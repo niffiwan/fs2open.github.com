@@ -18,6 +18,8 @@ private:
 	int width;
 	int height;
 
+	bool drawToScreen;
+
 public:
 	HTMLWidget(HTMLInterface* parent, Awesomium::WebView* view, int width, int height);
 	~HTMLWidget();
@@ -25,7 +27,11 @@ public:
 	void navigateTo(const SCP_string& string);
 
 	void moveTo(int x, int y);
+	void setDrawToScreen(bool draw);
+
 	void update();
+
+	int getRenderTexture();
 };
 
 class HTMLInterface

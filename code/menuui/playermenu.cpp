@@ -324,8 +324,8 @@ void player_select_init()
 
 	htmlInterface = new HTMLInterface();
 
-	htmlWidget = htmlInterface->createDisplay(800, 600);
-	htmlWidget->navigateTo("http://www.google.com");
+	htmlWidget = htmlInterface->createDisplay(1200, 600);
+	htmlWidget->navigateTo("http://www.hard-light.net/");
 	htmlWidget->moveTo(200, 200);
 }
 
