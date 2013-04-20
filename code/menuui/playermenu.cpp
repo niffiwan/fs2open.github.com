@@ -32,6 +32,10 @@
 #include "cfile/cfile.h"
 #include "network/multi.h"
 
+#include "HTMLInterface/HTMLInterface.h"
+
+HTMLInterface* htmlInterface;
+HTMLWidget* htmlWidget;
 
 // --------------------------------------------------------------------------------------------------------
 // PLAYER SELECT defines
@@ -317,6 +321,12 @@ void player_select_init()
 	if ( (Player_select_num_pilots == 1) && Player_select_input_mode ) {
 		Player_select_autoaccept = 1;
 	}
+
+	htmlInterface = new HTMLInterface();
+
+	htmlWidget = htmlInterface->createDisplay(800, 600);
+	htmlWidget->navigateTo("http://www.google.com");
+	htmlWidget->moveTo(200, 200);
 }
 
 // no need to reset this to false because we only ever see player_select once per game run
@@ -419,6 +429,8 @@ void player_select_do()
 	// draw any pending messages on the bottom or middle of the screen
 	player_select_display_all_text();
 
+	htmlInterface->update();
+
 	gr_flip();
 }
 
@@ -489,6 +501,9 @@ void player_select_close()
 	stop_parse();
 
 	Player_select_screen_active = 0;
+
+	delete htmlWidget;
+	delete htmlInterface;
 }
 
 void player_select_set_input_mode(int n)

@@ -205,6 +205,9 @@
     <Filter Include="GameHelp\fs2netd">
       <UniqueIdentifier>{eaaf5609-a655-4b46-95b4-bee16c341561}</UniqueIdentifier>
     </Filter>
+    <Filter Include="HTMLInterface">
+      <UniqueIdentifier>{8e7eb22c-9c8b-4e9b-b4cc-7fb89a618d19}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\code\ai\ai.cpp">
@@ -1056,6 +1059,12 @@
     <ClCompile Include="..\..\code\parse\generic_log.cpp">
       <Filter>Parse</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\code\HTMLInterface\HTMLInterface.cpp">
+      <Filter>HTMLInterface</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\code\HTMLInterface\OpenGLSurface.cpp">
+      <Filter>HTMLInterface</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\code\ai\ai.h">
@@ -1858,6 +1867,12 @@
     </ClInclude>
     <ClInclude Include="..\..\code\PilotFile\pilotfile.h">
       <Filter>PilotFile</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\code\HTMLInterface\HTMLInterface.h">
+      <Filter>HTMLInterface</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\code\HTMLInterface\OpenGLSurface.h">
+      <Filter>HTMLInterface</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
