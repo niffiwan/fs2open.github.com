@@ -1,7 +1,20 @@
 #include "HTMLInterface.h"
 #include "globalincs/alphacolors.h"
 
+#include <Awesomium/ResourceInterceptor.h>
+
 using namespace Awesomium;
+
+class RestrictingResourceInterceptor : public ResourceInterceptor
+{
+public:
+	ResourceResponse* RestrictingResourceInterceptor::OnRequest(ResourceRequest* request)
+	{
+		WebURL url = request->url();
+
+		return NULL;
+	}
+};
 
 HTMLInterface::HTMLInterface()
 {
@@ -11,6 +24,9 @@ HTMLInterface::HTMLInterface()
 
 	openglFactory = new OpenGLSurfaceFactory();
 	webCore->set_surface_factory(openglFactory);
+
+	interceptor = new RestrictingResourceInterceptor();
+	webCore->set_resource_interceptor(interceptor);
 }
 
 HTMLInterface::~HTMLInterface()
@@ -27,6 +43,11 @@ HTMLInterface::~HTMLInterface()
 	if (openglFactory)
 	{
 		delete openglFactory;
+	}
+
+	if (interceptor)
+	{
+		delete interceptor;
 	}
 }
 

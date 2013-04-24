@@ -34,11 +34,14 @@ public:
 	int getRenderTexture();
 };
 
+class RestrictingResourceInterceptor;
 class HTMLInterface
 {
 private:
 	Awesomium::WebCore* webCore;
+
 	OpenGLSurfaceFactory* openglFactory;
+	RestrictingResourceInterceptor* interceptor;
 
 	SCP_list<HTMLWidget*> widgets;
 public:
