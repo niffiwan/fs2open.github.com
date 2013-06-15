@@ -329,7 +329,7 @@ void player_select_init()
 	if (!htmlWidget.expired())
 	{
 		boost::shared_ptr<HTMLWidget> widget = htmlWidget.lock();
-		widget->navigateTo("http://www.hard-light.net/");
+		widget->navigateTo("asset://cfile/test.html");
 		widget->moveTo(200, 200);
 	}
 }

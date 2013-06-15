@@ -445,6 +445,7 @@
     <ClCompile Include="..\..\code\graphics\gropenglstate.cpp" />
     <ClCompile Include="..\..\code\graphics\gropengltexture.cpp" />
     <ClCompile Include="..\..\code\graphics\gropengltnl.cpp" />
+    <ClCompile Include="..\..\code\HTMLInterface\CFileDataSource.cpp" />
     <ClCompile Include="..\..\code\HTMLInterface\HTMLInterface.cpp" />
     <ClCompile Include="..\..\code\HTMLInterface\HTMLWidget.cpp" />
     <ClCompile Include="..\..\code\HTMLInterface\OpenGLSurface.cpp" />
@@ -737,6 +738,7 @@
     <ClInclude Include="..\..\code\graphics\gropenglstate.h" />
     <ClInclude Include="..\..\code\graphics\gropengltexture.h" />
     <ClInclude Include="..\..\code\graphics\gropengltnl.h" />
+    <ClInclude Include="..\..\code\HTMLInterface\CFileDataSource.h" />
     <ClInclude Include="..\..\code\HTMLInterface\HTMLInterface.h" />
     <ClInclude Include="..\..\code\HTMLInterface\HTMLWidget.h" />
     <ClInclude Include="..\..\code\HTMLInterface\OpenGLSurface.h" />

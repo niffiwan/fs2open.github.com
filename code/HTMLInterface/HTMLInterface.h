@@ -5,6 +5,7 @@
 #include "globalincs/pstypes.h"
 #include "HTMLInterface/OpenGLSurface.h"
 #include "HTMLInterface/HTMLWidget.h"
+#include "HTMLInterface/CFileDataSource.h"
 
 #include <boost/smart_ptr.hpp>
 #include <Awesomium/WebCore.h>
@@ -15,10 +16,13 @@ class HTMLInterface
 {
 private:
 	Awesomium::WebCore* webCore;
+	Awesomium::WebSession* defaultSession;
 
 	boost::shared_ptr<OpenGLSurfaceFactory> openglFactory;
 
 	boost::shared_ptr<RestrictingResourceInterceptor> interceptor;
+
+	boost::shared_ptr<CFileDataSource> cfileDataSource;
 
 	SCP_vector<boost::shared_ptr<HTMLWidget>> widgets;
 

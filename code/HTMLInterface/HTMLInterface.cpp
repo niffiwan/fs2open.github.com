@@ -13,91 +13,103 @@ const std::string assetSchemeName = "asset";
 class RestrictingResourceInterceptor : public ResourceInterceptor
 {
 public:
-	ResourceResponse* RestrictingResourceInterceptor::OnRequest(ResourceRequest* request)
-	{
-		WebURL url = request->url();
+    ResourceResponse* RestrictingResourceInterceptor::OnRequest(ResourceRequest* request)
+    {
+        WebURL url = request->url();
 
-		std::string host = ToString(url.host());
-		std::string scheme = ToString(url.scheme());
+        std::string host = ToString(url.host());
+        std::string scheme = ToString(url.scheme());
 
-		if (!host.compare(cfileDataSourceName) && !scheme.compare(assetSchemeName))
-		{
-			// If scheme and data source match, allow the request
-			return NULL;
-		}
-		else
-		{
-			request->Cancel();
+        if (!host.compare(cfileDataSourceName) && !scheme.compare(assetSchemeName))
+        {
+            // If scheme and data source match, allow the request
+            return NULL;
+        }
+        else
+        {
+            request->Cancel();
 
-			return NULL;
-		}
-	}
+            return NULL;
+        }
+    }
 };
 
 HTMLInterface::HTMLInterface() : nextWidgetID(0)
 {
-	WebConfig config;
+    WebConfig config;
 
-	webCore = WebCore::Initialize(config);
+    webCore = WebCore::Initialize(config);
 
-	openglFactory = boost::shared_ptr<OpenGLSurfaceFactory>(new OpenGLSurfaceFactory());
-	webCore->set_surface_factory(openglFactory.get());
+	WebPreferences prefs = WebPreferences();
+	prefs.enable_plugins = false;
+	prefs.enable_web_gl = true;
+	prefs.allow_scripts_to_open_windows = false;
+	prefs.allow_scripts_to_close_windows = false;
 
-	if (!Cmdline_allow_external_requests)
-	{
-		interceptor = boost::shared_ptr<RestrictingResourceInterceptor>(new RestrictingResourceInterceptor());
-		webCore->set_resource_interceptor(interceptor.get());
-	}
+	defaultSession = webCore->CreateWebSession(WSLit("data/websession"), prefs);
+
+    openglFactory = boost::shared_ptr<OpenGLSurfaceFactory>(new OpenGLSurfaceFactory());
+    webCore->set_surface_factory(openglFactory.get());
+
+    if (!Cmdline_allow_external_requests)
+    {
+        interceptor = boost::shared_ptr<RestrictingResourceInterceptor>(new RestrictingResourceInterceptor());
+        webCore->set_resource_interceptor(interceptor.get());
+    }
+
+	cfileDataSource = boost::shared_ptr<CFileDataSource>(new CFileDataSource());
+	defaultSession->AddDataSource(ToWebString(cfileDataSourceName), cfileDataSource.get());
 }
 
 HTMLInterface::~HTMLInterface()
 {
-	widgets.clear();
+    widgets.clear();
+	defaultSession->Release();
 
-	WebCore::Shutdown();
+    WebCore::Shutdown();
 }
 
 void HTMLInterface::update()
 {
-	webCore->Update();
+    webCore->Update();
 
-	for (SCP_vector<boost::shared_ptr<HTMLWidget>>::iterator iter = widgets.begin(); iter != widgets.end(); ++iter)
-	{
-		(*iter)->update();
-	}
+    for (SCP_vector<boost::shared_ptr<HTMLWidget>>::iterator iter = widgets.begin(); iter != widgets.end(); ++iter)
+    {
+        (*iter)->update();
+    }
 }
 
 boost::weak_ptr<HTMLWidget> HTMLInterface::createDisplay(int width, int height)
 {
-	WebView* view = webCore->CreateWebView(width, height);
+	WebView* view = webCore->CreateWebView(width, height, defaultSession);
 
-	boost::shared_ptr<HTMLWidget> widget = boost::shared_ptr<HTMLWidget>(new HTMLWidget(this, nextWidgetID++, view, width, height));
+    boost::shared_ptr<HTMLWidget> widget = boost::shared_ptr<HTMLWidget>(new HTMLWidget(this, nextWidgetID++, view, width, height));
 
-	widgets.push_back(widget);
+    widgets.push_back(widget);
 
-	return boost::weak_ptr<HTMLWidget>(widget);
+    return boost::weak_ptr<HTMLWidget>(widget);
 }
 
 bool HTMLInterface::removeWidget(uint widgetID)
 {
-	for (SCP_vector<boost::shared_ptr<HTMLWidget>>::iterator iter = widgets.begin(); iter != widgets.end(); ++iter)
-	{
-		if ((*iter)->getID() == widgetID)
-		{
-			// Remove this entry if it isn't active anymore
-			if (iter + 1 == widgets.end())
-			{
-				widgets.pop_back();
-			}
-			else
-			{
-				*iter = widgets.back();
-				widgets.pop_back();
-			}
+    for (SCP_vector<boost::shared_ptr<HTMLWidget>>::iterator iter = widgets.begin(); iter != widgets.end(); ++iter)
+    {
+        if ((*iter)->getID() == widgetID)
+        {
+            // Remove this entry if it isn't active anymore
+            if (iter + 1 == widgets.end())
+            {
+                widgets.pop_back();
+            }
+            else
+            {
+                *iter = widgets.back();
+                widgets.pop_back();
+            }
 
-			return true;
-		}
-	}
+            return true;
+        }
+    }
 
-	return false;
+    return false;
 }
