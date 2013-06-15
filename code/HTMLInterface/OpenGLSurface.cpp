@@ -6,7 +6,7 @@
 #include "graphics/gropenglstate.h"
 #include "graphics/gropengltnl.h"
 
-static const int BYTES_PER_PIXEL = 4;
+const int BYTES_PER_PIXEL = 4;
 
 Awesomium::Surface* OpenGLSurfaceFactory::CreateSurface(Awesomium::WebView* view, int width, int height)
 {
@@ -31,8 +31,6 @@ extern GLuint opengl_get_rtt_framebuffer();
 void OpenGLSurface::Paint(unsigned char* src_buffer, int src_row_span, 
 						   const Awesomium::Rect& src_rect, const Awesomium::Rect& dest_rect)
 {
-	GLuint framebuffer = opengl_get_rtt_framebuffer();
-
 	if (bm_set_render_target(renderTarget))
 	{
 		glPushAttrib(GL_CURRENT_BIT);
@@ -45,7 +43,6 @@ void OpenGLSurface::Paint(unsigned char* src_buffer, int src_row_span,
 		glPopAttrib();
 
 		bm_set_render_target(-1);
-		vglBindFramebufferEXT(GL_FRAMEBUFFER_EXT, framebuffer);
 	}
 }
 

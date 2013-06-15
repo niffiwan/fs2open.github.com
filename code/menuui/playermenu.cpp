@@ -35,7 +35,7 @@
 #include "HTMLInterface/HTMLInterface.h"
 
 HTMLInterface* htmlInterface;
-HTMLWidget* htmlWidget;
+boost::weak_ptr<HTMLWidget> htmlWidget;
 
 // --------------------------------------------------------------------------------------------------------
 // PLAYER SELECT defines
@@ -325,8 +325,13 @@ void player_select_init()
 	htmlInterface = new HTMLInterface();
 
 	htmlWidget = htmlInterface->createDisplay(1200, 600);
-	htmlWidget->navigateTo("http://www.hard-light.net/");
-	htmlWidget->moveTo(200, 200);
+
+	if (!htmlWidget.expired())
+	{
+		boost::shared_ptr<HTMLWidget> widget = htmlWidget.lock();
+		widget->navigateTo("http://www.hard-light.net/");
+		widget->moveTo(200, 200);
+	}
 }
 
 // no need to reset this to false because we only ever see player_select once per game run
@@ -502,7 +507,7 @@ void player_select_close()
 
 	Player_select_screen_active = 0;
 
-	delete htmlWidget;
+	htmlWidget.reset();
 	delete htmlInterface;
 }
 

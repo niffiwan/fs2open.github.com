@@ -375,9 +375,7 @@ xcopy /y /i "$(AWE_DIR)build\bin" "$(FS2PATH)"</Command>
       </OutputFile>
     </Bscmake>
     <PostBuildEvent>
-      <Command>copy /y "$(TargetPath)" "$(FS2PATH)\$(TargetFileName)"
-
-xcopy /y /i "$(AWE_DIR)build\bin" "$(FS2PATH)"</Command>
+      <Command>copy /y "$(TargetPath)" "$(FS2PATH)\$(TargetFileName)"</Command>
     </PostBuildEvent>
     <PostBuildEvent>
       <Message>Copying build...</Message>

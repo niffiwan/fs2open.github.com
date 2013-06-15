@@ -1065,6 +1065,9 @@
     <ClCompile Include="..\..\code\HTMLInterface\OpenGLSurface.cpp">
       <Filter>HTMLInterface</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\code\HTMLInterface\HTMLWidget.cpp">
+      <Filter>HTMLInterface</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\code\ai\ai.h">
@@ -1872,6 +1875,9 @@
       <Filter>HTMLInterface</Filter>
     </ClInclude>
     <ClInclude Include="..\..\code\HTMLInterface\OpenGLSurface.h">
+      <Filter>HTMLInterface</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\code\HTMLInterface\HTMLWidget.h">
       <Filter>HTMLInterface</Filter>
     </ClInclude>
   </ItemGroup>

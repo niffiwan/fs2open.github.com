@@ -148,5 +148,6 @@ extern int Cmdline_verify_vps;
 extern int Cmdline_no_grab;
 #endif
 extern int Cmdline_reparse_mainhall;
+extern int Cmdline_allow_external_requests;
 
 #endif

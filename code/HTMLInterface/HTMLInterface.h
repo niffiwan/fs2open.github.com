@@ -1,38 +1,13 @@
-#pragma once
+
+#ifndef _HTML_INTERFACE_H
+#define _HTML_INTERFACE_H
 
 #include "globalincs/pstypes.h"
 #include "HTMLInterface/OpenGLSurface.h"
+#include "HTMLInterface/HTMLWidget.h"
 
+#include <boost/smart_ptr.hpp>
 #include <Awesomium/WebCore.h>
-
-class HTMLInterface;
-
-class HTMLWidget
-{
-private:
-	HTMLInterface* parent;
-	Awesomium::WebView* webView;
-
-	int x;
-	int y;
-	int width;
-	int height;
-
-	bool drawToScreen;
-
-public:
-	HTMLWidget(HTMLInterface* parent, Awesomium::WebView* view, int width, int height);
-	~HTMLWidget();
-
-	void navigateTo(const SCP_string& string);
-
-	void moveTo(int x, int y);
-	void setDrawToScreen(bool draw);
-
-	void update();
-
-	int getRenderTexture();
-};
 
 class RestrictingResourceInterceptor;
 
@@ -41,20 +16,21 @@ class HTMLInterface
 private:
 	Awesomium::WebCore* webCore;
 
-	OpenGLSurfaceFactory* openglFactory;
+	boost::shared_ptr<OpenGLSurfaceFactory> openglFactory;
 
-	RestrictingResourceInterceptor* interceptor;
+	boost::shared_ptr<RestrictingResourceInterceptor> interceptor;
 
-	OpenGLSurfaceFactory* openglFactory;
+	SCP_vector<boost::shared_ptr<HTMLWidget>> widgets;
 
-	SCP_list<HTMLWidget*> widgets;
+	uint nextWidgetID;
 public:
 	HTMLInterface();
 	~HTMLInterface();
 
 	void update();
 
-	HTMLWidget* createDisplay(int width, int height);
-	void removeWidget(HTMLWidget* widget);
+	boost::weak_ptr<HTMLWidget> createDisplay(int width, int height);
+	bool removeWidget(uint widgetID);
 };
 
+#endif // _HTML_INTERFACE_H

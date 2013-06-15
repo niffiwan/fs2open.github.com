@@ -1,4 +1,6 @@
-#pragma once
+
+#ifndef _OPENGL_SURFACE_H
+#define _OPENGL_SURFACE_H
 
 #include "globalincs/pstypes.h"
 #include <Awesomium/Surface.h>
@@ -26,3 +28,4 @@ public:
 	friend class OpenGLSurfaceFactory;
 };
 
+#endif // _OPENGL_SURFACE_H
