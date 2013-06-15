@@ -34,8 +34,13 @@ public:
 	void navigateTo(const SCP_string& string);
 
 	void moveTo(int x, int y);
+	void resize(int width, int height);
+
 	void setDrawToScreen(bool draw);
+
 	void setWidgetColor(const color& color);
+
+	void setFocus(bool focus);
 
 	void update();
 

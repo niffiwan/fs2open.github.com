@@ -35,8 +35,22 @@ void HTMLWidget::navigateTo(const SCP_string& string)
 
 void HTMLWidget::moveTo(int x, int y)
 {
+	Assertion(x >= 0, "X-Coordinate must be at least 0, got %d.", x);
+	Assertion(y >= 0, "Y-Coordinate must be at least 0, got %d.", y);
+
 	this->x = x;
 	this->y = y;
+}
+
+void HTMLWidget::resize(int width, int height)
+{
+	Assertion(width >= 0, "Width must be at least 0, got %d.", width);
+	Assertion(height >= 0, "Height must be at least 0, got %d.", height);
+
+	this->width = width;
+	this->width = height;
+
+	this->webView->Resize(width, height);
 }
 
 void HTMLWidget::setDrawToScreen(bool draw)
@@ -47,6 +61,18 @@ void HTMLWidget::setDrawToScreen(bool draw)
 void HTMLWidget::setWidgetColor(const color& color)
 {
 	widgetColor = color;
+}
+
+void HTMLWidget::setFocus(bool focus)
+{
+	if (focus)
+	{
+		this->webView->Focus();
+	}
+	else
+	{
+		this->webView->Unfocus();
+	}
 }
 
 void HTMLWidget::update()

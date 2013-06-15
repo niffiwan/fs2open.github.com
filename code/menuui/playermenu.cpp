@@ -331,6 +331,7 @@ void player_select_init()
 		boost::shared_ptr<HTMLWidget> widget = htmlWidget.lock();
 		widget->navigateTo("asset://cfile/test.html");
 		widget->moveTo(200, 200);
+		widget->setFocus(true);
 	}
 }
 
