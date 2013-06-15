@@ -35,13 +35,17 @@ public:
 };
 
 class RestrictingResourceInterceptor;
+
 class HTMLInterface
 {
 private:
 	Awesomium::WebCore* webCore;
 
 	OpenGLSurfaceFactory* openglFactory;
+
 	RestrictingResourceInterceptor* interceptor;
+
+	OpenGLSurfaceFactory* openglFactory;
 
 	SCP_list<HTMLWidget*> widgets;
 public:
