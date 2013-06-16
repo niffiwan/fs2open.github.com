@@ -21,8 +21,14 @@
 #endif // __GNUC__
 
 #if ! defined __GNUC__
+#if defined(_MSC_VER) && _MSC_VER >= 1700
+// Visual Studio 2012 has C++11 support
+#include <unordered_map>
+#define SCP_hash_map std::unordered_map
+#else
 #include <hash_map>
 #define SCP_hash_map stdext::hash_map
+#endif
 #endif // ! defined __GNUC__
 
 #if defined(_MSC_VER) && _MSC_VER >= 1400 || !defined(_MSC_VER)

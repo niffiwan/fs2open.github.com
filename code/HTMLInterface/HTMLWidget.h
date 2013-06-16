@@ -4,17 +4,17 @@
 
 #include "globalincs/alphacolors.h"
 #include "globalincs/pstypes.h"
+#include "HTMLInterface/JavaScriptManager.h"
 
 #include <Awesomium/WebCore.h>
 
 // FOrward definitions
 class HTMLInterface;
 
-class HTMLWidget
+class HTMLWidget : public JavaScriptManager
 {
 private:
 	HTMLInterface* parent;
-	Awesomium::WebView* webView;
 
 	int x;
 	int y;

@@ -8,7 +8,7 @@
 using namespace Awesomium;
 
 HTMLWidget::HTMLWidget(HTMLInterface* parent, uint id, WebView* view, int width, int height) 
-	: parent(parent), width(width), height(height), webView(view), drawToScreen(true), id(id),
+	: JavaScriptManager(view), parent(parent), width(width), height(height), drawToScreen(true), id(id),
 	widgetColor(Color_black)
 {
 	Assertion(parent != NULL, "Parent is invalid!");
@@ -21,11 +21,6 @@ HTMLWidget::HTMLWidget(HTMLInterface* parent, uint id, WebView* view, int width,
 HTMLWidget::~HTMLWidget()
 {
 	parent->removeWidget(this->id);
-
-	if (webView)
-	{
-		webView->Destroy();
-	}
 }
 
 void HTMLWidget::navigateTo(const SCP_string& string)

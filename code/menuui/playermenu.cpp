@@ -328,7 +328,19 @@ void player_select_init()
 
 	if (!htmlWidget.expired())
 	{
+		using namespace Awesomium;
+
 		boost::shared_ptr<HTMLWidget> widget = htmlWidget.lock();
+		
+		JSArray pilotsArray;
+		for (int i = 0; i< Player_select_num_pilots; i++)
+		{
+			pilotsArray.Push(WebString::CreateFromUTF8(Pilots[i], strlen(Pilots[i])));
+		}
+
+		ObjectHandle handle = widget->createGlobalObject("playerSelect");
+		handle.setProperty("pilots", pilotsArray);
+
 		widget->navigateTo("asset://cfile/test.html");
 		widget->moveTo(200, 200);
 		widget->setFocus(true);

@@ -448,6 +448,7 @@
     <ClCompile Include="..\..\code\HTMLInterface\CFileDataSource.cpp" />
     <ClCompile Include="..\..\code\HTMLInterface\HTMLInterface.cpp" />
     <ClCompile Include="..\..\code\HTMLInterface\HTMLWidget.cpp" />
+    <ClCompile Include="..\..\code\HTMLInterface\JavaScriptManager.cpp" />
     <ClCompile Include="..\..\code\HTMLInterface\OpenGLSurface.cpp" />
     <ClCompile Include="..\..\code\hud\hud.cpp" />
     <ClCompile Include="..\..\code\hud\hudartillery.cpp" />
@@ -741,6 +742,7 @@
     <ClInclude Include="..\..\code\HTMLInterface\CFileDataSource.h" />
     <ClInclude Include="..\..\code\HTMLInterface\HTMLInterface.h" />
     <ClInclude Include="..\..\code\HTMLInterface\HTMLWidget.h" />
+    <ClInclude Include="..\..\code\HTMLInterface\JavaScriptManager.h" />
     <ClInclude Include="..\..\code\HTMLInterface\OpenGLSurface.h" />
     <ClInclude Include="..\..\code\hud\hud.h" />
     <ClInclude Include="..\..\code\hud\hudartillery.h" />
