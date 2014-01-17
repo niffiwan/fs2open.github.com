@@ -636,7 +636,7 @@ void gr_opengl_line_htl(vec3d *start, vec3d *end)
 	};
 
 	GL_state.Array.BindArrayBuffer(0);
-	opengl_shader_set_current();
+	opengl::shader::shaderManager.disableShader();
 
 	GL_state.Array.EnableClientVertex();
 	GL_state.Array.VertexPointer(3, GL_FLOAT, 0, line);
@@ -1358,7 +1358,7 @@ void opengl_tmapper_internal3d(int nv, vertex **verts, uint flags)
 		}
 	}
 
-	opengl_shader_set_current();
+	opengl::shader::shaderManager.disableShader();
 
 	GLboolean cull_face = GL_state.CullFace(GL_FALSE);
 
@@ -1602,6 +1602,8 @@ bool Use_Shaders_for_effect_rendering = true;
 
 void gr_opengl_render_effect(int nverts, vertex *verts, float *radius_list, uint flags)
 {
+	using namespace opengl::shader;
+
 	int alpha, tmap_type, r, g, b;
 	float u_scale = 1.0f, v_scale = 1.0f;
 	GLenum gl_mode = GL_TRIANGLE_FAN;
@@ -1618,6 +1620,8 @@ void gr_opengl_render_effect(int nverts, vertex *verts, float *radius_list, uint
 	if ( flags & TMAP_FLAG_TEXTURED ) {
 		if ( flags & TMAP_FLAG_SOFT_QUAD ) {
 			int sdr_index;
+
+			Shader *shader;
 			if( (flags & TMAP_FLAG_DISTORTION) || (flags & TMAP_FLAG_DISTORTION_THRUSTER) )
 			{
 				glDrawBuffer(GL_COLOR_ATTACHMENT0_EXT);
@@ -1627,9 +1631,11 @@ void gr_opengl_render_effect(int nverts, vertex *verts, float *radius_list, uint
 					Use_Shaders_for_effect_rendering = false;
 					return;
 				}
-				opengl_shader_set_current(&GL_shader[sdr_index]);
+
+				shader = &shaderManager.getShader(sdr_index);
+				shaderManager.enableShader(*shader);
 				
-				vglUniform1iARB(opengl_shader_get_uniform("frameBuffer"), 2);
+				shader->getUniform("frameBuffer").setValue(2);
 				
 				GL_state.Texture.SetActiveUnit(2);
 				GL_state.Texture.SetTarget(GL_TEXTURE_2D);
@@ -1638,12 +1644,12 @@ void gr_opengl_render_effect(int nverts, vertex *verts, float *radius_list, uint
 				GL_state.Texture.SetTarget(GL_TEXTURE_2D);
 				if(flags & TMAP_FLAG_DISTORTION_THRUSTER)
 				{
-					vglUniform1iARB(opengl_shader_get_uniform("distMap"), 3);
+					shader->getUniform("distMap").setValue(3);
 					GL_state.Texture.Enable(Distortion_texture[!Distortion_switch]);
 				}
 				else
 				{
-					vglUniform1iARB(opengl_shader_get_uniform("distMap"), 0);
+					shader->getUniform("distMap").setValue(0);
 					GL_state.Texture.Disable();
 				}
 				zbuff = gr_zbuffer_set(GR_ZBUFF_READ);
@@ -1655,31 +1661,34 @@ void gr_opengl_render_effect(int nverts, vertex *verts, float *radius_list, uint
 					Use_Shaders_for_effect_rendering = false;
 					return;
 				}
-				opengl_shader_set_current(&GL_shader[sdr_index]);
+
+				shader = &shaderManager.getShader(sdr_index);
+				shaderManager.enableShader(*shader);
+
 				zbuff = gr_zbuffer_set(GR_ZBUFF_NONE);
 			}
 
-			vglUniform1iARB(opengl_shader_get_uniform("baseMap"), 0);
-			vglUniform1iARB(opengl_shader_get_uniform("depthMap"), 1);
-			vglUniform1fARB(opengl_shader_get_uniform("window_width"), (float)gr_screen.max_w);
-			vglUniform1fARB(opengl_shader_get_uniform("window_height"), (float)gr_screen.max_h);
-			vglUniform1fARB(opengl_shader_get_uniform("nearZ"), Min_draw_distance);
-			vglUniform1fARB(opengl_shader_get_uniform("farZ"), Max_draw_distance);
-			vglUniform1fARB(opengl_shader_get_uniform("use_offset"), 0.0f);
+			shader->getUniform("baseMap").setValue(0);
+			shader->getUniform("depthMap").setValue(1);
+			shader->getUniform("window_width").setValue((float)gr_screen.max_w);
+			shader->getUniform("window_height").setValue((float)gr_screen.max_h);
+			shader->getUniform("nearZ").setValue(Min_draw_distance);
+			shader->getUniform("farZ").setValue(Max_draw_distance);
+			shader->getUniform("use_offset").setValue(0.0f);
 
 			if( !(flags & TMAP_FLAG_DISTORTION) && !(flags & TMAP_FLAG_DISTORTION_THRUSTER) ) // Only use vertex attribute with soft particles to avoid OpenGL Errors - Valathil
 			{
-				attrib_index = opengl_shader_get_attribute("radius_in");
+				attrib_index = shader->getAttribute("radius_in").getLocation();
 				GL_state.Array.EnableVertexAttrib(attrib_index);
 				GL_state.Array.VertexAttribPointer(attrib_index, 1, GL_FLOAT, GL_FALSE, 0, radius_list);
 
 			}
 			if(flags & TMAP_FLAG_DISTORTION_THRUSTER)
 			{
-				attrib_index = opengl_shader_get_attribute("offset_in");
+				attrib_index = shader->getAttribute("offset_in").getLocation();
 				GL_state.Array.EnableVertexAttrib(attrib_index);
 				GL_state.Array.VertexAttribPointer(attrib_index, 1, GL_FLOAT, GL_FALSE, 0, radius_list);
-				vglUniform1fARB(opengl_shader_get_uniform("use_offset"), 1.0f);
+				shader->getUniform("use_offset").setValue(1.0f);
 			}
 			GL_state.Texture.SetActiveUnit(1);
 			GL_state.Texture.SetTarget(GL_TEXTURE_2D);
@@ -1723,7 +1732,7 @@ void gr_opengl_render_effect(int nverts, vertex *verts, float *radius_list, uint
 
 	glDrawArrays(gl_mode, 0, nverts);
 
-	opengl_shader_set_current();
+	shaderManager.disableShader();
 
 	GL_state.Texture.SetActiveUnit(1);
 	GL_state.Texture.Disable();
@@ -2262,7 +2271,7 @@ void gr_opengl_sphere_htl(float rad)
 	GL_state.SetTextureSource(TEXTURE_SOURCE_NONE);
 	GL_state.SetAlphaBlendMode(ALPHA_BLEND_NONE);
 	GL_state.SetZbufferType(ZBUFFER_TYPE_FULL);
-	opengl_shader_set_current();
+	opengl::shader::shaderManager.disableShader();
 
 	GL_state.Color(gr_screen.current_color.red, gr_screen.current_color.green, gr_screen.current_color.blue);
 
@@ -2703,7 +2712,7 @@ void gr_opengl_update_distortion()
 	GLboolean blend = GL_state.Blend(GL_FALSE);
 	GLboolean cull = GL_state.CullFace(GL_FALSE);
 
-	opengl_shader_set_current();
+	opengl::shader::shaderManager.disableShader();
 	vglBindFramebufferEXT(GL_FRAMEBUFFER_EXT, Distortion_framebuffer);
 	vglFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, Distortion_texture[!Distortion_switch], 0);
 	glDrawBuffer(GL_COLOR_ATTACHMENT0_EXT);

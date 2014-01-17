@@ -60,7 +60,7 @@ static int GL_htl_view_matrix_set = 0;
 static int GL_htl_2d_matrix_depth = 0;
 static int GL_htl_2d_matrix_set = 0;
 
-static GLfloat GL_env_texture_matrix[16] = { 0.0f };
+static matrix4 GL_env_texture_matrix = { { 0.0f } };
 static bool GL_env_texture_matrix_set = false;
 
 int GL_vertex_data_in = 0;
@@ -415,7 +415,7 @@ void gr_opengl_set_buffer(int idx)
 		}
 
 		if ( (Use_GLSL > 1) && !GLSL_override ) {
-			opengl_shader_set_current();
+			opengl::shader::shaderManager.disableShader();
 		}
 
 		return;
@@ -584,6 +584,8 @@ extern int Interp_thrust_scale_subobj;
 extern float Interp_thrust_scale;
 static void opengl_render_pipeline_program(int start, const vertex_buffer *bufferp, const buffer_data *datap, int flags)
 {
+	using namespace opengl::shader;
+
 	float u_scale, v_scale;
 	int render_pass = 0;
 	int shader_flags = 0;
@@ -670,7 +672,8 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 
 	Assert( sdr_index >= 0 );
 
-	opengl_shader_set_current( &GL_shader[sdr_index] );
+	Shader& renderShader = shaderManager.getShader(sdr_index);
+	shaderManager.enableShader(renderShader);
 
 	opengl_default_light_settings( !GL_center_alpha, (Interp_light > 0.25f) );
 	gr_opengl_set_center_alpha(GL_center_alpha);
@@ -695,29 +698,29 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 
 	if(flags & TMAP_ANIMATED_SHADER)
 	{
-		vglUniform1fARB( opengl_shader_get_uniform("anim_timer"), opengl_shader_get_animated_timer() );
-		vglUniform1iARB( opengl_shader_get_uniform("effect_num"), opengl_shader_get_animated_effect() );
-		vglUniform1fARB( opengl_shader_get_uniform("vpwidth"), 1.0f/gr_screen.max_w );
-		vglUniform1fARB( opengl_shader_get_uniform("vpheight"), 1.0f/gr_screen.max_h );
+		renderShader.getUniform("anim_timer").setValue(get_animated_timer());
+		renderShader.getUniform("effect_num").setValue((int) get_animated_effect());
+		renderShader.getUniform("vpwidth").setValue(1.0f / gr_screen.max_w);
+		renderShader.getUniform("vpheight").setValue(1.0f / gr_screen.max_h);
 	}
 	int n_lights = MIN(Num_active_gl_lights, GL_max_lights) - 1;
-	vglUniform1iARB( opengl_shader_get_uniform("n_lights"), n_lights );
+	renderShader.getUniform("n_lights").setValue(n_lights);
 
 	GL_state.Texture.ResetUsed();
 
 	// base texture
 	if (shader_flags & SDR_FLAG_DIFFUSE_MAP) {
-		vglUniform1iARB( opengl_shader_get_uniform("sBasemap"), render_pass );
+		renderShader.getUniform("sBasemap").setValue(render_pass);
 
 		int desaturate = 0;
 		if ( flags & TMAP_FLAG_DESATURATE ) {
 			desaturate = 1;
 		}
 
-		vglUniform1iARB( opengl_shader_get_uniform("desaturate"), desaturate);
-		vglUniform1fARB( opengl_shader_get_uniform("desaturate_r"), gr_screen.current_color.red/255.0f);
-		vglUniform1fARB( opengl_shader_get_uniform("desaturate_g"), gr_screen.current_color.green/255.0f);
-		vglUniform1fARB( opengl_shader_get_uniform("desaturate_b"), gr_screen.current_color.blue/255.0f);
+		renderShader.getUniform("desaturate").setValue(desaturate);
+		renderShader.getUniform("desaturate_r").setValue(gr_screen.current_color.red / 255.0f);
+		renderShader.getUniform("desaturate_g").setValue(gr_screen.current_color.green / 255.0f);
+		renderShader.getUniform("desaturate_b").setValue(gr_screen.current_color.blue / 255.0f);
 
 		gr_opengl_tcache_set(gr_screen.current_bitmap, tmap_type, &u_scale, &v_scale, render_pass);
 	
@@ -725,7 +728,7 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 	}
 
 	if (shader_flags & SDR_FLAG_GLOW_MAP) {
-		vglUniform1iARB( opengl_shader_get_uniform("sGlowmap"), render_pass );
+		renderShader.getUniform("sGlowmap").setValue(render_pass);
 
 		gr_opengl_tcache_set(GLOWMAP, tmap_type, &u_scale, &v_scale, render_pass);
 
@@ -733,7 +736,7 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 	}
 
 	if (shader_flags & SDR_FLAG_SPEC_MAP) {
-		vglUniform1iARB( opengl_shader_get_uniform("sSpecmap"), render_pass );
+		renderShader.getUniform("sSpecmap").setValue(render_pass);
 
 		gr_opengl_tcache_set(SPECMAP, tmap_type, &u_scale, &v_scale, render_pass);
 
@@ -743,9 +746,9 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 			// 0 == env with non-alpha specmap, 1 == env with alpha specmap
 			int alpha_spec = bm_has_alpha_channel(SPECMAP);
 
-			vglUniform1iARB( opengl_shader_get_uniform("alpha_spec"), alpha_spec );
-			vglUniformMatrix4fvARB( opengl_shader_get_uniform("envMatrix"), 1, GL_FALSE, &GL_env_texture_matrix[0] );
-			vglUniform1iARB( opengl_shader_get_uniform("sEnvmap"), render_pass );
+			renderShader.getUniform("alpha_spec").setValue(alpha_spec);
+			renderShader.getUniform("envMatrix").setValue(GL_env_texture_matrix);
+			renderShader.getUniform("sEnvmap").setValue(render_pass);
 	
 			gr_opengl_tcache_set(ENVMAP, TCACHE_TYPE_CUBEMAP, &u_scale, &v_scale, render_pass);
 	
@@ -754,7 +757,7 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 	}
 
 	if (shader_flags & SDR_FLAG_NORMAL_MAP) {
-		vglUniform1iARB( opengl_shader_get_uniform("sNormalmap"), render_pass );
+		renderShader.getUniform("sNormalmap").setValue(render_pass);
 
 		gr_opengl_tcache_set(NORMMAP, tmap_type, &u_scale, &v_scale, render_pass);
 
@@ -762,7 +765,7 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 	}
 
 	if (shader_flags & SDR_FLAG_HEIGHT_MAP) {
-		vglUniform1iARB( opengl_shader_get_uniform("sHeightmap"), render_pass );
+		renderShader.getUniform("sHeightmap").setValue(render_pass);
 
 		gr_opengl_tcache_set(HEIGHTMAP, tmap_type, &u_scale, &v_scale, render_pass);
 
@@ -770,7 +773,7 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 	}
 
 	if (shader_flags & SDR_FLAG_MISC_MAP) {
-		vglUniform1iARB( opengl_shader_get_uniform("sMiscmap"), render_pass );
+		renderShader.getUniform("sMiscmap").setValue(render_pass);
 
 		gr_opengl_tcache_set(MISCMAP, tmap_type, &u_scale, &v_scale, render_pass);
 
@@ -788,7 +791,7 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 		}
 		else
 			GL_state.Texture.Enable(Framebuffer_fallback_texture_id);
-		vglUniform1iARB( opengl_shader_get_uniform("sFramebuffer"), render_pass );
+		renderShader.getUniform("sFramebuffer").setValue(render_pass);
 		render_pass++;
 	}
 
@@ -796,12 +799,12 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 	// By default, this is handled through the r and g channels of the misc map, but this can be changed
 	// in the shader; test versions of this used the normal map r and b channels
 	if (shader_flags & SDR_FLAG_TEAMCOLOR) {
-		vglUniform3fARB( opengl_shader_get_uniform("stripe_color"), Current_team_color->stripe.r,  Current_team_color->stripe.g,  Current_team_color->stripe.b);
-		vglUniform3fARB( opengl_shader_get_uniform("base_color"), Current_team_color->base.r, Current_team_color->base.g, Current_team_color->base.b);
+		renderShader.getUniform("stripe_color").setValue3f(Current_team_color->stripe.r, Current_team_color->stripe.g, Current_team_color->stripe.b);
+		renderShader.getUniform("base_color").setValue3f(Current_team_color->base.r, Current_team_color->base.g, Current_team_color->base.b);
 	}
 
 	if (shader_flags & SDR_FLAG_THRUSTER) {
-		vglUniform1fARB( opengl_shader_get_uniform("thruster_scale"), Interp_thrust_scale);
+		renderShader.getUniform("thruster_scale").setValue(Interp_thrust_scale);
 	}
 
 	// DRAW IT!!
@@ -1122,7 +1125,7 @@ static void opengl_render_pipeline_fixed(int start, const vertex_buffer *bufferp
 		if (GL_env_texture_matrix_set) {
 			glMatrixMode(GL_TEXTURE);
 			glPushMatrix();
-			glLoadMatrixf(GL_env_texture_matrix);
+			glLoadMatrixf(GL_env_texture_matrix.data);
 			// switch back to the default modelview mode
 			glMatrixMode(GL_MODELVIEW);
 		}
@@ -1293,7 +1296,7 @@ void gr_opengl_render_stream_buffer_start(int buffer_id)
 	Stream_lighting = GL_state.Lighting(GL_FALSE);
 	Stream_zbuff_mode = gr_zbuffer_set(GR_ZBUFF_READ);
 
-	opengl_shader_set_current();
+	opengl::shader::shaderManager.disableShader();
 	Stream_buffer_sdr = -1;
 }
 
@@ -1303,7 +1306,7 @@ void gr_opengl_render_stream_buffer_end()
 
 	gr_opengl_flush_data_states();
 
-	opengl_shader_set_current();
+	opengl::shader::shaderManager.disableShader();
 	Stream_buffer_sdr = -1;
 
 	GL_state.CullFace(Stream_cull);
@@ -1316,6 +1319,8 @@ extern GLuint Distortion_texture[2];
 extern int Distortion_switch;
 void gr_opengl_render_stream_buffer(int offset, int n_verts, int flags)
 {
+	using namespace opengl::shader;
+
 	int alpha, tmap_type, r, g, b;
 	float u_scale = 1.0f, v_scale = 1.0f;
 	GLenum gl_mode = GL_TRIANGLE_FAN;
@@ -1347,24 +1352,25 @@ void gr_opengl_render_stream_buffer(int offset, int n_verts, int flags)
 			int sdr_index;
 
 			if( (flags & TMAP_FLAG_DISTORTION) || (flags & TMAP_FLAG_DISTORTION_THRUSTER) ) {
-				sdr_index = gr_opengl_maybe_create_shader(SDR_FLAG_SOFT_QUAD|SDR_FLAG_DISTORTION);
+				sdr_index = gr_opengl_maybe_create_shader(SDR_FLAG_SOFT_QUAD | SDR_FLAG_DISTORTION);
+				Shader& renderShader = shaderManager.getShader(sdr_index);
 
 				if ( sdr_index != Stream_buffer_sdr ) {
 					glDrawBuffer(GL_COLOR_ATTACHMENT0_EXT);
 
-					opengl_shader_set_current(&GL_shader[sdr_index]);
+					shaderManager.enableShader(renderShader);
 					Stream_buffer_sdr = sdr_index;
 
-					vglUniform1iARB(opengl_shader_get_uniform("baseMap"), 0);
-					vglUniform1iARB(opengl_shader_get_uniform("depthMap"), 1);
-					vglUniform1fARB(opengl_shader_get_uniform("window_width"), (float)gr_screen.max_w);
-					vglUniform1fARB(opengl_shader_get_uniform("window_height"), (float)gr_screen.max_h);
-					vglUniform1fARB(opengl_shader_get_uniform("nearZ"), Min_draw_distance);
-					vglUniform1fARB(opengl_shader_get_uniform("farZ"), Max_draw_distance);
+					renderShader.getUniform("baseMap").setValue(0);
+					renderShader.getUniform("depthMap").setValue(1);
+					renderShader.getUniform("window_width").setValue(gr_screen.max_w);
+					renderShader.getUniform("window_height").setValue(gr_screen.max_h);
+					renderShader.getUniform("nearZ").setValue(Min_draw_distance);
+					renderShader.getUniform("farZ").setValue(Max_draw_distance);
 
-					vglUniform1iARB(opengl_shader_get_uniform("frameBuffer"), 2);
+					renderShader.getUniform("frameBuffer").setValue(2);
 
-					attrib_index = opengl_shader_get_attribute("offset_in");
+					attrib_index = renderShader.getAttribute("offset_in").getLocation();
 					GL_state.Array.EnableVertexAttrib(attrib_index);
 					GL_state.Array.VertexAttribPointer(attrib_index, 1, GL_FLOAT, GL_FALSE, sizeof(effect_vertex), ptr + radius_offset);
 				}
@@ -1374,15 +1380,15 @@ void gr_opengl_render_stream_buffer(int offset, int n_verts, int flags)
 				GL_state.Texture.Enable(Scene_effect_texture);
 				
 				if(flags & TMAP_FLAG_DISTORTION_THRUSTER) {
-					vglUniform1iARB(opengl_shader_get_uniform("distMap"), 3);
+					renderShader.getUniform("distMap").setValue(3);
 
 					GL_state.Texture.SetActiveUnit(3);
 					GL_state.Texture.SetTarget(GL_TEXTURE_2D);
 					GL_state.Texture.Enable(Distortion_texture[!Distortion_switch]);
-					vglUniform1fARB(opengl_shader_get_uniform("use_offset"), 1.0f);
+					renderShader.getUniform("use_offset").setValue(1.0f);
 				} else {
-					vglUniform1iARB(opengl_shader_get_uniform("distMap"), 0);
-					vglUniform1fARB(opengl_shader_get_uniform("use_offset"), 0.0f);
+					renderShader.getUniform("distMap").setValue(0);
+					renderShader.getUniform("use_offset").setValue(0.0f);
 				}
 
 				zbuff = gr_zbuffer_set(GR_ZBUFF_READ);
@@ -1394,19 +1400,20 @@ void gr_opengl_render_stream_buffer(int offset, int n_verts, int flags)
 				GL_state.Texture.Enable(Scene_depth_texture);
 			} else if ( Cmdline_softparticles ) {
 				sdr_index = gr_opengl_maybe_create_shader(SDR_FLAG_SOFT_QUAD);
+				Shader& renderShader = shaderManager.getShader(sdr_index);
 
 				if ( sdr_index != Stream_buffer_sdr ) {
-					opengl_shader_set_current(&GL_shader[sdr_index]);
+					opengl::shader::shaderManager.enableShader(renderShader);
 					Stream_buffer_sdr = sdr_index;
 
-					vglUniform1iARB(opengl_shader_get_uniform("baseMap"), 0);
-					vglUniform1iARB(opengl_shader_get_uniform("depthMap"), 1);
-					vglUniform1fARB(opengl_shader_get_uniform("window_width"), (float)gr_screen.max_w);
-					vglUniform1fARB(opengl_shader_get_uniform("window_height"), (float)gr_screen.max_h);
-					vglUniform1fARB(opengl_shader_get_uniform("nearZ"), Min_draw_distance);
-					vglUniform1fARB(opengl_shader_get_uniform("farZ"), Max_draw_distance);
+					renderShader.getUniform("baseMap").setValue(0);
+					renderShader.getUniform("depthMap").setValue(1);
+					renderShader.getUniform("window_width").setValue(gr_screen.max_w);
+					renderShader.getUniform("window_height").setValue(gr_screen.max_h);
+					renderShader.getUniform("nearZ").setValue(Min_draw_distance);
+					renderShader.getUniform("farZ").setValue(Max_draw_distance);
 
-					attrib_index = opengl_shader_get_attribute("radius_in");
+					attrib_index = renderShader.getAttribute("radius_in").getLocation();
 					GL_state.Array.EnableVertexAttrib(attrib_index);
 					GL_state.Array.VertexAttribPointer(attrib_index, 1, GL_FLOAT, GL_FALSE, sizeof(effect_vertex), ptr + radius_offset);
 				}
@@ -1697,19 +1704,19 @@ void gr_opengl_set_view_matrix(vec3d *pos, matrix *orient)
 			glGetFloatv(GL_MODELVIEW_MATRIX, mview);
 
 			// r.xyz  <--  r.x, u.x, f.x
-			GL_env_texture_matrix[0]  =  mview[0];
-			GL_env_texture_matrix[1]  = -mview[4];
-			GL_env_texture_matrix[2]  =  mview[8];
+			GL_env_texture_matrix.data[0]  =  mview[0];
+			GL_env_texture_matrix.data[1] = -mview[4];
+			GL_env_texture_matrix.data[2] = mview[8];
 			// u.xyz  <--  r.y, u.y, f.y
-			GL_env_texture_matrix[4]  =  mview[1];
-			GL_env_texture_matrix[5]  = -mview[5];
-			GL_env_texture_matrix[6]  =  mview[9];
+			GL_env_texture_matrix.data[4] = mview[1];
+			GL_env_texture_matrix.data[5] = -mview[5];
+			GL_env_texture_matrix.data[6] = mview[9];
 			// f.xyz  <--  r.z, u.z, f.z
-			GL_env_texture_matrix[8]  =  mview[2];
-			GL_env_texture_matrix[9]  = -mview[6];
-			GL_env_texture_matrix[10] =  mview[10];
+			GL_env_texture_matrix.data[8] = mview[2];
+			GL_env_texture_matrix.data[9] = -mview[6];
+			GL_env_texture_matrix.data[10] = mview[10];
 
-			GL_env_texture_matrix[15] = 1.0f;
+			GL_env_texture_matrix.data[15] = 1.0f;
 		}
 	}
 

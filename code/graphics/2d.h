@@ -27,21 +27,23 @@ extern int Gr_inited;
 extern int gr_zbuffering, gr_zbuffering_mode;
 extern int gr_global_zbuffering;
 
-// Shader flags
-#define SDR_FLAG_LIGHT			(1<<0)
-#define SDR_FLAG_FOG			(1<<1)
-#define SDR_FLAG_DIFFUSE_MAP	(1<<2)
-#define SDR_FLAG_GLOW_MAP		(1<<3)
-#define SDR_FLAG_SPEC_MAP		(1<<4)
-#define SDR_FLAG_NORMAL_MAP		(1<<5)
-#define SDR_FLAG_HEIGHT_MAP		(1<<6)
-#define SDR_FLAG_ENV_MAP		(1<<7)
-#define SDR_FLAG_ANIMATED		(1<<8)
-#define SDR_FLAG_SOFT_QUAD		(1<<9)
-#define SDR_FLAG_DISTORTION		(1<<10)
-#define SDR_FLAG_MISC_MAP		(1<<11)
-#define SDR_FLAG_TEAMCOLOR		(1<<12)
-#define SDR_FLAG_THRUSTER		(1<<13)
+enum ShaderFlags
+{
+	SDR_FLAG_LIGHT = (1<<0),
+	SDR_FLAG_FOG = (1<<1),
+	SDR_FLAG_DIFFUSE_MAP = (1<<2),
+	SDR_FLAG_GLOW_MAP = (1<<3),
+	SDR_FLAG_SPEC_MAP = (1<<4),
+	SDR_FLAG_NORMAL_MAP = (1<<5),
+	SDR_FLAG_HEIGHT_MAP = (1<<6),
+	SDR_FLAG_ENV_MAP = (1<<7),
+	SDR_FLAG_ANIMATED = (1<<8),
+	SDR_FLAG_SOFT_QUAD = (1<<9),
+	SDR_FLAG_DISTORTION	= (1<<10),
+	SDR_FLAG_MISC_MAP = (1<<11),
+	SDR_FLAG_TEAMCOLOR = (1<<12),
+	SDR_FLAG_THRUSTER = (1<<13),
+};
 
 // stencil buffering stuff
 extern int gr_stencil_mode;

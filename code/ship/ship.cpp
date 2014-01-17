@@ -6375,7 +6375,7 @@ void ship_render(object * obj)
 				render_flags |= (MR_ANIMATED_SHADER);
 
 				ship_effect* sep = &Ship_effects[shipp->shader_effect_num];
-				opengl_shader_set_animated_effect(sep->shader_effect);
+				opengl::shader::set_animated_effect(sep->shader_effect);
 				if (sep->invert_timer) {
 					timer = 1.0f - ((timer_get_milliseconds() - shipp->shader_effect_start_time) / (float)shipp->shader_effect_duration);
 					timer = MAX(timer,0.0f);
@@ -6383,7 +6383,7 @@ void ship_render(object * obj)
 					timer = ((timer_get_milliseconds() - shipp->shader_effect_start_time) / (float)shipp->shader_effect_duration);
 				}
 
-				opengl_shader_set_animated_timer(timer);
+				opengl::shader::set_animated_timer(timer);
 
 				if (sep->disables_rendering && (timer_get_milliseconds() > shipp->shader_effect_start_time + shipp->shader_effect_duration) ) {
 					shipp->flags2 |= SF2_CLOAKED;

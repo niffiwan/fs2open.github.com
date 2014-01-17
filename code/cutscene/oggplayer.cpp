@@ -29,6 +29,7 @@
 #include "theora/theora.h"
 #include "vorbis/codec.h"
 
+using namespace opengl::shader;
 
 extern int Cmdline_noscalevid;
 
@@ -79,6 +80,7 @@ static int audiofd_fragsize = 0;
 static longlong videobuf_granulepos = -1;
 static double videobuf_time = 0;
 
+static Shader videoShader("OGG shader");
 static bool use_shaders = true;
 // -----------------------------------------------------------------------------
 //  Utility items
@@ -364,54 +366,30 @@ static void OGG_video_init(theora_info *tinfo)
 				video_inited = 1;
 				return;
 			}
-
-			char *vert = NULL, *frag = NULL;
-			opengl_shader_t new_shader;
 			
 			// choose appropriate files
-			char *vert_name = "video-v.sdr";
-			char *frag_name = "video-f.sdr";
+			const char *vert_name = "video-v.sdr";
+			const char *frag_name = "video-f.sdr";
 
 			mprintf(("Compiling video-processing shader ... \n"));
 
-			// read vertex shader
-			CFILE *cf_shader = cfopen(vert_name, "rt", CFILE_NORMAL, CF_TYPE_EFFECTS);
-	
-			if (cf_shader != NULL) {
-				int len = cfilelength(cf_shader);
-				vert = (char*) vm_malloc(len + 1);
-				cfread(vert, len + 1, 1, cf_shader);
-				cfclose(cf_shader);
-			} else {
-				mprintf(("   Loading built-in default shader for: %s\n", vert_name));
-				vert = defaults_get_file(vert_name);
+			if (!videoShader.loadShaderFile(Shader::FRAGMENT_SHADER, frag_name))
+			{
+				use_shaders = false;
 			}
 
-			if(!vert)
+			if (!videoShader.loadShaderFile(Shader::VERTEX_SHADER, vert_name))
+			{
 				use_shaders = false;
-
-			// read fragment shader
-			cf_shader = cfopen(frag_name, "rt", CFILE_NORMAL, CF_TYPE_EFFECTS);
-	
-			if (cf_shader != NULL) {
-				int len = cfilelength(cf_shader);
-				frag = (char*) vm_malloc(len + 1);
-				cfread(frag, len + 1, 1, cf_shader);
-				cfclose(cf_shader);
-			} else {
-				mprintf(("   Loading built-in default shader for: %s\n", frag_name));
-				frag = defaults_get_file(frag_name);
 			}
 
-			if(!vert)
-				use_shaders = false;
-			Verify( vert != NULL );
-			Verify( frag != NULL );
-
-			shader_id = opengl_shader_create(vert, frag);
-			vglUseProgramObjectARB(shader_id);
-			if (!shader_id)
-				use_shaders = false;
+			if (use_shaders)
+			{
+				if (!videoShader.linkProgram())
+				{
+					use_shaders = false;
+				}
+			}
 		} 
 
 		if(!use_shaders) {
@@ -444,6 +422,8 @@ static void OGG_video_init(theora_info *tinfo)
 		GL_state.SetZbufferType(ZBUFFER_TYPE_NONE);
 		
 		if(use_shaders) {
+			shaderManager.enableShader(videoShader);
+
 			GL_state.Texture.SetActiveUnit(0);
 			GL_state.Texture.SetTarget(GL_texture_target);
 			GL_state.Texture.Enable(ytex);
@@ -604,7 +584,9 @@ static void OGG_video_close()
 		ytex = utex = vtex = 0;
 		GLtex = 0;
 		GL_state.Texture.SetShaderMode(GL_FALSE);
-		opengl_shader_set_current( 0 );
+
+		shaderManager.disableShader();
+		videoShader.releaseResources();
 	}
 
 	if (pixelbuf != NULL) {

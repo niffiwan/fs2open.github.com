@@ -1746,8 +1746,8 @@ void draw_model_rotating(int model_id, int x1, int y1, int x2, int y2, float *ro
 			model_clear_instance(model_id);
 			model_set_detail_level(0);
 			gr_set_color(80,49,160);
-			opengl_shader_set_animated_effect(ANIMATED_SHADER_LOADOUTSELECT_FS2);
-			opengl_shader_set_animated_timer(-clip);
+			opengl::shader::set_animated_effect(opengl::shader::ANIMATED_SHADER_LOADOUTSELECT_FS2);
+			opengl::shader::set_animated_timer(-clip);
 
 			if ( (time < 2.5f) && (time >= 0.5f) ) { // Phase 1 and 2 render the wireframe
 				if (time >= 1.5f) // Just clip the wireframe after Phase 1
@@ -1832,8 +1832,8 @@ void draw_model_rotating(int model_id, int x1, int y1, int x2, int y2, float *ro
 		gr_set_color(0,128,0);
 
 		if (effect == 1) { // FS1 effect
-			opengl_shader_set_animated_effect(ANIMATED_SHADER_LOADOUTSELECT_FS1);
-			opengl_shader_set_animated_timer(MIN(time*0.5f,2.0f));
+			opengl::shader::set_animated_effect(opengl::shader::ANIMATED_SHADER_LOADOUTSELECT_FS1);
+			opengl::shader::set_animated_timer(MIN(time*0.5f, 2.0f));
 			model_render(model_id, &model_orient, &vmd_zero_vector, flags | MR_ANIMATED_SHADER);
 		} else {
 			model_render(model_id, &model_orient, &vmd_zero_vector, flags);

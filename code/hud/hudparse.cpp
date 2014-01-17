@@ -238,10 +238,14 @@ void parse_hud_gauges_tbl(const char *filename)
 	}
 
 	if (optional_string("$Targetbox Shader Effect:")) {
-		stuff_int(&Targetbox_shader_effect);
-		if (Targetbox_shader_effect < 0) {
-			Targetbox_shader_effect = 0;
+		int temp;
+		stuff_int(&temp);
+
+		if (temp < 0) {
+			temp = 0;
 		}
+
+		Targetbox_shader_effect = static_cast<opengl::shader::AnimatedShader>(temp);
 	}
 
 	if (optional_string("$Lock Wireframe Mode:")) {

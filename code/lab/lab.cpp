@@ -904,8 +904,8 @@ void labviewer_render_model(float frametime)
 				}
 			}
 		}
-		opengl_shader_set_animated_effect(ANIMATED_SHADER_LOADOUTSELECT_FS1);
-		opengl_shader_set_animated_timer(MIN((timer_get_milliseconds()-anim_timer_start)/1500.0f,2.0f));
+		opengl::shader::set_animated_effect(opengl::shader::ANIMATED_SHADER_LOADOUTSELECT_FS1);
+		opengl::shader::set_animated_timer(MIN((timer_get_milliseconds() - anim_timer_start) / 1500.0f, 2.0f));
 
 		//render weapon models if selected
 		if (Lab_mode == LAB_MODE_SHIP && (Lab_viewer_flags & LAB_FLAG_SHOW_WEAPONS)) {

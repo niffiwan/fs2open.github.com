@@ -1426,7 +1426,7 @@ void gr_opengl_shutdown()
 	opengl_tnl_shutdown();
 	opengl_scene_texture_shutdown();
 	opengl_post_process_shutdown();
-	opengl_shader_shutdown();
+	opengl::shader::shutdown();
 
 	GL_initted = false;
 
@@ -2000,7 +2000,7 @@ bool gr_opengl_init()
 	opengl_tnl_init();
 
 	// setup default shaders, and shader related items
-	opengl_shader_init();
+	opengl::shader::init();
 
 	// post processing effects, after shaders are initialized
 	opengl_setup_scene_textures();

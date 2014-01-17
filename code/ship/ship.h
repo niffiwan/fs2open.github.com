@@ -30,6 +30,7 @@
 #include "globalincs/pstypes.h"
 #include "fireball/fireballs.h"
 #include "hud/hud.h"
+#include "graphics/gropenglshader.h"
 
 #include <string>
 
@@ -1960,7 +1961,8 @@ typedef struct ship_effect {
 	char name[NAME_LENGTH];
 	bool disables_rendering;
 	bool invert_timer;
-	int shader_effect;
+
+	opengl::shader::AnimatedShader shader_effect;
 } ship_effect;
 
 extern SCP_vector<ship_effect> Ship_effects;

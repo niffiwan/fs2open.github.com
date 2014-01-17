@@ -103,7 +103,7 @@ int Cargo_scan_coords[GR_NUM_RESOLUTIONS][4] = {
 int Targetbox_flash_timers[NUM_TBOX_FLASH_TIMERS];
 
 int Targetbox_wire = 0;
-int Targetbox_shader_effect = -1;
+opengl::shader::AnimatedShader Targetbox_shader_effect = opengl::shader::ANIMATED_SHADER_NONE;
 bool Lock_targetbox_mode = false;
 
 // Different target states.  This drives the text display right below the hull integrity on the targetbox.
@@ -583,7 +583,7 @@ void HudGaugeTargetBox::renderTargetShip(object *target_objp)
 		if(Targetbox_shader_effect > -1) {
 			flags |= MR_ANIMATED_SHADER;
 
-			opengl_shader_set_animated_effect(Targetbox_shader_effect);
+			opengl::shader::set_animated_effect(Targetbox_shader_effect);
 		}
 
 		if ( Monitor_mask >= 0 ) {
@@ -722,7 +722,7 @@ void HudGaugeTargetBox::renderTargetDebris(object *target_objp)
 		if(Targetbox_shader_effect > -1) {
 			flags |= MR_ANIMATED_SHADER;
 
-			opengl_shader_set_animated_effect(Targetbox_shader_effect);
+			opengl::shader::set_animated_effect(Targetbox_shader_effect);
 		}
 
 		if ( Monitor_mask >= 0 ) {
@@ -923,7 +923,7 @@ void HudGaugeTargetBox::renderTargetWeapon(object *target_objp)
 		if(Targetbox_shader_effect > -1) {
 			flags |= MR_ANIMATED_SHADER;
 
-			opengl_shader_set_animated_effect(Targetbox_shader_effect);
+			opengl::shader::set_animated_effect(Targetbox_shader_effect);
 		}
 
 		if ( Monitor_mask >= 0 ) {
@@ -1086,7 +1086,7 @@ void HudGaugeTargetBox::renderTargetAsteroid(object *target_objp)
 		if(Targetbox_shader_effect > -1) {
 			flags |= MR_ANIMATED_SHADER;
 
-			opengl_shader_set_animated_effect(Targetbox_shader_effect);
+			opengl::shader::set_animated_effect(Targetbox_shader_effect);
 		}
 
 		if ( Monitor_mask >= 0 ) {
