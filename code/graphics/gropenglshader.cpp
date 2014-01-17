@@ -759,3 +759,175 @@ float opengl_shader_get_animated_timer()
 {
 	return Anim_timer;
 }
+
+namespace opengl
+{
+	Shader::~Shader()
+	{
+	}
+
+	void Shader::releaseResources()
+	{
+		for (int i = 0; i < MAX_SHADER_TYPES; i++)
+		{
+			if (programs[i] != 0)
+			{
+				vglDeleteObjectARB(programs[i]);
+			}
+		}
+
+		if (shaderHandle != 0)
+		{
+			vglDeleteObjectARB(this->shaderHandle);
+		}
+	}
+
+	bool Shader::loadShaderSource(Shader::ShaderType shaderType, const SCP_string& source)
+	{
+		GLenum type;
+		switch (shaderType)
+		{
+		case FRAGMENT_SHADER:
+			type = GL_FRAGMENT_SHADER_ARB;
+			break;
+		case VERTEX_SHADER:
+			type = GL_VERTEX_SHADER_ARB;
+			break;
+		case GEOMETRY_SHADER:
+			type = GL_GEOMETRY_SHADER_ARB;
+			break;
+		default:
+			Error(LOCATION, "Unknown shader type %d! Get a coder!", (int) shaderType);
+			type = GL_INVALID_ENUM;
+		}
+
+		GLhandleARB program = opengl_shader_compile_object(source.c_str(), type);
+
+		if (program != 0)
+		{
+			this->programs[shaderType] = program;
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	bool Shader::linkProgram()
+	{
+		GLint status = 0;
+
+		shaderHandle = vglCreateProgramObjectARB();
+
+		for (int i = 0; i < MAX_SHADER_TYPES; i++)
+		{
+			if (programs[i] != 0)
+			{
+				vglAttachObjectARB(shaderHandle, programs[i]);
+			}
+		}
+
+		vglLinkProgramARB(shaderHandle);
+
+		// check if the link was successful
+		vglGetObjectParameterivARB(shaderHandle, GL_OBJECT_LINK_STATUS_ARB, &status);
+
+		opengl_shader_check_info_log(shaderHandle);
+
+		// we failed, bail out now...
+		if (status == 0) {
+			mprintf(("Shader failed to link:\n%s\n", GLshader_info_log));
+
+			if (shaderHandle) {
+				vglDeleteObjectARB(shaderHandle);
+				shaderHandle = 0;
+			}
+
+			return false;
+		}
+
+		// we succeeded, maybe output warnings too
+		if (strlen(GLshader_info_log) > 5) {
+			nprintf(("SHADER-DEBUG", "Shader linked with warnings:\n%s\n", GLshader_info_log));
+		}
+
+		return true;
+	}
+
+	Uniform& Shader::addUniform(const SCP_string& name)
+	{
+		Assertion(shaderHandle != 0, "Tried to add uniform '%s' to invalid or unlinked shader!", name.c_str());
+
+		GLint location = vglGetUniformLocationARB(shaderHandle, name.c_str());
+
+		Assertion(location >= 0, "Failed to find uniform '%s' for shader '%s'!", name.c_str(), this->name.c_str());
+
+		Uniform uniform(this, name, location);
+
+		uniforms[name] = uniform;
+
+		return getUniform(name);
+	}
+
+	Attribute& Shader::addAttribute(const SCP_string& name)
+	{
+		Assertion(shaderHandle != 0, "Tried to add attribute '%s' to invalid or unlinked shader!", name.c_str());
+
+		GLint location = vglGetAttribLocationARB(shaderHandle, name.c_str());
+
+		Assertion(location >= 0, "Failed to find attribute '%s' for shader '%s'!", name.c_str(), this->name.c_str());
+
+		Attribute attrib(this, name, location);
+
+		attributes[name] = attrib;
+
+		return getAttribute(name);
+	}
+
+	Shader& ShaderManager::newShader(const SCP_string& name)
+	{
+		Shader shader(name);
+
+		shaders.push_back(shader);
+
+		return getShader(shaders.size() - 1);
+	}
+
+	void ShaderManager::shutdown()
+	{
+		if (currentShader != NULL)
+		{
+			disableShader(*currentShader);
+		}
+
+		SCP_vector<Shader>::iterator iter;
+		for (iter = shaders.begin(); iter != shaders.end(); ++iter)
+		{
+			iter->releaseResources();
+		}
+
+		shaders.clear();
+	}
+
+	void ShaderManager::enableShader(Shader& shader)
+	{
+		Assertion(currentShader == NULL || currentShader->getHandle() == shader.getHandle(),
+			"Trying to enable shader '%s' although '%s' is already enabled!",
+			shader.getName().c_str(), currentShader->getName().c_str());
+
+		vglUseProgramObjectARB(shader.getHandle());
+		currentShader = &shader;
+	}
+
+	void ShaderManager::disableShader(const Shader& shader)
+	{
+		Assertion(currentShader->getHandle() == shader.getHandle(),
+			"Trying to disable shader '%s' which is not the current shader!", shader.getName().c_str());
+
+		vglUseProgramObjectARB(0);
+		currentShader = NULL;
+	}
+
+	ShaderManager shaderManager();
+}

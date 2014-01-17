@@ -17,6 +17,128 @@
 
 #include <string>
 
+namespace opengl
+{
+	class Shader;
+
+	class Uniform
+	{
+	private:
+		SCP_string name;
+		GLint location;
+		Shader *parentShader;
+
+	public:
+		Uniform(Shader* parentShader, const SCP_string& name, GLint location)
+			: parentShader(parentShader), name(name), location(location) {}
+
+		Uniform() : name(""), location(-1), parentShader(NULL) {}
+
+		inline GLint getLocation() const { return location; }
+
+		inline const SCP_string& getName() const { return name; }
+
+		template<class T>
+		void setValue(size_t count, T* values);
+	};
+
+	class Attribute
+	{
+	private:
+		SCP_string name;
+		GLint location;
+		Shader *parentShader;
+
+	public:
+		Attribute(Shader* parentShader, const SCP_string& name, GLint location)
+			: parentShader(parentShader), name(name), location(location) {}
+
+		Attribute() : name(""), location(-1), parentShader(NULL) {}
+
+		inline GLint getLocation() const { return location; }
+
+		inline const SCP_string& getName() const { return name; }
+	};
+
+	class Shader
+	{
+	public:
+		enum ShaderType { VERTEX_SHADER, FRAGMENT_SHADER, GEOMETRY_SHADER, MAX_SHADER_TYPES };
+
+	private:
+		SCP_string name;
+		GLhandleARB shaderHandle;
+		bool enabled;
+		GLhandleARB programs[MAX_SHADER_TYPES];
+
+		SCP_hash_map<SCP_string, Uniform> uniforms;
+		SCP_hash_map<SCP_string, Attribute> attributes;
+
+	public:
+		Shader::Shader(const SCP_string& name) : name(name), shaderHandle(0), enabled(false) {}
+		~Shader();
+
+		bool loadShaderSource(ShaderType shaderType, const SCP_string& source);
+		bool linkProgram();
+
+		void releaseResources();
+
+		Uniform& addUniform(const SCP_string& name);
+		Attribute& addAttribute(const SCP_string& name);
+
+		inline GLhandleARB getHandle() const { return shaderHandle; }
+		inline SCP_string getName() const { return name; }
+
+		inline Attribute& getAttribute(const SCP_string& name)
+		{
+			Assertion(attributes.find(name) != attributes.end(), "Failed to find attribute '%s' in shader '%s'.", name.c_str(), this->name.c_str());
+
+			return attributes[name];
+		}
+
+		inline Uniform& getUniform(const SCP_string& name)
+		{
+			Assertion(uniforms.find(name) != uniforms.end(), "Failed to find uniform '%s' in shader '%s'.", name.c_str(), this->name.c_str());
+
+			return uniforms[name];
+		}
+
+		inline Uniform& operator[] (const SCP_string& name)
+		{
+			return getUniform(name);
+		}
+	};
+
+	class ShaderManager
+	{
+	private:
+		SCP_vector<Shader> shaders;
+		Shader* currentShader;
+
+	public:
+		ShaderManager() : shaders(SCP_vector<Shader>()), currentShader(NULL) {}
+
+		Shader& newShader(const SCP_string& name);
+
+		void enableShader(Shader& shader);
+
+		void disableShader(const Shader& shader);
+
+		void shutdown();
+
+		inline Shader* getCurrentShader() { return currentShader; }
+
+		inline Shader& getShader(size_t index)
+		{
+			Assertion(index >= 0 && index < shaders.size(), "Invalid shader index %d!", index);
+
+			return shaders[index];
+		}
+	};
+
+	extern ShaderManager shaderManager;
+}
+
 #define MAX_SHADER_UNIFORMS		15
 
 #define SDR_ATTRIB_RADIUS		0
