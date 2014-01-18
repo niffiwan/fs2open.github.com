@@ -86,7 +86,14 @@ namespace opengl
 			SCP_hash_map<SCP_string, Attribute> attributes;
 
 		public:
-			Shader::Shader(const SCP_string& name) : name(name), shaderHandle(0), enabled(false), flags(0), flags2(0) {}
+			Shader::Shader(const SCP_string& name) : name(name), shaderHandle(0), enabled(false), flags(0), flags2(0)
+			{
+				for (int i = 0; i < MAX_SHADER_TYPES; i++)
+				{
+					programs[i] = 0;
+				}
+			}
+
 			~Shader();
 
 			bool loadShaderSource(ShaderType shaderType, const SCP_string& source);
