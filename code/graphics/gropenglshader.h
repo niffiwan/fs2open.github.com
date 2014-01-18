@@ -30,11 +30,13 @@ namespace opengl
 			GLint location;
 			Shader *parentShader;
 
+			bool valid;
+
 		public:
 			Uniform(Shader* parentShader, const SCP_string& name, GLint location)
-				: parentShader(parentShader), name(name), location(location) {}
+				: parentShader(parentShader), name(name), location(location), valid(true) {}
 
-			Uniform() : name(""), location(-1), parentShader(NULL) {}
+			Uniform() : name(""), location(-1), parentShader(NULL), valid(false) {}
 
 			inline GLint getLocation() const { return location; }
 
@@ -50,6 +52,8 @@ namespace opengl
 
 			void setValue2f(float x, float y);
 		};
+
+		extern Uniform invalidUniform;
 
 		class Attribute
 		{
@@ -106,7 +110,7 @@ namespace opengl
 
 			void releaseResources();
 
-			Uniform& addUniform(const SCP_string& name);
+			bool addUniform(const SCP_string& name);
 			Attribute& addAttribute(const SCP_string& name);
 
 			inline GLhandleARB getHandle() const { return shaderHandle; }
@@ -123,9 +127,17 @@ namespace opengl
 
 			inline Uniform& getUniform(const SCP_string& name)
 			{
-				Assertion(uniforms.find(name) != uniforms.end(), "Failed to find uniform '%s' in shader '%s'.", name.c_str(), this->name.c_str());
+				SCP_hash_map<SCP_string, Uniform>::iterator iter = uniforms.find(name);
 
-				return uniforms[name];
+				if (iter == uniforms.end())
+				{
+					nprintf(("SHADER-DEBUG", "WARNING: Unable to find uniform \"%s\" in shader \"%s\"!\n", name.c_str(), this->name.c_str()));
+					return invalidUniform;
+				}
+				else
+				{
+					return iter->second;
+				}
 			}
 		};
 

@@ -626,19 +626,21 @@ namespace opengl
 			return true;
 		}
 
-		Uniform& Shader::addUniform(const SCP_string& name)
+		bool Shader::addUniform(const SCP_string& name)
 		{
 			Assertion(shaderHandle != 0, "Tried to add uniform '%s' to invalid or unlinked shader!", name.c_str());
 
 			GLint location = vglGetUniformLocationARB(shaderHandle, name.c_str());
 
-			Assertion(location >= 0, "Failed to find uniform '%s' for shader '%s'!", name.c_str(), this->name.c_str());
+			if (location < 0) {
+				return false;
+			}
 
 			Uniform uniform(this, name, location);
 
 			uniforms[name] = uniform;
 
-			return getUniform(name);
+			return true;
 		}
 
 		Attribute& Shader::addAttribute(const SCP_string& name)
@@ -669,32 +671,44 @@ namespace opengl
 		template<>
 		void Uniform::setValue<int>(const int& value)
 		{
+			if (!valid) return;
+
 			vglUniform1iARB(location, value);
 		}
 
 		template<>
 		void Uniform::setValue<float>(const float& value)
 		{
+			if (!valid) return;
+
 			vglUniform1fARB(location, value);
 		}
 
 		template<>
 		void Uniform::setValue<vec2d>(const vec2d& value)
 		{
+			if (!valid) return;
+
 			vglUniform2fARB(location, value.x, value.y);
 		}
 
 		template<>
 		void Uniform::setValue<vec3d>(const vec3d& value)
 		{
+			if (!valid) return;
+
 			vglUniform3fARB(location, value.xyz.x, value.xyz.y, value.xyz.z);
 		}
 
 		template<>
 		void Uniform::setValue<matrix4>(const matrix4& value)
 		{
+			if (!valid) return;
+
 			vglUniformMatrix4fvARB(location, 1, GL_FALSE, value.data);
 		}
+
+		Uniform invalidUniform;
 
 		Shader& ShaderManager::addShader(Shader& newShader)
 		{
@@ -721,10 +735,6 @@ namespace opengl
 
 		void ShaderManager::enableShader(Shader& shader)
 		{
-			Assertion(currentShader == NULL || currentShader->getHandle() == shader.getHandle(),
-				"Trying to enable shader '%s' although '%s' is already enabled!",
-				shader.getName().c_str(), currentShader->getName().c_str());
-
 			vglUseProgramObjectARB(shader.getHandle());
 			currentShader = &shader;
 
