@@ -509,6 +509,8 @@ namespace opengl
 				ss << "#define FLAG_THRUSTER\n";
 			}
 
+			ss << source;
+
 			return ss.str();
 		}
 
@@ -565,7 +567,7 @@ namespace opengl
 			if (!fromFile)
 			{
 				//If we're still here, proceed with internals
-				mprintf(("   Loading built-in default shader for: %s\n", filename));
+				mprintf(("   Loading built-in default shader for: %s\n", filename.c_str()));
 				source.assign(defaults_get_file(filename.c_str()));
 			}
 
