@@ -301,12 +301,12 @@ void opengl_post_pass_fxaa() {
 	// We only want to draw to ATTACHMENT0
 	glDrawBuffer(GL_COLOR_ATTACHMENT0_EXT);
 
-	Shader& shader1 = GL_post_shader[fxaa_shader_id + 1];
+	Shader& shader = GL_post_shader[fxaa_shader_id + 1];
 	// Do a prepass to convert the main shaders' RGBA output into RGBL
-	shaderManager.enableShader(shader1);
+	shaderManager.enableShader(shader);
 
 	// basic/default uniforms
-	shader1.getUniform("tex").setValue(0);
+	shader.getUniform("tex").setValue(0);
 
 	vglFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, Scene_luminance_texture, 0);
 
@@ -319,15 +319,15 @@ void opengl_post_pass_fxaa() {
 	GL_state.Texture.Disable();
 
 	// set and configure post shader ..
-	Shader& shader2 = GL_post_shader[fxaa_shader_id];
-	shaderManager.enableShader(shader2);
+	shader = GL_post_shader[fxaa_shader_id];
+	shaderManager.enableShader(shader);
 
 	vglFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, Scene_color_texture, 0);
 
 	// basic/default uniforms
-	shader2.getUniform("tex0").setValue(0);
-	shader2.getUniform("rt_w").setValue(static_cast<float>(Post_texture_width));
-	shader2.getUniform("rt_h").setValue(static_cast<float>(Post_texture_height));
+	shader.getUniform("tex0").setValue(0);
+	shader.getUniform("rt_w").setValue(static_cast<float>(Post_texture_width));
+	shader.getUniform("rt_h").setValue(static_cast<float>(Post_texture_height));
 
 	GL_state.Texture.SetActiveUnit(0);
 	GL_state.Texture.SetTarget(GL_TEXTURE_2D);
@@ -431,20 +431,19 @@ void gr_opengl_post_process_end()
 
 	// set and configure post shader ...
 
-	Shader& postShader = GL_post_shader[Post_active_shader_index];
-	shaderManager.enableShader(postShader);
+	shader = GL_post_shader[Post_active_shader_index];
+	shaderManager.enableShader(shader);
 
 	// basic/default uniforms
-	postShader.getUniform("tex").setValue(0);
-	postShader.getUniform("depth_tex").setValue(2);
-	postShader.getUniform("timer").setValue(static_cast<float>(timer_get_milliseconds() % 100 + 1));
+	shader.getUniform("tex").setValue(0);
+	shader.getUniform("depth_tex").setValue(2);
+	shader.getUniform("timer").setValue(static_cast<float>(timer_get_milliseconds() % 100 + 1));
 
 	for (size_t idx = 0; idx < Post_effects.size(); idx++) {
 		if ( GL_post_shader[Post_active_shader_index].getSecondaryFlags() & (1<<idx) ) {
-			const char *name = Post_effects[idx].uniform_name.c_str();
 			float value = Post_effects[idx].intensity;
-
-			postShader.getUniform(name).setValue(value);
+			
+			shader.getUniform(Post_effects[idx].uniform_name).setValue(value);
 		}
 	}
 
@@ -457,9 +456,9 @@ void gr_opengl_post_process_end()
 			intensity /= 3.0f;
 		}
 
-		postShader.getUniform("bloom_intensity").setValue(intensity);
+		shader.getUniform("bloom_intensity").setValue(intensity);
 
-		postShader.getUniform("bloomed").setValue(1);
+		shader.getUniform("bloomed").setValue(1);
 
 		GL_state.Texture.SetActiveUnit(1);
 		GL_state.Texture.SetTarget(GL_TEXTURE_2D);
@@ -935,18 +934,17 @@ static SCP_string opengl_post_load_shader(const char *filename, int flags, int f
 static bool opengl_post_init_shader()
 {
 	bool rval = true;
-	int idx, i;
 	int flags2 = 0;
 	int num_main_uniforms = 0;
 
-	for (idx = 0; idx < (int)Post_effects.size(); idx++) {
+	for (int idx = 0; idx < (int)Post_effects.size(); idx++) {
 		if (Post_effects[idx].always_on) {
 			flags2 |= (1 << idx);
 			num_main_uniforms++;
 		}
 	}
 
-	for (idx = 0; idx < (int)Num_post_shader_files; idx++) {
+	for (int idx = 0; idx < (int)Num_post_shader_files; idx++) {
 		bool in_error = false;
 
 		opengl_shader_file_t *shader_file = &GL_post_shader_files[idx];
@@ -990,12 +988,12 @@ static bool opengl_post_init_shader()
 
 			shaderManager.enableShader(postShader);
 
-			for (idx = 0; idx < shader_file->num_uniforms; idx++) {
-				postShader.addUniform(shader_file->uniforms[idx]);
+			for (int uniform = 0; uniform < shader_file->num_uniforms; uniform++) {
+				postShader.addUniform(shader_file->uniforms[uniform]);
 			}
 
-			if (idx == 0) {
-				for (i = 0; i < (int)Post_effects.size(); i++) {
+			if (shader_file->num_uniforms == 0) {
+				for (int i = 0; i < (int)Post_effects.size(); i++) {
 					if (flags2 & (1 << i)) {
 						postShader.addUniform(Post_effects[i].uniform_name);
 					}
@@ -1009,14 +1007,14 @@ static bool opengl_post_init_shader()
 
 			// add it to our list of embedded shaders
 			GL_post_shader.push_back(postShader);
+
+			if (idx == 4)
+				fxaa_shader_id = GL_post_shader.size() - 1;
 		}
 		else
 		{
 			postShader.releaseResources();
 		}
-
-		if (idx == 4)
-			fxaa_shader_id = GL_post_shader.size() - 1;
 
 		if (in_error) {
 			if (idx == 0) {
