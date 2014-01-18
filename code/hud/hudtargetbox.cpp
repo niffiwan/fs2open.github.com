@@ -580,7 +580,7 @@ void HudGaugeTargetBox::renderTargetShip(object *target_objp)
 			model_set_detail_level(target_sip->hud_target_lod);
 		}
 
-		if(Targetbox_shader_effect > -1) {
+		if(Targetbox_shader_effect != opengl::shader::ANIMATED_SHADER_NONE) {
 			flags |= MR_ANIMATED_SHADER;
 
 			opengl::shader::set_animated_effect(Targetbox_shader_effect);
