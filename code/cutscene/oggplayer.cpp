@@ -422,7 +422,7 @@ static void OGG_video_init(theora_info *tinfo)
 		GL_state.SetZbufferType(ZBUFFER_TYPE_NONE);
 		
 		if(use_shaders) {
-			shaderManager.enableShader(videoShader);
+			GL_state.Shader.enableShader(videoShader);
 
 			GL_state.Texture.SetActiveUnit(0);
 			GL_state.Texture.SetTarget(GL_texture_target);
@@ -585,7 +585,7 @@ static void OGG_video_close()
 		GLtex = 0;
 		GL_state.Texture.SetShaderMode(GL_FALSE);
 
-		shaderManager.disableShader();
+		GL_state.Shader.disableShader();
 		videoShader.releaseResources();
 	}
 

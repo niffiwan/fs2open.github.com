@@ -332,6 +332,8 @@ opengl_state::~opengl_state()
 	if (light_Status != NULL) {
 		vm_free(light_Status);
 	}
+
+	Shader.shutdown();
 }
 
 void opengl_state::init()

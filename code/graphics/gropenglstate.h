@@ -15,6 +15,7 @@
 #include "graphics/gropengl.h"
 #include "graphics/gropenglextension.h"
 #include "graphics/gropengltexture.h"
+#include "graphics/gropenglshader.h"
 
 struct opengl_texture_unit {
 	GLboolean active;	// unit is active
@@ -308,6 +309,7 @@ class opengl_state
 
 		opengl_texture_state Texture;
 		opengl_array_state Array;
+		opengl::shader::ShaderState Shader;
 
 		void SetTextureSource(gr_texture_source ts);
 		void SetAlphaBlendMode(gr_alpha_blend ab);

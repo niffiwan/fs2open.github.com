@@ -97,7 +97,7 @@ int gr_opengl_maybe_create_shader(int flags)
 	if (Use_GLSL < 2)
 		return -1;
 
-	const SCP_vector<Shader>& shaders = shaderManager.getShaderVector();
+	const SCP_vector<Shader>& shaders = GL_state.Shader.getShaderVector();
 
 	SCP_vector<Shader>::const_iterator iter;
 	int idx = 0;
@@ -136,8 +136,6 @@ namespace opengl
 				vm_free(GLshader_info_log);
 				GLshader_info_log = NULL;
 			}
-
-			shaderManager.shutdown();
 		}
 
 		/**
@@ -186,7 +184,7 @@ namespace opengl
 
 			if (!in_error)
 			{
-				shaderManager.enableShader(shader);
+				GL_state.Shader.enableShader(shader);
 
 				mprintf(("Shader features:\n"));
 
@@ -230,9 +228,9 @@ namespace opengl
 					}
 				}
 
-				shaderManager.disableShader();
+				GL_state.Shader.disableShader();
 
-				shaderManager.addShader(shader);
+				GL_state.Shader.addShader(shader);
 			}
 			else
 			{
@@ -263,7 +261,7 @@ namespace opengl
 						Cmdline_normal = 0;
 
 						// Clear resources of shader manager
-						shaderManager.shutdown();
+						GL_state.Shader.shutdown();
 					} else {
 						// We died on a lighting shader, probably due to instruction count.
 						// Drop down to a special var that will use fixed-function rendering
@@ -716,14 +714,14 @@ namespace opengl
 
 		Uniform invalidUniform;
 
-		Shader& ShaderManager::addShader(Shader& newShader)
+		Shader& ShaderState::addShader(Shader& newShader)
 		{
 			shaders.push_back(newShader);
 
 			return getShader(shaders.size() - 1);
 		}
 
-		void ShaderManager::shutdown()
+		void ShaderState::shutdown()
 		{
 			if (currentShader != NULL)
 			{
@@ -739,7 +737,7 @@ namespace opengl
 			shaders.clear();
 		}
 
-		void ShaderManager::enableShader(Shader& shader)
+		void ShaderState::enableShader(Shader& shader)
 		{
 			vglUseProgramObjectARB(shader.getHandle());
 			currentShader = &shader;
@@ -767,7 +765,7 @@ namespace opengl
 	#endif
 		}
 
-		void ShaderManager::disableShader()
+		void ShaderState::disableShader()
 		{
 			if (currentShader != NULL)
 			{
@@ -775,7 +773,5 @@ namespace opengl
 				currentShader = NULL;
 			}
 		}
-
-		ShaderManager shaderManager;
 	}
 }

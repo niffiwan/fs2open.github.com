@@ -636,7 +636,7 @@ void gr_opengl_line_htl(vec3d *start, vec3d *end)
 	};
 
 	GL_state.Array.BindArrayBuffer(0);
-	opengl::shader::shaderManager.disableShader();
+	GL_state.Shader.disableShader();
 
 	GL_state.Array.EnableClientVertex();
 	GL_state.Array.VertexPointer(3, GL_FLOAT, 0, line);
@@ -1358,7 +1358,7 @@ void opengl_tmapper_internal3d(int nv, vertex **verts, uint flags)
 		}
 	}
 
-	opengl::shader::shaderManager.disableShader();
+	GL_state.Shader.disableShader();
 
 	GLboolean cull_face = GL_state.CullFace(GL_FALSE);
 
@@ -1632,8 +1632,8 @@ void gr_opengl_render_effect(int nverts, vertex *verts, float *radius_list, uint
 					return;
 				}
 
-				shader = &shaderManager.getShader(sdr_index);
-				shaderManager.enableShader(*shader);
+				shader = &GL_state.Shader.getShader(sdr_index);
+				GL_state.Shader.enableShader(*shader);
 				
 				shader->getUniform("frameBuffer").setValue(2);
 				
@@ -1662,8 +1662,8 @@ void gr_opengl_render_effect(int nverts, vertex *verts, float *radius_list, uint
 					return;
 				}
 
-				shader = &shaderManager.getShader(sdr_index);
-				shaderManager.enableShader(*shader);
+				shader = &GL_state.Shader.getShader(sdr_index);
+				GL_state.Shader.enableShader(*shader);
 
 				zbuff = gr_zbuffer_set(GR_ZBUFF_NONE);
 			}
@@ -1732,7 +1732,7 @@ void gr_opengl_render_effect(int nverts, vertex *verts, float *radius_list, uint
 
 	glDrawArrays(gl_mode, 0, nverts);
 
-	shaderManager.disableShader();
+	GL_state.Shader.disableShader();
 
 	GL_state.Texture.SetActiveUnit(1);
 	GL_state.Texture.Disable();
@@ -2271,7 +2271,7 @@ void gr_opengl_sphere_htl(float rad)
 	GL_state.SetTextureSource(TEXTURE_SOURCE_NONE);
 	GL_state.SetAlphaBlendMode(ALPHA_BLEND_NONE);
 	GL_state.SetZbufferType(ZBUFFER_TYPE_FULL);
-	opengl::shader::shaderManager.disableShader();
+	GL_state.Shader.disableShader();
 
 	GL_state.Color(gr_screen.current_color.red, gr_screen.current_color.green, gr_screen.current_color.blue);
 
@@ -2712,7 +2712,7 @@ void gr_opengl_update_distortion()
 	GLboolean blend = GL_state.Blend(GL_FALSE);
 	GLboolean cull = GL_state.CullFace(GL_FALSE);
 
-	opengl::shader::shaderManager.disableShader();
+	GL_state.Shader.disableShader();
 	vglBindFramebufferEXT(GL_FRAMEBUFFER_EXT, Distortion_framebuffer);
 	vglFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, Distortion_texture[!Distortion_switch], 0);
 	glDrawBuffer(GL_COLOR_ATTACHMENT0_EXT);

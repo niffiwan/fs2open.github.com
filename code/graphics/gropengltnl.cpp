@@ -415,7 +415,7 @@ void gr_opengl_set_buffer(int idx)
 		}
 
 		if ( (Use_GLSL > 1) && !GLSL_override ) {
-			opengl::shader::shaderManager.disableShader();
+			GL_state.Shader.disableShader();
 		}
 
 		return;
@@ -672,8 +672,8 @@ static void opengl_render_pipeline_program(int start, const vertex_buffer *buffe
 
 	Assert( sdr_index >= 0 );
 
-	Shader& renderShader = shaderManager.getShader(sdr_index);
-	shaderManager.enableShader(renderShader);
+	Shader& renderShader = GL_state.Shader.getShader(sdr_index);
+	GL_state.Shader.enableShader(renderShader);
 
 	opengl_default_light_settings( !GL_center_alpha, (Interp_light > 0.25f) );
 	gr_opengl_set_center_alpha(GL_center_alpha);
@@ -1296,7 +1296,7 @@ void gr_opengl_render_stream_buffer_start(int buffer_id)
 	Stream_lighting = GL_state.Lighting(GL_FALSE);
 	Stream_zbuff_mode = gr_zbuffer_set(GR_ZBUFF_READ);
 
-	opengl::shader::shaderManager.disableShader();
+	GL_state.Shader.disableShader();
 	Stream_buffer_sdr = -1;
 }
 
@@ -1306,7 +1306,7 @@ void gr_opengl_render_stream_buffer_end()
 
 	gr_opengl_flush_data_states();
 
-	opengl::shader::shaderManager.disableShader();
+	GL_state.Shader.disableShader();
 	Stream_buffer_sdr = -1;
 
 	GL_state.CullFace(Stream_cull);
@@ -1353,12 +1353,12 @@ void gr_opengl_render_stream_buffer(int offset, int n_verts, int flags)
 
 			if( (flags & TMAP_FLAG_DISTORTION) || (flags & TMAP_FLAG_DISTORTION_THRUSTER) ) {
 				sdr_index = gr_opengl_maybe_create_shader(SDR_FLAG_SOFT_QUAD | SDR_FLAG_DISTORTION);
-				Shader& renderShader = shaderManager.getShader(sdr_index);
+				Shader& renderShader = GL_state.Shader.getShader(sdr_index);
 
 				if ( sdr_index != Stream_buffer_sdr ) {
 					glDrawBuffer(GL_COLOR_ATTACHMENT0_EXT);
 
-					shaderManager.enableShader(renderShader);
+					GL_state.Shader.enableShader(renderShader);
 					Stream_buffer_sdr = sdr_index;
 
 					renderShader.getUniform("baseMap").setValue(0);
@@ -1400,10 +1400,10 @@ void gr_opengl_render_stream_buffer(int offset, int n_verts, int flags)
 				GL_state.Texture.Enable(Scene_depth_texture);
 			} else if ( Cmdline_softparticles ) {
 				sdr_index = gr_opengl_maybe_create_shader(SDR_FLAG_SOFT_QUAD);
-				Shader& renderShader = shaderManager.getShader(sdr_index);
+				Shader& renderShader = GL_state.Shader.getShader(sdr_index);
 
 				if ( sdr_index != Stream_buffer_sdr ) {
-					opengl::shader::shaderManager.enableShader(renderShader);
+					GL_state.Shader.enableShader(renderShader);
 					Stream_buffer_sdr = sdr_index;
 
 					renderShader.getUniform("baseMap").setValue(0);

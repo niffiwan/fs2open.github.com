@@ -143,14 +143,14 @@ namespace opengl
 			}
 		};
 
-		class ShaderManager
+		class ShaderState
 		{
 		private:
 			SCP_vector<Shader> shaders;
 			Shader* currentShader;
 
 		public:
-			ShaderManager() : shaders(SCP_vector<Shader>()), currentShader(NULL) {}
+			ShaderState() : shaders(SCP_vector<Shader>()), currentShader(NULL) {}
 
 			Shader& addShader(Shader& newShader);
 
@@ -171,8 +171,6 @@ namespace opengl
 				return shaders[index];
 			}
 		};
-
-		extern ShaderManager shaderManager;
 
 		enum AnimatedShader
 		{
