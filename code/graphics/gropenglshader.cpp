@@ -386,6 +386,12 @@ namespace opengl
 				vglDeleteObjectARB(this->shaderHandle);
 				this->shaderHandle = 0;
 			}
+
+			uniforms.clear();
+			attributes.clear();
+
+			flags = 0;
+			flags2 = 0;
 		}
 
 		void Shader::addPrimaryFlag(int flags)
