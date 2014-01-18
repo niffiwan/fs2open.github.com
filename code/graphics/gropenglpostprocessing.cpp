@@ -186,7 +186,7 @@ static bool opengl_post_pass_bloom()
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		Shader& passShader = GL_post_shader[1 + pass];
-		opengl::shader::shaderManager.enableShader(passShader);
+		shaderManager.enableShader(passShader);
 
 		passShader.getUniform("tex").setValue(0);
 		passShader.getUniform("bsize").setValue((pass) ? (float)width : (float)height);
@@ -301,8 +301,8 @@ void opengl_post_pass_fxaa() {
 	// We only want to draw to ATTACHMENT0
 	glDrawBuffer(GL_COLOR_ATTACHMENT0_EXT);
 
-	Shader& shader = GL_post_shader[fxaa_shader_id + 1];
 	// Do a prepass to convert the main shaders' RGBA output into RGBL
+	Shader& shader = GL_post_shader[fxaa_shader_id + 1];
 	shaderManager.enableShader(shader);
 
 	// basic/default uniforms
@@ -319,15 +319,15 @@ void opengl_post_pass_fxaa() {
 	GL_state.Texture.Disable();
 
 	// set and configure post shader ..
-	shader = GL_post_shader[fxaa_shader_id];
-	shaderManager.enableShader(shader);
+	Shader& shader2 = GL_post_shader[fxaa_shader_id];
+	shaderManager.enableShader(shader2);
 
 	vglFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_2D, Scene_color_texture, 0);
 
 	// basic/default uniforms
-	shader.getUniform("tex0").setValue(0);
-	shader.getUniform("rt_w").setValue(static_cast<float>(Post_texture_width));
-	shader.getUniform("rt_h").setValue(static_cast<float>(Post_texture_height));
+	shader2.getUniform("tex0").setValue(0);
+	shader2.getUniform("rt_w").setValue(static_cast<float>(Post_texture_width));
+	shader2.getUniform("rt_h").setValue(static_cast<float>(Post_texture_height));
 
 	GL_state.Texture.SetActiveUnit(0);
 	GL_state.Texture.SetTarget(GL_TEXTURE_2D);
@@ -419,7 +419,7 @@ void gr_opengl_post_process_end()
 	}
 	
 	// Bind the correct framebuffer. opengl_get_rtt_framebuffer returns 0 if not doing RTT
-	vglBindFramebufferEXT(GL_FRAMEBUFFER_EXT, opengl_get_rtt_framebuffer());	
+	vglBindFramebufferEXT(GL_FRAMEBUFFER_EXT, opengl_get_rtt_framebuffer());
 
 	// do bloom, hopefully ;)
 	bool bloomed = opengl_post_pass_bloom();
@@ -431,19 +431,19 @@ void gr_opengl_post_process_end()
 
 	// set and configure post shader ...
 
-	shader = GL_post_shader[Post_active_shader_index];
-	shaderManager.enableShader(shader);
+	Shader& activeShader = GL_post_shader[Post_active_shader_index];
+	shaderManager.enableShader(activeShader);
 
 	// basic/default uniforms
-	shader.getUniform("tex").setValue(0);
-	shader.getUniform("depth_tex").setValue(2);
-	shader.getUniform("timer").setValue(static_cast<float>(timer_get_milliseconds() % 100 + 1));
+	activeShader.getUniform("tex").setValue(0);
+	activeShader.getUniform("depth_tex").setValue(2);
+	activeShader.getUniform("timer").setValue(static_cast<float>(timer_get_milliseconds() % 100 + 1));
 
 	for (size_t idx = 0; idx < Post_effects.size(); idx++) {
 		if ( GL_post_shader[Post_active_shader_index].getSecondaryFlags() & (1<<idx) ) {
 			float value = Post_effects[idx].intensity;
 			
-			shader.getUniform(Post_effects[idx].uniform_name).setValue(value);
+			activeShader.getUniform(Post_effects[idx].uniform_name).setValue(value);
 		}
 	}
 
@@ -456,9 +456,9 @@ void gr_opengl_post_process_end()
 			intensity /= 3.0f;
 		}
 
-		shader.getUniform("bloom_intensity").setValue(intensity);
+		activeShader.getUniform("bloom_intensity").setValue(intensity);
 
-		shader.getUniform("bloomed").setValue(1);
+		activeShader.getUniform("bloomed").setValue(1);
 
 		GL_state.Texture.SetActiveUnit(1);
 		GL_state.Texture.SetTarget(GL_TEXTURE_2D);
@@ -494,9 +494,9 @@ void gr_opengl_post_process_end()
 	GL_state.Blend(blend);
 	GL_state.CullFace(cull);
 
-	shaderManager.disableShader();
-
 	Post_in_frame = false;
+
+	shaderManager.disableShader();
 }
 
 void get_post_process_effect_names(SCP_vector<SCP_string> &names) 
@@ -992,7 +992,7 @@ static bool opengl_post_init_shader()
 				postShader.addUniform(shader_file->uniforms[uniform]);
 			}
 
-			if (shader_file->num_uniforms == 0) {
+			if (idx == 0) {
 				for (int i = 0; i < (int)Post_effects.size(); i++) {
 					if (flags2 & (1 << i)) {
 						postShader.addUniform(Post_effects[i].uniform_name);

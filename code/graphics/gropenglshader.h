@@ -81,7 +81,6 @@ namespace opengl
 		private:
 			SCP_string name;
 			GLhandleARB shaderHandle;
-			bool enabled;
 			GLhandleARB programs[MAX_SHADER_TYPES];
 			int flags;
 			int flags2;
@@ -89,8 +88,11 @@ namespace opengl
 			SCP_hash_map<SCP_string, Uniform> uniforms;
 			SCP_hash_map<SCP_string, Attribute> attributes;
 
+			// Disallow allignment
+			Shader& operator= (const Shader&);
+
 		public:
-			Shader::Shader(const SCP_string& name) : name(name), shaderHandle(0), enabled(false), flags(0), flags2(0)
+			Shader::Shader(const SCP_string& name) : name(name), shaderHandle(0), flags(0), flags2(0)
 			{
 				for (int i = 0; i < MAX_SHADER_TYPES; i++)
 				{
