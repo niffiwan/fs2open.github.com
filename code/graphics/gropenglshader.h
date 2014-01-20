@@ -86,8 +86,8 @@ namespace opengl
 			int flags;
 			int flags2;
 
-			boost::unordered_map<SCP_string, Uniform, boost::hash<SCP_string>> uniforms;
-			boost::unordered_map<SCP_string, Attribute, boost::hash<SCP_string>> attributes;
+			boost::unordered_map<const char*, Uniform, boost::hash<const char*>> uniforms;
+			boost::unordered_map<const char*, Attribute, boost::hash<const char*>> attributes;
 
 			// Disallow allignment
 			Shader& operator= (const Shader&);
@@ -113,28 +113,28 @@ namespace opengl
 
 			void releaseResources();
 
-			bool addUniform(const SCP_string& name);
-			bool addAttribute(const SCP_string& name);
+			bool addUniform(const char* name);
+			bool addAttribute(const char* name);
 
 			inline GLhandleARB getHandle() const { return shaderHandle; }
 			inline SCP_string getName() const { return name; }
 			inline int getPrimaryFlags() const { return flags; }
 			inline int getSecondaryFlags() const { return flags2; }
 
-			inline Attribute& getAttribute(const SCP_string& name)
+			inline Attribute& getAttribute(const char* name)
 			{
-				Assertion(attributes.find(name) != attributes.end(), "Failed to find attribute '%s' in shader '%s'.", name.c_str(), this->name.c_str());
+				Assertion(attributes.find(name) != attributes.end(), "Failed to find attribute '%s' in shader '%s'.", name, this->name.c_str());
 
 				return attributes[name];
 			}
 
-			inline Uniform& getUniform(const SCP_string& name)
+			inline Uniform& getUniform(const char* name)
 			{
-				boost::unordered_map<SCP_string, Uniform>::iterator iter = uniforms.find(name);
+				boost::unordered_map<const char*, Uniform>::iterator iter = uniforms.find(name);
 
 				if (iter == uniforms.end())
 				{
-					nprintf(("SHADER-DEBUG", "WARNING: Unable to find uniform \"%s\" in shader \"%s\"!\n", name.c_str(), this->name.c_str()));
+					nprintf(("SHADER-DEBUG", "WARNING: Unable to find uniform \"%s\" in shader \"%s\"!\n", name, this->name.c_str()));
 					return invalidUniform;
 				}
 				else

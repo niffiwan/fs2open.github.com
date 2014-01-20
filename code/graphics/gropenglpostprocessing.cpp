@@ -443,7 +443,7 @@ void gr_opengl_post_process_end()
 		if ( GL_post_shader[Post_active_shader_index].getSecondaryFlags() & (1<<idx) ) {
 			float value = Post_effects[idx].intensity;
 			
-			activeShader.getUniform(Post_effects[idx].uniform_name).setValue(value);
+			activeShader.getUniform(Post_effects[idx].uniform_name.c_str()).setValue(value);
 		}
 	}
 
@@ -567,7 +567,7 @@ static bool opengl_post_compile_shader(int flags)
 
 		for (idx = 0; idx < (int)Post_effects.size(); idx++) {
 			if ( flags & (1 << idx) ) {
-				postShader.addUniform(Post_effects[idx].uniform_name);
+				postShader.addUniform(Post_effects[idx].uniform_name.c_str());
 			}
 		}
 
@@ -995,7 +995,7 @@ static bool opengl_post_init_shader()
 			if (idx == 0) {
 				for (int i = 0; i < (int)Post_effects.size(); i++) {
 					if (flags2 & (1 << i)) {
-						postShader.addUniform(Post_effects[i].uniform_name);
+						postShader.addUniform(Post_effects[i].uniform_name.c_str());
 					}
 				}
 

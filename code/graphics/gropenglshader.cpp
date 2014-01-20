@@ -630,11 +630,11 @@ namespace opengl
 			return true;
 		}
 
-		bool Shader::addUniform(const SCP_string& name)
+		bool Shader::addUniform(const char* name)
 		{
-			Assertion(shaderHandle != 0, "Tried to add uniform '%s' to invalid or unlinked shader!", name.c_str());
+			Assertion(shaderHandle != 0, "Tried to add uniform '%s' to invalid or unlinked shader!", name);
 
-			GLint location = vglGetUniformLocationARB(shaderHandle, name.c_str());
+			GLint location = vglGetUniformLocationARB(shaderHandle, name);
 
 			if (location < 0) {
 				return false;
@@ -645,11 +645,11 @@ namespace opengl
 			return true;
 		}
 
-		bool Shader::addAttribute(const SCP_string& name)
+		bool Shader::addAttribute(const char* name)
 		{
-			Assertion(shaderHandle != 0, "Tried to add attribute '%s' to invalid or unlinked shader!", name.c_str());
+			Assertion(shaderHandle != 0, "Tried to add attribute '%s' to invalid or unlinked shader!", name);
 
-			GLint location = vglGetAttribLocationARB(shaderHandle, name.c_str());
+			GLint location = vglGetAttribLocationARB(shaderHandle, name);
 
 			if (location < 0)
 			{
