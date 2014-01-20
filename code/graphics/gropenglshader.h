@@ -89,11 +89,11 @@ namespace opengl
 			boost::unordered_map<const char*, Uniform, boost::hash<const char*>> uniforms;
 			boost::unordered_map<const char*, Attribute, boost::hash<const char*>> attributes;
 
-			// Disallow allignment
+			// Disallow assignment
 			Shader& operator= (const Shader&);
 
 		public:
-			Shader::Shader(const SCP_string& name) : name(name), shaderHandle(0), flags(0), flags2(0)
+			Shader(const SCP_string& name) : name(name), shaderHandle(0), flags(0), flags2(0)
 			{
 				for (int i = 0; i < MAX_SHADER_TYPES; i++)
 				{
