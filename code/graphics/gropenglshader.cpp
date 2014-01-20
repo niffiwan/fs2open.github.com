@@ -640,26 +640,25 @@ namespace opengl
 				return false;
 			}
 
-			Uniform uniform(this, name, location);
-
-			uniforms[name] = uniform;
+			uniforms.insert(std::make_pair(name, Uniform(this, name, location)));
 
 			return true;
 		}
 
-		Attribute& Shader::addAttribute(const SCP_string& name)
+		bool Shader::addAttribute(const SCP_string& name)
 		{
 			Assertion(shaderHandle != 0, "Tried to add attribute '%s' to invalid or unlinked shader!", name.c_str());
 
 			GLint location = vglGetAttribLocationARB(shaderHandle, name.c_str());
 
-			Assertion(location >= 0, "Failed to find attribute '%s' for shader '%s'!", name.c_str(), this->name.c_str());
+			if (location < 0)
+			{
+				return false;
+			}
 
-			Attribute attrib(this, name, location);
+			attributes.insert(std::make_pair(name, Attribute(this, name, location)));
 
-			attributes[name] = attrib;
-
-			return getAttribute(name);
+			return true;
 		}
 
 		void Uniform::setValue3f(float x, float y, float z)

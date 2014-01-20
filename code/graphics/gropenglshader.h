@@ -12,8 +12,9 @@
 #define _GROPENGLSHADER_H
 
 #include "globalincs/pstypes.h"
-
 #include "graphics/gropengl.h"
+
+#include <boost/unordered_map.hpp>
 
 #include <string>
 
@@ -85,8 +86,8 @@ namespace opengl
 			int flags;
 			int flags2;
 
-			SCP_hash_map<SCP_string, Uniform> uniforms;
-			SCP_hash_map<SCP_string, Attribute> attributes;
+			boost::unordered_map<SCP_string, Uniform, boost::hash<SCP_string>> uniforms;
+			boost::unordered_map<SCP_string, Attribute, boost::hash<SCP_string>> attributes;
 
 			// Disallow allignment
 			Shader& operator= (const Shader&);
@@ -113,7 +114,7 @@ namespace opengl
 			void releaseResources();
 
 			bool addUniform(const SCP_string& name);
-			Attribute& addAttribute(const SCP_string& name);
+			bool addAttribute(const SCP_string& name);
 
 			inline GLhandleARB getHandle() const { return shaderHandle; }
 			inline SCP_string getName() const { return name; }
@@ -129,7 +130,7 @@ namespace opengl
 
 			inline Uniform& getUniform(const SCP_string& name)
 			{
-				SCP_hash_map<SCP_string, Uniform>::iterator iter = uniforms.find(name);
+				boost::unordered_map<SCP_string, Uniform>::iterator iter = uniforms.find(name);
 
 				if (iter == uniforms.end())
 				{
