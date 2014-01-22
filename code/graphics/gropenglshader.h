@@ -86,8 +86,8 @@ namespace opengl
 			int flags;
 			int flags2;
 
-			boost::unordered_map<const char*, Uniform, boost::hash<const char*>> uniforms;
-			boost::unordered_map<const char*, Attribute, boost::hash<const char*>> attributes;
+			boost::unordered_map<const char*, Uniform> uniforms;
+			boost::unordered_map<const char*, Attribute> attributes;
 
 			// Disallow assignment
 			Shader& operator= (const Shader&);
