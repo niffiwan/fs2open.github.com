@@ -18,8 +18,6 @@
 #include <memory.h>
 #include <string.h>
 
-#include <sstream>
-
 #if defined( __x86_64__ ) || defined( _WIN64 )
 #define IAM_64BIT 1
 #endif
@@ -112,13 +110,6 @@ typedef struct matrix {
 		float a1d[9];
 	};
 } matrix;
-
-// Used in OpenGL
-typedef struct matrix4 {
-	union {
-		float data[16];
-	};
-} matrix4;
 
 typedef struct uv_pair {
 	float u,v;
@@ -585,6 +576,7 @@ typedef struct profile_sample_history {
 extern char profile_output[2048];
 
 void profile_init();
+void profile_deinit();
 void profile_begin(char* name);
 void profile_end(char* name);
 void profile_dump_output();
