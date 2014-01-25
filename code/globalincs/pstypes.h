@@ -18,6 +18,8 @@
 #include <memory.h>
 #include <string.h>
 
+#include <sstream>
+
 #if defined( __x86_64__ ) || defined( _WIN64 )
 #define IAM_64BIT 1
 #endif
@@ -110,6 +112,13 @@ typedef struct matrix {
 		float a1d[9];
 	};
 } matrix;
+
+// Used in OpenGL
+typedef struct matrix4 {
+	union {
+		float data[16];
+	};
+} matrix4;
 
 typedef struct uv_pair {
 	float u,v;
