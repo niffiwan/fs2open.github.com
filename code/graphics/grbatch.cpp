@@ -592,10 +592,10 @@ struct batch_item {
 	bool laser;
 };
 
-static boost::unordered_map<int, batch_item> geometry_map;
+static SCP_hash_map<int, batch_item> geometry_map;
 static SCP_vector<batch_item> distortion_map;
 
-typedef boost::unordered_map<int, batch_item>::iterator batch_iterator;
+typedef SCP_hash_map<int, batch_item>::iterator batch_iterator;
 
 // Used for sending verts to the vertex buffer
 effect_vertex *Batch_buffer = NULL;
