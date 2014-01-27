@@ -592,22 +592,20 @@ struct batch_item {
 	bool laser;
 };
 
-static SCP_hash_map<int, batch_item> geometry_map;
+static SCP_vector<batch_item> geometry_map;
 static SCP_vector<batch_item> distortion_map;
-
-typedef SCP_hash_map<int, batch_item>::iterator batch_iterator;
 
 // Used for sending verts to the vertex buffer
 effect_vertex *Batch_buffer = NULL;
 size_t Batch_buffer_size = 0;
 
-static batch_item* find_good_batch_item(int texture)
+static size_t find_good_batch_item(int texture)
 {
-	batch_iterator iter = geometry_map.find(texture);
+	size_t max_size = geometry_map.size();
 
-	if (iter != geometry_map.end())
-	{
-		return &iter->second;
+	for (size_t i = 0; i < max_size; i++) {
+		if (geometry_map[i].texture == texture)
+			return i;
 	}
 
 	// don't have an existing match so add a new entry
@@ -615,11 +613,9 @@ static batch_item* find_good_batch_item(int texture)
 
 	new_item.texture = texture;
 
-	std::pair<batch_iterator, bool> result = geometry_map.insert(std::make_pair(texture, new_item));
+	geometry_map.push_back(new_item);
 
-	Assertion(result.second, "Batch item not found in map but inserting failed!");
-
-	return &result.first->second;
+	return (geometry_map.size() - 1);
 }
 
 static size_t find_good_distortion_item(int texture)
@@ -649,10 +645,10 @@ float batch_add_laser(int texture, vec3d *p0, float width1, vec3d *p1, float wid
 	}
 
 	geometry_batcher *item = NULL;
-	batch_item* batch_item = find_good_batch_item(texture);
+	size_t index = find_good_batch_item(texture);
 
-	batch_item->laser = true;
-	item = &batch_item->batch;
+	geometry_map[index].laser = true;
+	item = &geometry_map[index].batch;
 
 	item->add_allocate(1);
 
@@ -667,14 +663,14 @@ int batch_add_bitmap(int texture, int tmap_flags, vertex *pnt, int orient, float
 	}
 
 	geometry_batcher *item = NULL;
-	batch_item* batch_item = find_good_batch_item(texture);
+	size_t index = find_good_batch_item(texture);
 
-	Assertion((batch_item->laser == false), "Particle effect %s used as laser glow or laser bitmap\n", bm_get_filename(texture));
+	Assertion( (geometry_map[index].laser == false), "Particle effect %s used as laser glow or laser bitmap\n", bm_get_filename(texture) );
 
-	batch_item->tmap_flags = tmap_flags;
-	batch_item->alpha = alpha;
+	geometry_map[index].tmap_flags = tmap_flags;
+	geometry_map[index].alpha = alpha;
 
-	item = &batch_item->batch;
+	item = &geometry_map[index].batch;
 
 	item->add_allocate(1);
 
@@ -691,14 +687,14 @@ int batch_add_bitmap_rotated(int texture, int tmap_flags, vertex *pnt, float ang
 	}
 
 	geometry_batcher *item = NULL;
-	batch_item* batch_item = find_good_batch_item(texture);
+	size_t index = find_good_batch_item(texture);
 
-	Assertion((batch_item->laser == false), "Particle effect %s used as laser glow or laser bitmap\n", bm_get_filename(texture));
+	Assertion( (geometry_map[index].laser == false), "Particle effect %s used as laser glow or laser bitmap\n", bm_get_filename(texture) );
 
-	batch_item->tmap_flags = tmap_flags;
-	batch_item->alpha = alpha;
+	geometry_map[index].tmap_flags = tmap_flags;
+	geometry_map[index].alpha = alpha;
 
-	item = &batch_item->batch;
+	item = &geometry_map[index].batch;
 
 	item->add_allocate(1);
 
@@ -715,14 +711,14 @@ int batch_add_beam(int texture, int tmap_flags, vec3d *start, vec3d *end, float 
 	}
 
 	geometry_batcher *item = NULL;
-	batch_item* batch_item = find_good_batch_item(texture);
+	size_t index = find_good_batch_item(texture);
 
-	Assertion((batch_item->laser == false), "Particle effect %s used as laser glow or laser bitmap\n", bm_get_filename(texture));
+	Assertion( (geometry_map[index].laser == false), "Particle effect %s used as laser glow or laser bitmap\n", bm_get_filename(texture) );
 
-	batch_item->tmap_flags = tmap_flags;
-	batch_item->alpha = intensity;
+	geometry_map[index].tmap_flags = tmap_flags;
+	geometry_map[index].alpha = intensity;
 
-	item = &batch_item->batch;
+	item = &geometry_map[index].batch;
 
 	item->add_allocate(1);
 
@@ -733,75 +729,71 @@ int batch_add_beam(int texture, int tmap_flags, vec3d *start, vec3d *end, float 
 
 void batch_render_lasers(bool stream_buffer)
 {
-	batch_iterator end = geometry_map.end();
-	for (batch_iterator iter = geometry_map.begin(); iter != end; ++iter) {
+	for (SCP_vector<batch_item>::iterator bi = geometry_map.begin(); bi != geometry_map.end(); ++bi) {
 
-		if (!iter->second.laser)
+		if ( !bi->laser )
 			continue;
 
-		if (!iter->second.batch.need_to_render())
+		if ( !bi->batch.need_to_render() )
 			continue;
 
-		Assert(iter->second.texture >= 0);
-		gr_set_bitmap(iter->second.texture, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.99999f);
+		Assert( bi->texture >= 0 );
+		gr_set_bitmap(bi->texture, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.99999f);
 		if ( stream_buffer ) {
-			iter->second.batch.render_buffer(TMAP_FLAG_TEXTURED | TMAP_FLAG_XPARENT | TMAP_HTL_3D_UNLIT | TMAP_FLAG_RGB | TMAP_FLAG_GOURAUD | TMAP_FLAG_CORRECT);
+			bi->batch.render_buffer(TMAP_FLAG_TEXTURED | TMAP_FLAG_XPARENT | TMAP_HTL_3D_UNLIT | TMAP_FLAG_RGB | TMAP_FLAG_GOURAUD | TMAP_FLAG_CORRECT);
 		} else {
-			iter->second.batch.render(TMAP_FLAG_TEXTURED | TMAP_FLAG_XPARENT | TMAP_HTL_3D_UNLIT | TMAP_FLAG_RGB | TMAP_FLAG_GOURAUD | TMAP_FLAG_CORRECT);
+			bi->batch.render(TMAP_FLAG_TEXTURED | TMAP_FLAG_XPARENT | TMAP_HTL_3D_UNLIT | TMAP_FLAG_RGB | TMAP_FLAG_GOURAUD | TMAP_FLAG_CORRECT);
 		}
 	}
 }
 
 void batch_load_buffer_lasers(effect_vertex* buffer, int *n_verts)
 {
-	batch_iterator end = geometry_map.end();
-	for (batch_iterator iter = geometry_map.begin(); iter != end; ++iter) {
+	for (SCP_vector<batch_item>::iterator bi = geometry_map.begin(); bi != geometry_map.end(); ++bi) {
 
-		if (!iter->second.laser)
+		if ( !bi->laser )
 			continue;
 
-		if (!iter->second.batch.need_to_render())
+		if ( !bi->batch.need_to_render() )
 			continue;
 
-		Assert(iter->second.texture >= 0);
-		iter->second.batch.load_buffer(buffer, n_verts);
+		Assert( bi->texture >= 0 );
+		bi->batch.load_buffer(buffer, n_verts);
 	}
 }
 
 void batch_render_geometry_map_bitmaps(bool stream_buffer)
 {
-	batch_iterator end = geometry_map.end();
-	for (batch_iterator iter = geometry_map.begin(); iter != end; ++iter) {
+	for (SCP_vector<batch_item>::iterator bi = geometry_map.begin(); bi != geometry_map.end(); ++bi) {
 
-		if (iter->second.laser)
+		if ( bi->laser )
 			continue;
 
-		if (!iter->second.batch.need_to_render())
+		if ( !bi->batch.need_to_render() )
 			continue;
 
-		Assert(iter->second.texture >= 0);
-		gr_set_bitmap(iter->second.texture, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, iter->second.alpha);
+		Assert( bi->texture >= 0 );
+		gr_set_bitmap(bi->texture, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, bi->alpha);
 		if ( stream_buffer ) {
-			iter->second.batch.render_buffer(iter->second.tmap_flags);
+			bi->batch.render_buffer(bi->tmap_flags);
 		} else {
-			iter->second.batch.render(iter->second.tmap_flags);
+			bi->batch.render( bi->tmap_flags);
 		}
 	}
 }
 
 void batch_load_buffer_geometry_map_bitmaps(effect_vertex* buffer, int *n_verts)
 {
-	batch_iterator end = geometry_map.end();
-	for (batch_iterator iter = geometry_map.begin(); iter != end; ++iter) {
+	for (SCP_vector<batch_item>::iterator bi = geometry_map.begin(); bi != geometry_map.end(); ++bi) {
 
-		if (iter->second.laser)
+		if ( bi->laser )
 			continue;
 
-		if (!iter->second.batch.need_to_render())
+		if ( !bi->batch.need_to_render() )
 			continue;
 
-		Assert(iter->second.texture >= 0);
-		iter->second.batch.load_buffer(buffer, n_verts);
+		Assert( bi->texture >= 0 );
+		bi->batch.load_buffer(buffer, n_verts);
 	}
 }
 
@@ -944,13 +936,12 @@ void batch_load_buffer_distortion_map_bitmaps(effect_vertex* buffer, int *n_vert
 int batch_get_size()
 {
 	int n_to_render = 0;
+	SCP_vector<batch_item>::iterator bi;
 
-	batch_iterator end = geometry_map.end();
-	for (batch_iterator iter = geometry_map.begin(); iter != end; ++iter) {
-		n_to_render += iter->second.batch.need_to_render();
+	for (bi = geometry_map.begin(); bi != geometry_map.end(); ++bi) {
+		n_to_render += bi->batch.need_to_render();
 	}
 
-	SCP_vector<batch_item>::iterator bi;
 	for (bi = distortion_map.begin(); bi != distortion_map.end(); ++bi) {
 		if ( bi->laser )
 			continue;
