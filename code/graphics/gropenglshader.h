@@ -34,8 +34,8 @@ namespace opengl
 			bool valid;
 
 		public:
-			Uniform(Shader* parentShader, const SCP_string& name, GLint location)
-				: parentShader(parentShader), name(name), location(location), valid(true) {}
+			Uniform(Shader* parentShaderIn, const SCP_string& nameIn, GLint locationIn)
+				: name(nameIn), location(locationIn), parentShader(parentShaderIn), valid(true) {}
 
 			Uniform() : name(""), location(-1), parentShader(NULL), valid(false) {}
 
@@ -64,8 +64,8 @@ namespace opengl
 			Shader *parentShader;
 
 		public:
-			Attribute(Shader* parentShader, const SCP_string& name, GLint location)
-				: parentShader(parentShader), name(name), location(location) {}
+			Attribute(Shader* parentShaderIn, const SCP_string& nameIn, GLint locationIn)
+				: name(nameIn), location(locationIn), parentShader(parentShaderIn) {}
 
 			Attribute() : name(""), location(-1), parentShader(NULL) {}
 
@@ -90,10 +90,10 @@ namespace opengl
 			boost::unordered_map<const char*, Attribute> attributes;
 
 			// Disallow assignment
-			Shader& operator= (const Shader&);
+			//Shader& operator= (const Shader&);
 
 		public:
-			Shader(const SCP_string& name) : name(name), shaderHandle(0), flags(0), flags2(0)
+			Shader(const SCP_string& nameIn) : name(nameIn), shaderHandle(0), flags(0), flags2(0)
 			{
 				for (int i = 0; i < MAX_SHADER_TYPES; i++)
 				{
@@ -121,20 +121,20 @@ namespace opengl
 			inline int getPrimaryFlags() const { return flags; }
 			inline int getSecondaryFlags() const { return flags2; }
 
-			inline Attribute& getAttribute(const char* name)
+			inline Attribute& getAttribute(const char* attribute_name)
 			{
-				Assertion(attributes.find(name) != attributes.end(), "Failed to find attribute '%s' in shader '%s'.", name, this->name.c_str());
+				Assertion(attributes.find(attribute_name) != attributes.end(), "Failed to find attribute '%s' in shader '%s'.", attribute_name, this->name.c_str());
 
-				return attributes[name];
+				return attributes[attribute_name];
 			}
 
-			inline Uniform& getUniform(const char* name)
+			inline Uniform& getUniform(const char* uniform_name)
 			{
-				boost::unordered_map<const char*, Uniform>::iterator iter = uniforms.find(name);
+				boost::unordered_map<const char*, Uniform>::iterator iter = uniforms.find(uniform_name);
 
 				if (iter == uniforms.end())
 				{
-					nprintf(("SHADER-DEBUG", "WARNING: Unable to find uniform \"%s\" in shader \"%s\"!\n", name, this->name.c_str()));
+					nprintf(("SHADER-DEBUG", "WARNING: Unable to find uniform \"%s\" in shader \"%s\"!\n", uniform_name, this->name.c_str()));
 					return invalidUniform;
 				}
 				else
@@ -167,7 +167,7 @@ namespace opengl
 
 			inline Shader& getShader(size_t index)
 			{
-				Assertion(index >= 0 && index < shaders.size(), "Invalid shader index %d!", index);
+				Assertion(index < shaders.size(), "Invalid shader index %d!", index);
 
 				return shaders[index];
 			}

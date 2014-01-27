@@ -20,8 +20,12 @@
 #include <ctype.h>
 #include <assert.h>
 #include <limits.h>
-#if _MSC_VER < 1600
-	#include "globalincs/msvc/stdint.h"
+#ifdef _MSC_VER
+	#if _MSC_VER < 1600
+		#include "globalincs/msvc/stdint.h"
+	#else
+		#include <stdint.h>
+	#endif // _MSC_VER
 #else
 	#include <stdint.h>
 #endif
