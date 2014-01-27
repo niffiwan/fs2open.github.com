@@ -333,16 +333,16 @@ static void OGG_video_init(theora_info *tinfo)
 {
 	float scale_by = 0.0f;
 
-	GLhandleARB shader_id = 0;
-
 	if (video_inited)
 		return;
+
+	// Clear shader object
+	videoShader.releaseResources();
 
 	Assert( tinfo != NULL );
 
 	g_screenWidth = tinfo->frame_width;
 	g_screenHeight = tinfo->frame_height;
-
 
 	if (gr_screen.mode == GR_OPENGL) {
 		opengl_set_texture_target(GL_TEXTURE_2D);
@@ -389,6 +389,21 @@ static void OGG_video_init(theora_info *tinfo)
 				{
 					use_shaders = false;
 				}
+			}
+
+			if (!videoShader.addUniform("ytex"))
+			{
+				use_shaders = false;
+			}
+
+			if (!videoShader.addUniform("utex"))
+			{
+				use_shaders = false;
+			}
+
+			if (!videoShader.addUniform("vtex"))
+			{
+				use_shaders = false;
 			}
 		} 
 
@@ -512,9 +527,10 @@ static void OGG_video_init(theora_info *tinfo)
 			gl_screenU = i2fl(tinfo->frame_width-1) / i2fl(2048) ;
 			gl_screenV = i2fl(tinfo->frame_height-1) / i2fl(2048);
 			GL_state.Texture.SetShaderMode(GL_TRUE);
-			vglUniform1iARB( vglGetUniformLocationARB(shader_id, "ytex"), 0 );
-			vglUniform1iARB( vglGetUniformLocationARB(shader_id, "utex"), 1 );
-			vglUniform1iARB( vglGetUniformLocationARB(shader_id, "vtex"), 2 );
+
+			videoShader.getUniform("ytex").setValue(0);
+			videoShader.getUniform("utex").setValue(1);
+			videoShader.getUniform("vtex").setValue(2);
 		}
 
 		glVertices[0][0] = (GLfloat)g_screenX;
