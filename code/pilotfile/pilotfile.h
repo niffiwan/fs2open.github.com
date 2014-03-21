@@ -5,6 +5,7 @@
 #include "globalincs/pstypes.h"
 #include "cfile/cfile.h"
 #include "stats/scoring.h"
+#include "jansson.h"
 
 
 class player;
@@ -55,8 +56,8 @@ class pilotfile {
 		// --------------------------------------------------------------------
 		// info shared between PLR and CSG ...
 		// --------------------------------------------------------------------
-		CFILE *cfp;
-		SCP_string filename;
+		CFILE *cfp, *cfp_json;
+		SCP_string filename, filename_json, json_temp;
 		player *p;
 
 		int version;
@@ -124,6 +125,9 @@ class pilotfile {
 
 		scoring_special_t all_time_stats;
 		scoring_special_t multi_stats;
+
+		json_t *csg_root;
+		json_error_t *csg_error;
 
 		// sections of a pilot file. includes both plr and csg sections
 		struct Section {
