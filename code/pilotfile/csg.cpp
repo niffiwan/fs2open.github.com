@@ -372,42 +372,60 @@ void pilotfile::csg_write_missions()
 {
 	int idx, j;
 	cmission *missionp;
+	json_t *csg_missions, *csg_object, *csg_array;
 
 	startSection(Section::Missions);
+	csg_missions = json_array();
 
 	for (idx = 0; idx < MAX_CAMPAIGN_MISSIONS; idx++) {
 		if (Campaign.missions[idx].completed) {
 			missionp = &Campaign.missions[idx];
+			csg_object = json_object();
+			csg_array = json_array();
 
 			cfwrite_int(idx, cfp);
+			json_object_set_new(csg_object, "idx", json_integer(idx));
 
 			// flags
 			cfwrite_int(missionp->flags, cfp);
+			json_object_set_new(csg_object, "flags", json_integer(missionp->flags));
 
 			// goals
 			cfwrite_int(missionp->num_goals, cfp);
+			json_object_set_new(csg_object, "num_goals", json_integer(missionp->num_goals));
 
+			csg_array = json_array();
 			for (j = 0; j < missionp->num_goals; j++) {
 				cfwrite_string_len(missionp->goals[j].name, cfp);
 				cfwrite_char(missionp->goals[j].status, cfp);
+				json_array_append_new(csg_array, json_pack("{s:i}", missionp->goals[j].name, missionp->goals[j].status));
 			}
+			json_object_set_new(csg_object, "goals", csg_array);
 
 			// events
 			cfwrite_int(missionp->num_events, cfp);
+			json_object_set_new(csg_object, "num_events", json_integer(missionp->num_events));
 
+			csg_array = json_array();
 			for (j = 0; j < missionp->num_events; j++) {
 				cfwrite_string_len(missionp->events[j].name, cfp);
 				cfwrite_char(missionp->events[j].status, cfp);
+				json_array_append_new(csg_array, json_pack("{s,i}", missionp->events[j].name, missionp->events[j].status));
 			}
+			json_object_set_new(csg_object, "events", csg_array);
 
 			// variables
 			cfwrite_int(missionp->num_variables, cfp);
+			json_object_set_new(csg_object, "num_variables", json_integer(missionp->num_variables));
 
+			csg_array = json_array();
 			for (j = 0; j < missionp->num_variables; j++) {
 				cfwrite_int(missionp->variables[j].type, cfp);
 				cfwrite_string_len(missionp->variables[j].text, cfp);
 				cfwrite_string_len(missionp->variables[j].variable_name, cfp);
+				json_array_append_new(csg_array, json_pack("{s,{s,i}}", missionp->variables[j].variable_name, missionp->variables[j].text, missionp->variables[j].type));
 			}
+			json_object_set_new(csg_object, "variables", csg_array);
 
 			// scoring stats
 			cfwrite_int(missionp->stats.score, cfp);
@@ -425,18 +443,42 @@ void pilotfile::csg_write_missions()
 			cfwrite_uint(missionp->stats.s_shots_hit, cfp);
 			cfwrite_uint(missionp->stats.s_bonehead_hits, cfp);
 
+			json_object_set_new(csg_object, "score", json_integer(missionp->stats.score));
+			json_object_set_new(csg_object, "rank", json_integer(missionp->stats.rank));
+			json_object_set_new(csg_object, "assists", json_integer(missionp->stats.assists));
+			json_object_set_new(csg_object, "kill_count", json_integer(missionp->stats.kill_count));
+			json_object_set_new(csg_object, "kill_count_ok", json_integer(missionp->stats.kill_count_ok));
+			json_object_set_new(csg_object, "bonehead_kills", json_integer(missionp->stats.bonehead_kills));
+
+			json_object_set_new(csg_object, "p_shots_fired", json_integer(missionp->stats.p_shots_fired));
+			json_object_set_new(csg_object, "p_shots_hit", json_integer(missionp->stats.p_shots_hit));
+			json_object_set_new(csg_object, "p_bonehead_hits", json_integer(missionp->stats.p_bonehead_hits));
+
+			json_object_set_new(csg_object, "s_shots_fired", json_integer(missionp->stats.s_shots_fired));
+			json_object_set_new(csg_object, "s_shots_hit", json_integer(missionp->stats.s_shots_hit));
+			json_object_set_new(csg_object, "s_bonehead_hits", json_integer(missionp->stats.s_bonehead_hits));
+
+			csg_array = json_array();
 			// ship kills (scoring)
 			for (j = 0; j < Num_ship_classes; j++) {
 				cfwrite_int(missionp->stats.kills[j], cfp);
+				json_array_append_new(csg_array, json_integer(missionp->stats.kills[j]));
 			}
+			json_object_set_new(csg_object, "kills", csg_array);
 
+			csg_array = json_array();
 			// medals earned (scoring)
 			for (j = 0; j < Num_medals; j++) {
 				cfwrite_int(missionp->stats.medal_counts[j], cfp);
+				json_array_append_new(csg_array, json_integer(missionp->stats.medal_counts[j]));
 			}
+			json_object_set_new(csg_object, "medals", csg_array);
+
+			json_array_append_new(csg_missions, csg_object);
 		}
 	}
 
+	json_object_set_new(csg_root, "missions", csg_missions);
 	endSection();
 }
 
@@ -501,10 +543,12 @@ void pilotfile::csg_write_techroom()
 {
 	int idx;
 	ubyte visible;
+	json_t *csg_array;
 
 	startSection(Section::Techroom);
 
 	// visible ships
+	csg_array = json_array();
 	for (idx = 0; idx < Num_ship_classes; idx++) {
 		// only visible if not in techroom by default
 		if ( (Ship_info[idx].flags & SIF_IN_TECH_DATABASE) && !(Ship_info[idx].flags2 & SIF2_DEFAULT_IN_TECH_DATABASE) ) {
@@ -514,9 +558,12 @@ void pilotfile::csg_write_techroom()
 		}
 
 		cfwrite_ubyte(visible, cfp);
+		json_array_append_new(csg_array, json_integer(visible));
 	}
+	json_object_set_new(csg_root, "visible ships", csg_array);
 
 	// visible weapons
+	csg_array = json_array();
 	for (idx = 0; idx < Num_weapon_types; idx++) {
 		// only visible if not in techroom by default
 		if ( (Weapon_info[idx].wi_flags & WIF_IN_TECH_DATABASE) && !(Weapon_info[idx].wi_flags2 & WIF2_DEFAULT_IN_TECH_DATABASE) ) {
@@ -526,9 +573,12 @@ void pilotfile::csg_write_techroom()
 		}
 
 		cfwrite_ubyte(visible, cfp);
+		json_array_append_new(csg_array, json_integer(visible));
 	}
+	json_object_set_new(csg_root, "visible weapons", csg_array);
 
 	// visible intel entries
+	csg_array = json_array();
 	for (idx = 0; idx < Intel_info_size; idx++) {
 		// only visible if not in techroom by default
 		if ( (Intel_info[idx].flags & IIF_IN_TECH_DATABASE) && !(Intel_info[idx].flags & IIF_DEFAULT_IN_TECH_DATABASE) ) {
@@ -538,7 +588,9 @@ void pilotfile::csg_write_techroom()
 		}
 
 		cfwrite_ubyte(visible, cfp);
+		json_array_append_new(csg_array, json_integer(visible));
 	}
+	json_object_set_new(csg_root, "visible intel", csg_array);
 
 	endSection();
 }
@@ -659,48 +711,75 @@ void pilotfile::csg_read_loadout()
 void pilotfile::csg_write_loadout()
 {
 	int idx, j;
+	json_t *csg_obj_loadout, *csg_obj_slot, *csg_array, *csg_array_slots;
 
 	startSection(Section::Loadout);
+	csg_obj_loadout = json_object();
 
 	// base info
 	cfwrite_string_len(Player_loadout.filename, cfp);
 	cfwrite_string_len(Player_loadout.last_modified, cfp);
+	json_object_set_new(csg_obj_loadout, "filename", json_string(Player_loadout.filename));
+	json_object_set_new(csg_obj_loadout, "last_modified", json_string(Player_loadout.last_modified));
 
 	// ship pool
+	csg_array = json_array();
 	for (idx = 0; idx < Num_ship_classes; idx++) {
 		cfwrite_int(Player_loadout.ship_pool[idx], cfp);
+		json_array_append_new(csg_array, json_integer(Player_loadout.ship_pool[idx]));
 	}
+	json_object_set_new(csg_obj_loadout, "ship pool", csg_array);
 
 	// weapon pool
+	csg_array = json_array();
 	for (idx = 0; idx < Num_weapon_types; idx++) {
 		cfwrite_int(Player_loadout.weapon_pool[idx], cfp);
+		json_array_append_new(csg_array, json_integer(Player_loadout.weapon_pool[idx]));
 	}
+	json_object_set_new(csg_obj_loadout, "weapon pool", csg_array);
 
 	// play ship loadout
 	cfwrite_ushort(MAX_WSS_SLOTS, cfp);
+	json_object_set_new(csg_obj_loadout, "MAX_WSS_SLOTS", json_integer(MAX_WSS_SLOTS));
 
+	csg_array_slots = json_array();
 	for (idx = 0; idx < MAX_WSS_SLOTS; idx++) {
 		wss_unit *slot = &Player_loadout.unit_data[idx];
+		csg_obj_slot = json_object();
+		json_object_set_new(csg_obj_slot, "idx", json_integer(idx));
 
 		// ship
 		cfwrite_int(slot->ship_class, cfp);
+		json_object_set_new(csg_obj_slot, "ship_class", json_integer(slot->ship_class));
 
 		// primary weapons
 		cfwrite_int(MAX_SHIP_PRIMARY_BANKS, cfp);
+		json_object_set_new(csg_obj_slot, "MAX_SHIP_PRIMARY_BANKS", json_integer(MAX_SHIP_PRIMARY_BANKS));
 
+		csg_array = json_array();
 		for (j = 0; j < MAX_SHIP_PRIMARY_BANKS; j++) {
 			cfwrite_int(slot->wep[j], cfp);
 			cfwrite_int(slot->wep_count[j], cfp);
+			json_array_append_new(csg_array, json_pack("[i,i]", slot->wep[j], slot->wep_count[j]));
 		}
+		json_object_set_new(csg_obj_slot, "primaries", csg_array);
 
 		// secondary weapons
 		cfwrite_int(MAX_SHIP_SECONDARY_BANKS, cfp);
+		json_object_set_new(csg_obj_slot, "MAX_SHIP_SECONDARY_BANKS", json_integer(MAX_SHIP_SECONDARY_BANKS));
 
+		csg_array = json_array();
 		for (j = 0; j < MAX_SHIP_SECONDARY_BANKS; j++) {
 			cfwrite_int(slot->wep[j+MAX_SHIP_PRIMARY_BANKS], cfp);
 			cfwrite_int(slot->wep_count[j+MAX_SHIP_PRIMARY_BANKS], cfp);
+			json_array_append_new(csg_array, json_pack("[i,i]", slot->wep[j+MAX_SHIP_PRIMARY_BANKS], slot->wep_count[j+MAX_SHIP_PRIMARY_BANKS]));
 		}
+		json_object_set_new(csg_obj_slot, "secondaries", csg_array);
+
+		json_array_append_new(csg_array_slots, csg_obj_slot);
 	}
+	json_object_set_new(csg_obj_loadout, "ship loadouts", csg_array_slots);
+	json_object_set_new(csg_root, "loadout", csg_obj_loadout);
 
 	endSection();
 }
@@ -759,8 +838,10 @@ void pilotfile::csg_read_stats()
 void pilotfile::csg_write_stats()
 {
 	int idx;
+	json_t *csg_obj_stats, *csg_array;
 
 	startSection(Section::Scoring);
+	csg_obj_stats = json_object();
 
 	// scoring stats
 	cfwrite_int(p->stats.score, cfp);
@@ -783,16 +864,43 @@ void pilotfile::csg_write_stats()
 	cfwrite_int((int)p->stats.last_flown, cfp);
 	cfwrite_int((int)p->stats.last_backup, cfp);
 
+	json_object_set_new(csg_obj_stats, "score", json_integer(p->stats.score));
+	json_object_set_new(csg_obj_stats, "rank", json_integer(p->stats.rank));
+	json_object_set_new(csg_obj_stats, "assists", json_integer(p->stats.assists));
+	json_object_set_new(csg_obj_stats, "kill_count", json_integer(p->stats.kill_count));
+	json_object_set_new(csg_obj_stats, "kill_count_ok", json_integer(p->stats.kill_count_ok));
+	json_object_set_new(csg_obj_stats, "bonehead_kills", json_integer(p->stats.bonehead_kills));
+
+	json_object_set_new(csg_obj_stats, "p_shots_fired", json_integer(p->stats.p_shots_fired));
+	json_object_set_new(csg_obj_stats, "p_shots_hit", json_integer(p->stats.p_shots_hit));
+	json_object_set_new(csg_obj_stats, "p_bonehead_hits", json_integer(p->stats.p_bonehead_hits));
+
+	json_object_set_new(csg_obj_stats, "s_shots_fired", json_integer(p->stats.s_shots_fired));
+	json_object_set_new(csg_obj_stats, "s_shots_hit", json_integer(p->stats.s_shots_hit));
+	json_object_set_new(csg_obj_stats, "s_bonehead_hits", json_integer(p->stats.s_bonehead_hits));
+
+	json_object_set_new(csg_obj_stats, "flight_time", json_integer(p->stats.flight_time));
+	json_object_set_new(csg_obj_stats, "missions_flown", json_integer(p->stats.missions_flown));
+	json_object_set_new(csg_obj_stats, "last_flown", json_integer((int)p->stats.last_flown));
+	json_object_set_new(csg_obj_stats, "last_backup", json_integer((int)p->stats.last_backup));
+
 	// ship kills (scoring)
+	csg_array = json_array();
 	for (idx = 0; idx < Num_ship_classes; idx++) {
 		cfwrite_int(p->stats.kills[idx], cfp);
+		json_array_append_new(csg_array, json_integer(p->stats.kills[idx]));
 	}
+	json_object_set_new(csg_obj_stats, "ship kills", csg_array);
 
 	// medals earned (scoring)
+	csg_array = json_array();
 	for (idx = 0; idx < Num_medals; idx++) {
 		cfwrite_int(p->stats.medal_counts[idx], cfp);
+		json_array_append_new(csg_array, json_integer(p->stats.medal_counts[idx]));
 	}
+	json_object_set_new(csg_obj_stats, "medals", csg_array);
 
+	json_object_set_new(csg_root, "stats", csg_obj_stats);
 	endSection();
 }
 
@@ -901,63 +1009,92 @@ void pilotfile::csg_write_redalert()
 	int idx, j, list_size = 0;
 	int count;
 	red_alert_ship_status *ras;
+	json_t *csg_obj_redalert, *csg_obj_ra_ship, *csg_array_ra_ships, *csg_array;
 
 	startSection(Section::RedAlert);
+	csg_obj_redalert = json_object();
 
 	list_size = (int)Red_alert_wingman_status.size();
 
 	cfwrite_int(list_size, cfp);
+	json_object_set_new(csg_obj_redalert, "size", json_integer(list_size));
 
 	if (list_size) {
 		cfwrite_string_len(Red_alert_precursor_mission.c_str(), cfp);
+		json_object_set_new(csg_obj_redalert, "Red_alert_precursor_mission", json_string(Red_alert_precursor_mission.c_str()));
 
+		csg_array_ra_ships = json_array();
 		for (idx = 0; idx < list_size; idx++) {
 			ras = &Red_alert_wingman_status[idx];
+			csg_obj_ra_ship = json_object();
 
 			cfwrite_string_len(ras->name.c_str(), cfp);
+			json_object_set_new(csg_obj_ra_ship, "name", json_string(ras->name.c_str()));
 
 			cfwrite_float(ras->hull, cfp);
+			json_object_set_new(csg_obj_ra_ship, "hull", json_real(ras->hull));
 
 			// ship class, should be index into ship_list[] on load
 			cfwrite_int(ras->ship_class, cfp);
+			json_object_set_new(csg_obj_ra_ship, "class", json_integer(ras->ship_class));
 
 			// subsystem hits
 			count = (int)ras->subsys_current_hits.size();
 			cfwrite_int(count, cfp);
+			json_object_set_new(csg_obj_ra_ship, "subsys current hits size", json_integer(count));
 
+			csg_array = json_array();
 			for (j = 0; j < count; j++) {
 				cfwrite_float(ras->subsys_current_hits[j], cfp);
+				json_array_append_new(csg_array, json_real(ras->subsys_current_hits[j]));
 			}
+			json_object_set_new(csg_obj_ra_ship, "subsys current hits", csg_array);
 
 			// subsystem aggregate hits
 			count = (int)ras->subsys_aggregate_current_hits.size();
 			cfwrite_int(count, cfp);
+			json_object_set_new(csg_obj_ra_ship, "subsys aggregate hits size", json_integer(count));
 
+			csg_array = json_array();
 			for (j = 0; j < count; j++) {
 				cfwrite_float(ras->subsys_aggregate_current_hits[j], cfp);
+				json_array_append_new(csg_array, json_real(ras->subsys_aggregate_current_hits[j]));
 			}
+			json_object_set_new(csg_obj_ra_ship, "subsys aggregate hits", csg_array);
 
 			// primary weapon loadout and status
 			count = (int)ras->primary_weapons.size();
 			cfwrite_int(count, cfp);
+			json_object_set_new(csg_obj_ra_ship, "primaries count", json_integer(count));
 
+			csg_array = json_array();
 			for (j = 0; j < count; j++) {
 				cfwrite_int(ras->primary_weapons[j].index, cfp);
 				cfwrite_int(ras->primary_weapons[j].count, cfp);
+				json_array_append_new(csg_array, json_pack("[i,i]", ras->primary_weapons[j].index, ras->primary_weapons[j].count));
 			}
+			json_object_set_new(csg_obj_ra_ship, "primaries", csg_array);
 
 			// secondary weapon loadout and status
 			count = (int)ras->secondary_weapons.size();
 			cfwrite_int(count, cfp);
+			json_object_set_new(csg_obj_ra_ship, "secondaries count", json_integer(count));
 
+			csg_array = json_array();
 			for (j = 0; j < count; j++) {
 				cfwrite_int(ras->secondary_weapons[j].index, cfp);
 				cfwrite_int(ras->secondary_weapons[j].count, cfp);
+				json_array_append_new(csg_array, json_pack("[i,i]", ras->secondary_weapons[j].index, ras->secondary_weapons[j].count));
 			}
+			json_object_set_new(csg_obj_ra_ship, "secondaries", csg_array);
+
+			json_array_append_new(csg_array_ra_ships, csg_obj_ra_ship);
 		}
+		json_object_set_new(csg_obj_redalert, "redalert ships", csg_array_ra_ships);
 	}
 
 	endSection();
+	json_object_set_new(csg_root, "redalert", csg_obj_redalert);
 }
 
 void pilotfile::csg_read_hud()
@@ -1550,7 +1687,6 @@ bool pilotfile::save_savefile()
 
 	// open it, hopefully...
 	cfp = cfopen((char*)filename.c_str(), "wb", CFILE_NORMAL, CF_TYPE_PLAYERS);
-	cfp_json = cfopen((char*)filename_json.c_str(), "wt", CFILE_NORMAL, CF_TYPE_PLAYERS);
 	csg_root = json_object();
 
 	if ( !cfp ) {
@@ -1597,6 +1733,8 @@ bool pilotfile::save_savefile()
 	mprintf(("CSG => Saving:  Last Missions...\n"));
 	csg_write_lastmissions();
 
+	// json csg dump
+	cfp_json = cfopen((char*)filename_json.c_str(), "wt", CFILE_NORMAL, CF_TYPE_PLAYERS);
 	cfputs(json_dumps(csg_root, JSON_INDENT(4)|JSON_PRESERVE_ORDER), cfp_json);
 	cfclose(cfp_json);
 
