@@ -35,11 +35,14 @@ void pilotfile::csg_read_flags()
 void pilotfile::csg_write_flags()
 {
 	startSection(Section::Flags);
+	json_t *csg_obj_flags;
+	csg_obj_flags = json_object();
 
 	// tips
 	cfwrite_ubyte((ubyte)p->tips, cfp);
-	json_object_set_new(csg_root, "tips", json_integer(p->tips));
+	json_object_set_new(csg_obj_flags, "tips", json_integer(p->tips));
 
+	json_object_set_new(csg_root, "tips", csg_obj_flags);
 	endSection();
 }
 
@@ -173,73 +176,74 @@ void pilotfile::csg_read_info()
 void pilotfile::csg_write_info()
 {
 	int idx;
-	json_t *csg_array;
+	json_t *csg_obj_info, *csg_array;
 
 	startSection(Section::Info);
+	csg_obj_info = json_object();
 
 	// ship list
 	cfwrite_int(Num_ship_classes, cfp);
-	json_object_set_new(csg_root, "Num_ship_classes", json_integer(Num_ship_classes));
+	json_object_set_new(csg_obj_info, "Num_ship_classes", json_integer(Num_ship_classes));
 
 	csg_array = json_array();
 	for (idx = 0; idx < Num_ship_classes; idx++) {
 		cfwrite_string_len(Ship_info[idx].name, cfp);
 		json_array_append_new(csg_array, json_string(Ship_info[idx].name));
 	}
-	json_object_set_new(csg_root, "Num_ship_classes data", csg_array);
+	json_object_set_new(csg_obj_info, "Num_ship_classes data", csg_array);
 
 	// weapon list
 	cfwrite_int(Num_weapon_types, cfp);
-	json_object_set_new(csg_root, "Num_weapon_types", json_integer(Num_weapon_types));
+	json_object_set_new(csg_obj_info, "Num_weapon_types", json_integer(Num_weapon_types));
 
 	csg_array = json_array();
 	for (idx = 0; idx < Num_weapon_types; idx++) {
 		cfwrite_string_len(Weapon_info[idx].name, cfp);
 		json_array_append_new(csg_array, json_string(Weapon_info[idx].name));
 	}
-	json_object_set_new(csg_root, "Num_weapon_types data", csg_array);
+	json_object_set_new(csg_obj_info, "Num_weapon_types data", csg_array);
 
 	// intel list
 	cfwrite_int(Intel_info_size, cfp);
-	json_object_set_new(csg_root, "Intel_info_size", json_integer(Intel_info_size));
+	json_object_set_new(csg_obj_info, "Intel_info_size", json_integer(Intel_info_size));
 
 	csg_array = json_array();
 	for (idx = 0; idx < Intel_info_size; idx++) {
 		cfwrite_string_len(Intel_info[idx].name, cfp);
 		json_array_append_new(csg_array, json_string(Intel_info[idx].name));
 	}
-	json_object_set_new(csg_root, "Intel_info_size data", csg_array);
+	json_object_set_new(csg_obj_info, "Intel_info_size data", csg_array);
 
 	// medals list
 	cfwrite_int(Num_medals, cfp);
-	json_object_set_new(csg_root, "Num_medals", json_integer(Num_medals));
+	json_object_set_new(csg_obj_info, "Num_medals", json_integer(Num_medals));
 
 	csg_array = json_array();
 	for (idx = 0; idx < Num_medals; idx++) {
 		cfwrite_string_len(Medals[idx].name, cfp);
 		json_array_append_new(csg_array, json_string(Medals[idx].name));
 	}
-	json_object_set_new(csg_root, "Num_medals data", csg_array);
+	json_object_set_new(csg_obj_info, "Num_medals data", csg_array);
 
 	// last ship flown
 	cfwrite_int(p->last_ship_flown_si_index, cfp);
-	json_object_set_new(csg_root, "last ship flown", json_integer(p->last_ship_flown_si_index));
+	json_object_set_new(csg_obj_info, "last ship flown", json_integer(p->last_ship_flown_si_index));
 
 	// progression state
 	cfwrite_int(Campaign.prev_mission, cfp);
 	cfwrite_int(Campaign.next_mission, cfp);
-	json_object_set_new(csg_root, "Campaign.prev_mission", json_integer(Campaign.prev_mission));
-	json_object_set_new(csg_root, "Campaign.next_mission", json_integer(Campaign.next_mission));
+	json_object_set_new(csg_obj_info, "Campaign.prev_mission", json_integer(Campaign.prev_mission));
+	json_object_set_new(csg_obj_info, "Campaign.next_mission", json_integer(Campaign.next_mission));
 
 	// loop state
 	cfwrite_int(Campaign.loop_enabled, cfp);
 	cfwrite_int(Campaign.loop_reentry, cfp);
-	json_object_set_new(csg_root, "Campaign.loop_enabled", json_integer(Campaign.loop_enabled));
-	json_object_set_new(csg_root, "Campaign.loop_reentry", json_integer(Campaign.loop_reentry));
+	json_object_set_new(csg_obj_info, "Campaign.loop_enabled", json_integer(Campaign.loop_enabled));
+	json_object_set_new(csg_obj_info, "Campaign.loop_reentry", json_integer(Campaign.loop_reentry));
 
 	// missions completed
 	cfwrite_int(Campaign.num_missions_completed, cfp);
-	json_object_set_new(csg_root, "Campaign.num_missions_completed", json_integer(Campaign.num_missions_completed));
+	json_object_set_new(csg_obj_info, "Campaign.num_missions_completed", json_integer(Campaign.num_missions_completed));
 
 	// allowed ships
 	csg_array = json_array();
@@ -247,7 +251,7 @@ void pilotfile::csg_write_info()
 		cfwrite_ubyte(Campaign.ships_allowed[idx], cfp);
 		json_array_append_new(csg_array, json_integer(Campaign.ships_allowed[idx]));
 	}
-	json_object_set_new(csg_root, "ships_allowed", csg_array);
+	json_object_set_new(csg_obj_info, "ships_allowed", csg_array);
 
 	// allowed weapons
 	csg_array = json_array();
@@ -255,14 +259,15 @@ void pilotfile::csg_write_info()
 		cfwrite_ubyte(Campaign.weapons_allowed[idx], cfp);
 		json_array_append_new(csg_array, json_integer(Campaign.weapons_allowed[idx]));
 	}
-	json_object_set_new(csg_root, "weapons_allowed", csg_array);
+	json_object_set_new(csg_obj_info, "weapons_allowed", csg_array);
 
 	// single/campaign squad name & image
 	cfwrite_string_len(p->s_squad_name, cfp);
 	cfwrite_string_len(p->s_squad_filename, cfp);
-	json_object_set_new(csg_root, "s_squad_name", json_string(p->s_squad_name));
-	json_object_set_new(csg_root, "s_squad_filename", json_string(p->s_squad_filename));
+	json_object_set_new(csg_obj_info, "s_squad_name", json_string(p->s_squad_name));
+	json_object_set_new(csg_obj_info, "s_squad_filename", json_string(p->s_squad_filename));
 
+	json_object_set_new(csg_root, "info", csg_obj_info);
 	endSection();
 }
 
@@ -762,7 +767,7 @@ void pilotfile::csg_write_loadout()
 			cfwrite_int(slot->wep_count[j], cfp);
 			json_array_append_new(csg_array, json_pack("[i,i]", slot->wep[j], slot->wep_count[j]));
 		}
-		json_object_set_new(csg_obj_slot, "primaries", csg_array);
+		json_object_set_new(csg_obj_slot, "primaries (idx, count)", csg_array);
 
 		// secondary weapons
 		cfwrite_int(MAX_SHIP_SECONDARY_BANKS, cfp);
@@ -774,7 +779,7 @@ void pilotfile::csg_write_loadout()
 			cfwrite_int(slot->wep_count[j+MAX_SHIP_PRIMARY_BANKS], cfp);
 			json_array_append_new(csg_array, json_pack("[i,i]", slot->wep[j+MAX_SHIP_PRIMARY_BANKS], slot->wep_count[j+MAX_SHIP_PRIMARY_BANKS]));
 		}
-		json_object_set_new(csg_obj_slot, "secondaries", csg_array);
+		json_object_set_new(csg_obj_slot, "secondaries (idx, count)", csg_array);
 
 		json_array_append_new(csg_array_slots, csg_obj_slot);
 	}
@@ -1073,7 +1078,7 @@ void pilotfile::csg_write_redalert()
 				cfwrite_int(ras->primary_weapons[j].count, cfp);
 				json_array_append_new(csg_array, json_pack("[i,i]", ras->primary_weapons[j].index, ras->primary_weapons[j].count));
 			}
-			json_object_set_new(csg_obj_ra_ship, "primaries", csg_array);
+			json_object_set_new(csg_obj_ra_ship, "primaries (idx, count)", csg_array);
 
 			// secondary weapon loadout and status
 			count = (int)ras->secondary_weapons.size();
@@ -1086,7 +1091,7 @@ void pilotfile::csg_write_redalert()
 				cfwrite_int(ras->secondary_weapons[j].count, cfp);
 				json_array_append_new(csg_array, json_pack("[i,i]", ras->secondary_weapons[j].index, ras->secondary_weapons[j].count));
 			}
-			json_object_set_new(csg_obj_ra_ship, "secondaries", csg_array);
+			json_object_set_new(csg_obj_ra_ship, "secondaries (idx, count)", csg_array);
 
 			json_array_append_new(csg_array_ra_ships, csg_obj_ra_ship);
 		}
@@ -1147,36 +1152,58 @@ void pilotfile::csg_read_hud()
 void pilotfile::csg_write_hud()
 {
 	int idx;
+	json_t *csg_obj_hud, *csg_array;
 
 	startSection(Section::HUD);
+	csg_obj_hud = json_object();
 
 	// flags
 	cfwrite_int(HUD_config.show_flags, cfp);
 	cfwrite_int(HUD_config.show_flags2, cfp);
 
+	json_object_set_new(csg_obj_hud, "show_flags", json_integer(HUD_config.show_flags));
+	json_object_set_new(csg_obj_hud, "show_flags2", json_integer(HUD_config.show_flags2));
+
 	cfwrite_int(HUD_config.popup_flags, cfp);
 	cfwrite_int(HUD_config.popup_flags2, cfp);
+
+	json_object_set_new(csg_obj_hud, "popup_flags", json_integer(HUD_config.popup_flags));
+	json_object_set_new(csg_obj_hud, "popup_flags2", json_integer(HUD_config.popup_flags2));
 
 	// settings
 	cfwrite_ubyte(HUD_config.num_msg_window_lines, cfp);
 
+	json_object_set_new(csg_obj_hud, "num_msg_window_lines", json_integer(HUD_config.num_msg_window_lines));
+
 	cfwrite_int(HUD_config.rp_flags, cfp);
 	cfwrite_int(HUD_config.rp_dist, cfp);
+
+	json_object_set_new(csg_obj_hud, "rp_flags", json_integer(HUD_config.rp_flags));
+	json_object_set_new(csg_obj_hud, "rp_dist", json_integer(HUD_config.rp_dist));
 
 	// basic colors
 	cfwrite_int(HUD_config.main_color, cfp);
 	cfwrite_int(HUD_color_alpha, cfp);
 
+	json_object_set_new(csg_obj_hud, "main_color", json_integer(HUD_config.main_color));
+	json_object_set_new(csg_obj_hud, "HUD_color_alpha", json_integer(HUD_color_alpha));
+
 	// gauge-specific colors
 	cfwrite_int(NUM_HUD_GAUGES, cfp);
 
+	json_object_set_new(csg_obj_hud, "NUM_HUD_GAUGES", json_integer(NUM_HUD_GAUGES));
+
+	csg_array = json_array();
 	for (idx = 0; idx < NUM_HUD_GAUGES; idx++) {
 		cfwrite_ubyte(HUD_config.clr[idx].red, cfp);
 		cfwrite_ubyte(HUD_config.clr[idx].green, cfp);
 		cfwrite_ubyte(HUD_config.clr[idx].blue, cfp);
 		cfwrite_ubyte(HUD_config.clr[idx].alpha, cfp);
+		json_array_append_new(csg_array, json_pack("[iiii]", HUD_config.clr[idx].red, HUD_config.clr[idx].green, HUD_config.clr[idx].blue, HUD_config.clr[idx].alpha));
 	}
+	json_object_set_new(csg_obj_hud, "hud gauge colours (r,g,b,a)", csg_array);
 
+	json_object_set_new(csg_root, "HUD", csg_obj_hud);
 	endSection();
 }
 
@@ -1203,17 +1230,28 @@ void pilotfile::csg_read_variables()
 void pilotfile::csg_write_variables()
 {
 	int idx;
+	json_t *csg_variables, *csg_array;
 
 	startSection(Section::Variables);
+	csg_variables = json_object();
 
 	cfwrite_int(Campaign.num_variables, cfp);
+	json_object_set_new(csg_variables, "num_variables", json_integer(Campaign.num_variables));
 
+	csg_array = json_array();
 	for (idx = 0; idx < Campaign.num_variables; idx++) {
 		cfwrite_int(Campaign.variables[idx].type, cfp);
 		cfwrite_string_len(Campaign.variables[idx].text, cfp);
 		cfwrite_string_len(Campaign.variables[idx].variable_name, cfp);
+		json_array_append_new(csg_array, json_pack("[i,{ {si}, {ss}, {ss} }]",
+			idx,
+			"type", Campaign.variables[idx].type,
+			"text", Campaign.variables[idx].text,
+			"variable_name", Campaign.variables[idx].variable_name));
 	}
+	json_object_set_new(csg_variables, "variable data", csg_array);
 
+	json_object_set_new(csg_root, "variables (NEEDS TEST)", csg_variables);
 	endSection();
 }
 
