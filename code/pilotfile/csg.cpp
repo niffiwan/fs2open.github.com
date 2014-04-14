@@ -43,7 +43,7 @@ void pilotfile::csg_write_flags()
 	json_object_set_new(csg_obj_flags, "tips", json_integer(p->tips));
 
 	endSection();
-	json_object_set_new(csg_root, "tips (section)", csg_obj_flags);
+	json_object_set_new(csg_root, "flags (section)", csg_obj_flags);
 }
 
 void pilotfile::csg_read_info()
@@ -1431,7 +1431,7 @@ void pilotfile::csg_write_controls()
 		json_array_append_new(csg_array, json_pack("{si,si,si,ss}",
 			"idx*", idx,
 			"key_id", Control_config[idx].key_id,
-			"joy_id", Control_config[idx].key_id,
+			"joy_id", Control_config[idx].joy_id,
 			// skip the unused data for now
 			"text*", Control_config[idx].text));
 	}
