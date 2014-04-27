@@ -135,6 +135,10 @@ void PSNET_TOP_LAYER_PROCESS();
 // initialize psnet to use the specified port
 void psnet_init(int protocol, int default_port);
 
+#ifdef CONFIG_MINIUPNPC
+void psnet_SetupUPnP();
+#endif
+
 // shutdown psnet
 void psnet_close();
 
