@@ -1178,9 +1178,11 @@ bool pilotfile::save_player(player *_p)
 	mprintf(("PLR => Saving:  Settings...\n"));
 	plr_write_settings();
 
-	cfp_json = cfopen((char*)filename_json.c_str(), "wt", CFILE_NORMAL, CF_TYPE_PLAYERS);
-	cfputs(json_dumps(plr_root, JSON_INDENT(4)|JSON_PRESERVE_ORDER), cfp_json);
-	cfclose(cfp_json);
+	if (Cmdline_json_pilot) {
+		cfp_json = cfopen((char*)filename_json.c_str(), "wt", CFILE_NORMAL, CF_TYPE_PLAYERS);
+		cfputs(json_dumps(plr_root, JSON_INDENT(4)|JSON_PRESERVE_ORDER), cfp_json);
+		cfclose(cfp_json);
+	}
 
 	// Done!
 	mprintf(("PLR => Saving complete!\n"));

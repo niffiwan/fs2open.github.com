@@ -1870,9 +1870,11 @@ bool pilotfile::save_savefile()
 	csg_write_lastmissions();
 
 	// json csg dump
-	cfp_json = cfopen((char*)filename_json.c_str(), "wt", CFILE_NORMAL, CF_TYPE_PLAYERS);
-	cfputs(json_dumps(csg_root, JSON_INDENT(4)|JSON_PRESERVE_ORDER), cfp_json);
-	cfclose(cfp_json);
+	if (Cmdline_json_pilot) {
+		cfp_json = cfopen((char*)filename_json.c_str(), "wt", CFILE_NORMAL, CF_TYPE_PLAYERS);
+		cfputs(json_dumps(csg_root, JSON_INDENT(4)|JSON_PRESERVE_ORDER), cfp_json);
+		cfclose(cfp_json);
+	}
 
 	// Done!
 	mprintf(("CSG => Saving complete!\n"));

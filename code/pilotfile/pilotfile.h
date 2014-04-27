@@ -4,6 +4,7 @@
 
 #include "globalincs/pstypes.h"
 #include "cfile/cfile.h"
+#include "cmdline/cmdline.h"
 #include "stats/scoring.h"
 #include "jansson.h"
 
