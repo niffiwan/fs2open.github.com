@@ -616,10 +616,6 @@ void psnet_init( int protocol, int port_num )
 #else
 		Can_broadcast = Tcp_can_broadcast;
 #endif
-
-#ifdef CONFIG_MINIUPNPC
-        // psnet_SetupUPnP();
-#endif
 	
 		// initialize all packet type buffers
 		for(idx=0; idx<PSNET_NUM_TYPES; idx++){
