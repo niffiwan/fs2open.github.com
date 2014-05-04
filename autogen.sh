@@ -99,6 +99,37 @@ xlc )
   am_opt=--include-deps;;
 esac
 
+# GAH! This is an UGLY HACK!
+# try manually running minupnpc cmake to generate a makefile to be read by autotools
+# It may be a better idea to either
+# a) wait for cmake to land in trunk
+# b) run cmake to generate the Makefile and add the Makefile svn/git
+# lastly note that debian/ubuntu 14.04 are still using miniupnpc 1.6.3 in their repos
+# and that version is not compatible with 1.9
+for CMAKE in cmake28 cmake; do
+  (check_version "${CMAKE}" 2 8 0) && {
+    CMAKE="cmake"
+    break
+  }
+done
+
+if [ -z "${CMAKE}" ]; then
+  echo
+  echo "**Error**: You must have \`cmake' version 2.8.0 or greater"
+  echo "installed to compile $PKG_NAME. Download the appropriate package"
+  echo "for your distribution, or get the source tarball at"
+  echo "http://www.cmake.org/"
+  DIE=1
+fi
+
+MINIUPNPC_MAKEDIR=miniupnpcbuild
+MINIUPNPC_SRCDIR=miniupnpc
+rm -fr ${MINIUPNPC_MAKEDIR}
+mkdir ${MINIUPNPC_MAKEDIR}
+cd ${MINIUPNPC_MAKEDIR}
+${CMAKE} ../${MINIUPNPC_SRCDIR}
+cd -
+
 for coin in `find $srcdir -name configure.ac -print`
 do 
   dr=`dirname $coin`

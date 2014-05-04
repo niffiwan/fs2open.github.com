@@ -92,7 +92,7 @@ ushort	Psnet_default_port;
 // the naked packet.
 #define MAX_PACKET_BUFFERS		75
 
-#define CONFIG_MINIUPNPC
+#define CONFIG_MINIUPNPC 1
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
 
 #pragma pack(push, 2)

@@ -4,7 +4,7 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = mongoose code
+SUBDIRS = miniupnpcbuild mongoose code
 
 
 EXTRA_DIST =	\
