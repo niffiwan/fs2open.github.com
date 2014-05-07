@@ -670,7 +670,7 @@ void psnet_SetupUPnP()
         {
         case 0:
             mprintf(("No IGD found\n"));
-            break;
+            return;
         case 1:
             mprintf(("A valid connected IGD has been found = %hs\n", urls.controlURL));
             break;
@@ -682,6 +682,7 @@ void psnet_SetupUPnP()
             break;
         default:
             mprintf(("Unrecognized return value from UPNP_GetValidIGD\n"));
+            return;
         }
         
         // Try getting our external/internet facing IP. TODO: Display this on the game-setup page for conveniance.
