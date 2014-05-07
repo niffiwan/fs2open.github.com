@@ -632,7 +632,7 @@ void psnet_init( int protocol, int port_num )
 char g_psPort[6];
 const char* g_leaseDuration = "0"; // Indefinite/permanent lease duration.
 const char* g_description = "FreeSpace 2 Open Multiplayer";
-const char* g_protocol = "TCP";
+const char* g_protocol = "UDP";
 // Intermediate variables.
 UPNPDev* g_devlist;
 UPNPUrls g_urls;
