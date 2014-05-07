@@ -137,6 +137,7 @@ void psnet_init(int protocol, int default_port);
 
 #ifdef CONFIG_MINIUPNPC
 void psnet_SetupUPnP();
+void psnet_TeardownUPnP();
 #endif
 
 // shutdown psnet
