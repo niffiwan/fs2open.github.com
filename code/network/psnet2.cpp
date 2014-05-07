@@ -855,7 +855,7 @@ int psnet_use_protocol( int protocol )
 		Psnet_my_addr.port = Psnet_default_port;
             
 #ifdef CONFIG_MINIUPNPC
-        psnet_SetupUPnP();
+		psnet_SetupUPnP();
 #endif
 
 		ml_string("Psnet using - NET_TCP");
