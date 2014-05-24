@@ -629,63 +629,67 @@ void psnet_init( int protocol, int port_num )
 #include "upnpcommands.h"
 #include "upnperrors.h"
 
+char g_psPort[6];
+const char* g_leaseDuration = "0"; // Indefinite/permanent lease duration.
+const char* g_description = "FreeSpace 2 Open Multiplayer";
+const char* g_protocol = "UDP";
+// Intermediate variables.
+UPNPDev* g_devlist;
+UPNPUrls g_urls;
+IGDdatas g_data;
+
+    
 /**
  * Try to find a UPnP root on the network and setup port forwarding.
  */
 void psnet_SetupUPnP()
 {
     // Values we want to set.
-    char psPort[6];
-    snprintf(psPort, ARRAY_SIZE(psPort), "%d", Psnet_default_port);
-    const char* leaseDuration = "0"; // Indefinite/permanent lease duration.
-    const char* description = "FreeSpace 2 Open Multiplayer";
-    const char* protocol = "TCP";
+
+    snprintf(g_psPort, ARRAY_SIZE(g_psPort), "%d", Psnet_default_port);
     char internalIPAddress[64];
     char externalIPAddress[40];
     // Variables to hold the values that actually get set.
     char intClient[40];
     char intPort[6];
     char duration[16];
-    // Intermediate variables.
-    UPNPDev* devlist;
-    UPNPUrls urls;
-    IGDdatas data;
     
     const char* multicastif = 0;
     const char* minissdpdpath = 0;
     
     int error;
     
-    devlist = upnpDiscover(1000, multicastif, minissdpdpath, 0, 0, &error);
+    g_devlist = upnpDiscover(1000, multicastif, minissdpdpath, 0, 0, &error);
     if (error > 0) {
         mprintf(("UPnP discovery failed: %d\n",error));
     }
     else {
-        error = UPNP_GetValidIGD(devlist, &urls, &data, internalIPAddress, sizeof(internalIPAddress));
+        error = UPNP_GetValidIGD(g_devlist, &g_urls, &g_data, internalIPAddress, sizeof(internalIPAddress));
         
         if (error > 0)
-            freeUPNPDevlist(devlist);
+            freeUPNPDevlist(g_devlist);
         
         switch(error)
         {
         case 0:
             mprintf(("No IGD found\n"));
-            break;
+            return;
         case 1:
-            mprintf(("A valid connected IGD has been found = %hs\n", urls.controlURL));
+            mprintf(("A valid connected IGD has been found = %hs\n", g_urls.controlURL));
             break;
         case 2:
-            mprintf(("A valid IGD has been found, but it reported as not connected = %hs, will try to continue anyway\n", urls.controlURL));
+            mprintf(("A valid IGD has been found, but it reported as not connected = %hs, will try to continue anyway\n", g_urls.controlURL));
             break;
         case 3:
-            mprintf(("An UPnP device was found, but wasn't recognized as an IGD = %hs, will try to continue anyway\n", urls.controlURL));
+            mprintf(("An UPnP device was found, but wasn't recognized as an IGD = %hs, will try to continue anyway\n", g_urls.controlURL));
             break;
         default:
             mprintf(("Unrecognized return value from UPNP_GetValidIGD\n"));
+            return;
         }
         
         // Try getting our external/internet facing IP. TODO: Display this on the game-setup page for conveniance.
-        error = UPNP_GetExternalIPAddress(urls.controlURL, data.first.servicetype, externalIPAddress);
+        error = UPNP_GetExternalIPAddress(g_urls.controlURL, g_data.first.servicetype, externalIPAddress);
         if (error != UPNPCOMMAND_SUCCESS)
         {
             mprintf(("GetExternalIPAddress failed with code %d (%hs)\n", error, strupnperror(error)));
@@ -694,19 +698,19 @@ void psnet_SetupUPnP()
         mprintf(("ExternalIPAddress = %hs\n", externalIPAddress));
         
         // Try to setup port forwarding.
-        error = UPNP_AddPortMapping(urls.controlURL, data.first.servicetype, psPort, psPort,
-                                  internalIPAddress, description, protocol, 0, leaseDuration);
+        error = UPNP_AddPortMapping(g_urls.controlURL, g_data.first.servicetype, g_psPort, g_psPort,
+                                  internalIPAddress, g_description, g_protocol, 0, g_leaseDuration);
         if (error != UPNPCOMMAND_SUCCESS)
         {
             mprintf(("AddPortMapping(%hs, %hs, %hs) failed with code %d (%hs)\n",
-                       psPort, psPort, internalIPAddress, error, strupnperror(error)));
+                       g_psPort, g_psPort, internalIPAddress, error, strupnperror(error)));
             return;
         }
         
         // Check that the port was actually forwarded.
-        error = UPNP_GetSpecificPortMappingEntry(urls.controlURL,
-                                               data.first.servicetype,
-                                               psPort, protocol,
+        error = UPNP_GetSpecificPortMappingEntry(g_urls.controlURL,
+                                               g_data.first.servicetype,
+                                               g_psPort, g_protocol,
                                                NULL/*remotehost*/,
                                                intClient, intPort, NULL/*desc*/,
                                                NULL/*enabled*/, duration);
@@ -718,10 +722,34 @@ void psnet_SetupUPnP()
         }
         
         mprintf(("External %hs:%hs %hs is redirected to internal %hs:%hs (duration=%hs)\n",
-				   externalIPAddress, psPort, protocol, intClient, intPort, duration));
+				   externalIPAddress, g_psPort, g_protocol, intClient, intPort, duration));
     }
 
     return;
+}
+
+/**
+ * Try to remove a UPnP-initiated port forwarding.
+ */
+void psnet_TeardownUPnP()
+{
+    int error;
+    
+    if(!g_protocol || !g_psPort)
+    {
+        fprintf(stderr, "invalid arguments\n");
+        return;
+    }
+    
+    error = UPNP_DeletePortMapping(g_urls.controlURL,
+                                   g_data.first.servicetype,
+                                   g_psPort,
+                                   g_protocol, 0);
+    
+    if (error != UPNPCOMMAND_SUCCESS)
+    {
+        mprintf(("UPNP_DeletePortMapping() failed with code %d (%hs)\n", error, strupnperror(error)));
+    }
 }
 #endif
     
@@ -759,6 +787,9 @@ void psnet_close()
 	// close down all reliable sockets - this forces them to
 	// send a disconnect to any remote machines	
 	psnet_rel_close();
+#ifdef CONFIG_MINIUPNPC
+	psnet_TeardownUPnP();
+#endif
 	
 	Network_status = NETWORK_STATUS_NOT_INITIALIZED;
 }
@@ -855,7 +886,7 @@ int psnet_use_protocol( int protocol )
 		Psnet_my_addr.port = Psnet_default_port;
             
 #ifdef CONFIG_MINIUPNPC
-        psnet_SetupUPnP();
+		psnet_SetupUPnP();
 #endif
 
 		ml_string("Psnet using - NET_TCP");
