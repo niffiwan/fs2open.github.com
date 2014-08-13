@@ -1733,6 +1733,7 @@ void gr_rect(int x, int y, int w, int h, int resize_mode)
 		gr_resize_screen_pos(&x, &y, &w, &h, resize_mode);
 	}
 
+	mprintf(("gr_rect: %i %i %i %i\n", x, y, w, h));
 	g3_draw_2d_rect(x, y, w, h,
 		gr_screen.current_color.red,
 		gr_screen.current_color.green,

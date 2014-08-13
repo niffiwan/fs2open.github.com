@@ -446,14 +446,28 @@ void HudGaugeMessages::preprocess()
  */
 void HudGaugeMessages::render(float frametime)
 {
-	hud_set_default_color();
-
+	static const int border = 2; // for background around text
 	// dependant on max_width, max_lines, and line_height
 	setClip(position[0], position[1], Window_width, Window_height+2);
+
+	hud_set_default_color();
+
+	bool draw_bg = true;
 
 	for ( SCP_vector<Hud_display_info>::iterator m = active_messages.begin(); m != active_messages.end(); ++m) {
 		if ( !timestamp_elapsed(m->total_life) ) {
 			if ( !(Player->flags & PLAYER_FLAGS_MSG_MODE) || !Hidden_by_comms_menu) {
+				if ( draw_bg ) {
+					// add a background (dark is recommended)
+					// make this all customisable? By modder? Or player?
+					color tmp_bg_color;
+					gr_init_alphacolor(&tmp_bg_color, 5, 5, 5, 128);
+					gr_set_color_fast(&tmp_bg_color);
+					gr_set_bitmap(0); // reset alpha blend shenanigans
+					renderRect(0, 0, Window_width+border*2, Window_height-Line_h+border*2); // remember; Window_height has an extra line for the scroll-up effect
+					draw_bg = false;
+				}
+
 				// set the appropriate color					
 				if ( m->msg.source ) {
 					setGaugeColor(HUD_C_BRIGHT);
@@ -462,10 +476,11 @@ void HudGaugeMessages::render(float frametime)
 				}
 
 				// print the message out
-				renderPrintf(m->msg.x, m->y, "%s", m->msg.text.c_str());
+				renderPrintf(m->msg.x+border, m->y+border, "%s", m->msg.text.c_str());
 			}
 		}
 	}
+	resetClip();
 }
 
 //	Similar to HUD printf, but shows only one message at a time, at a fixed location.
