@@ -327,6 +327,11 @@ int shiphit_get_damage_weapon(object *damaging_objp)
 		case OBJ_SHOCKWAVE:
 			weapon_info_index = shockwave_get_weapon_index(damaging_objp->instance);
 			break;
+		case OBJ_BEAM:
+			if (Beams_use_armour_shield_subsys_factors) {
+				weapon_info_index = beam_get_weapon_info_index(damaging_objp);
+			}
+			break;
 		default:
 			weapon_info_index = -1;
 			break;
@@ -486,7 +491,8 @@ float do_subobj_hit_stuff(object *ship_objp, object *other_obj, vec3d *hitpos, i
 
 	// scale subsystem damage if appropriate
 	weapon_info_index = shiphit_get_damage_weapon(other_obj);	// Goober5000 - a NULL other_obj returns -1
-	if ((weapon_info_index >= 0) && (other_obj->type == OBJ_WEAPON)) {
+	if ((weapon_info_index >= 0) && ((other_obj->type == OBJ_WEAPON) ||
+				(Beams_use_armour_shield_subsys_factors && (other_obj->type == OBJ_BEAM)))) {
 		if ( Weapon_info[weapon_info_index].wi_flags2 & WIF2_TRAINING ) {
 			return damage_left;
 		}
@@ -729,6 +735,7 @@ float do_subobj_hit_stuff(object *ship_objp, object *other_obj, vec3d *hitpos, i
 			}
 
 			subsystem->current_hits -= damage_to_apply;
+			nprintf(("Damage", "Damage Subsys: %.1f, %s\n", damage_to_apply, ship_p->ship_name));
 			if (!(subsystem->flags & SSF_NO_AGGREGATE)) {
 				ship_p->subsys_info[subsystem->system_info->type].aggregate_current_hits -= damage_to_apply;
 			}
@@ -2097,7 +2104,11 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 				damage *= difficulty_scale_factor;
 			}
 
+			nprintf(("Damage", "Damage Shield: %.1f", damage)); // damage applied to shield
+
 			damage = apply_damage_to_shield(ship_objp, quadrant, damage);
+
+			nprintf(("Damage", " (%.1f), %s\n", damage, shipp->ship_name)); // damage leftover for hull, etc
 
 			if(damage > 0.0f){
 				subsystem_damage *= (damage / pre_shield);
@@ -2200,6 +2211,7 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 					}
 				}
 				ship_objp->hull_strength -= damage;
+				nprintf(("Damage", "Damage Hull  : %.1f, %s\n", damage, shipp->ship_name));
 			}
 
 			// let damage gauge know that player ship just took damage
