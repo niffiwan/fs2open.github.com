@@ -79,6 +79,20 @@ camid dead_get_camera()
 }
 */
 
+damage_type::damage_type(object *objp)
+   : is_weapon(false), is_beam(false), is_shockwave(false), is_asteroid(false), is_debris(false), is_ship(false)
+{
+	if (objp)
+	{
+		is_weapon = ((objp->type == OBJ_WEAPON) && (objp->instance >= 0) && (objp->instance < MAX_WEAPONS));
+		is_beam = ((objp->type == OBJ_BEAM) && (objp->instance >= 0) && (objp->instance < MAX_BEAMS));
+		is_shockwave = ((objp->type == OBJ_SHOCKWAVE) && (objp->instance >= 0) && (objp->instance < MAX_SHOCKWAVES));
+		is_asteroid = ((objp->type == OBJ_ASTEROID) && (objp->instance >= 0) && (objp->instance < MAX_ASTEROIDS));
+		is_debris = ((objp->type == OBJ_DEBRIS) && (objp->instance >= 0) && (objp->instance < MAX_DEBRIS_PIECES));
+		is_ship = ((objp->type == OBJ_SHIP) && (objp->instance >= 0) && (objp->instance < MAX_SHIPS));
+	}
+}
+
 bool is_subsys_destroyed(ship *shipp, int submodel)
 {
 	ship_subsys *subsys;
@@ -408,6 +422,33 @@ typedef struct {
 	ship_subsys	*ptr;
 } sublist;
 
+/*
+ * Find name of object that damaged someone
+ * For damage debug
+ */
+char * get_damager_name(object *objp, damage_type *dtp)
+{
+	if (objp) {
+		if (dtp) {
+			if (dtp->is_weapon) {
+				return Weapon_info[Weapons[objp->instance].weapon_info_index].name;
+			} else if (dtp->is_beam) {
+				return Weapon_info[beam_get_weapon_info_index(objp)].name;
+			} else if (dtp->is_shockwave) {
+				return Weapon_info[shockwave_get_weapon_index(objp->instance)].name;
+			} else if (dtp->is_asteroid) {
+				return Asteroid_info[Asteroids[objp->instance].asteroid_type].name;
+			} else if (dtp->is_debris) {
+				return Ships[Objects[Debris[objp->instance].source_objnum].instance].ship_name;
+			} else if (dtp->is_ship) {
+				return Ships[objp->instance].ship_name;
+			}
+		}
+	}
+
+	return "unknown";
+}
+
 // do_subobj_hit_stuff() is called when a collision is detected between a ship and something
 // else.  This is where we see if any sub-objects on the ship should take damage.
 //
@@ -442,7 +483,7 @@ typedef struct {
 //
 //WMC - hull_should_apply armor means that the initial subsystem had no armor, so the hull should apply armor instead.
 
-float do_subobj_hit_stuff(object *ship_objp, object *other_obj, vec3d *hitpos, int submodel_num, float damage, bool *hull_should_apply_armor)
+float do_subobj_hit_stuff(object *ship_objp, object *other_obj, vec3d *hitpos, int submodel_num, float damage, bool *hull_should_apply_armor, damage_type *dtp)
 {
 	vec3d			g_subobj_pos;
 	float				damage_left, damage_if_hull;
@@ -735,7 +776,7 @@ float do_subobj_hit_stuff(object *ship_objp, object *other_obj, vec3d *hitpos, i
 			}
 
 			subsystem->current_hits -= damage_to_apply;
-			nprintf(("Damage", "Damage Subsys: %.1f, %s\n", damage_to_apply, ship_p->ship_name));
+			nprintf(("Damage", "Damage Subsys: %.1f, %s, %s, %s\n", damage_to_apply, ship_p->ship_name, ship_subsys_get_name(subsystem), get_damager_name(other_obj, dtp)));
 			if (!(subsystem->flags & SSF_NO_AGGREGATE)) {
 				ship_p->subsys_info[subsystem->system_info->type].aggregate_current_hits -= damage_to_apply;
 			}
@@ -1934,12 +1975,7 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 
 	ship *shipp;	
 	float subsystem_damage = damage;			// damage to be applied to subsystems
-	int other_obj_is_weapon;
-	int other_obj_is_beam;
-	int other_obj_is_shockwave;
-	int other_obj_is_asteroid;
-	int other_obj_is_debris;
-	int other_obj_is_ship;
+	damage_type damage_src(other_obj);
 	float difficulty_scale_factor = 1.0f;
 
 	Assert(ship_objp);	// Goober5000
@@ -1953,32 +1989,15 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 	maybe_shockwave_damage_adjust(ship_objp, other_obj, &damage);
 
 	// Goober5000 - check to see what other_obj is
-	if (other_obj)
-	{
-		other_obj_is_weapon = ((other_obj->type == OBJ_WEAPON) && (other_obj->instance >= 0) && (other_obj->instance < MAX_WEAPONS));
-		other_obj_is_beam = ((other_obj->type == OBJ_BEAM) && (other_obj->instance >= 0) && (other_obj->instance < MAX_BEAMS));
-		other_obj_is_shockwave = ((other_obj->type == OBJ_SHOCKWAVE) && (other_obj->instance >= 0) && (other_obj->instance < MAX_SHOCKWAVES));
-		other_obj_is_asteroid = ((other_obj->type == OBJ_ASTEROID) && (other_obj->instance >= 0) && (other_obj->instance < MAX_ASTEROIDS));
-		other_obj_is_debris = ((other_obj->type == OBJ_DEBRIS) && (other_obj->instance >= 0) && (other_obj->instance < MAX_DEBRIS_PIECES));
-		other_obj_is_ship = ((other_obj->type == OBJ_SHIP) && (other_obj->instance >= 0) && (other_obj->instance < MAX_SHIPS));
-	}
-	else
-	{
-		other_obj_is_weapon = 0;
-		other_obj_is_beam = 0;
-		other_obj_is_shockwave = 0;
-		other_obj_is_asteroid = 0;
-		other_obj_is_debris = 0;
-		other_obj_is_ship = 0;
-	}
+	// now done in the helper class
 
 	// update lethality of ship doing damage - modified by Goober5000
-	if (other_obj_is_weapon || other_obj_is_shockwave) {
+	if (damage_src.is_weapon || damage_src.is_shockwave) {
 		ai_update_lethality(ship_objp, other_obj, damage);
 	}
 
 	// if this is a weapon
-	if (other_obj_is_weapon)
+	if (damage_src.is_weapon)
 		damage *= weapon_get_damage_scale(&Weapon_info[Weapons[other_obj->instance].weapon_info_index], other_obj, ship_objp);
 
 	MONITOR_INC( ShipHits, 1 );
@@ -1990,7 +2009,7 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 		}
 	}
 
-	if ( other_obj_is_weapon ) {		
+	if ( damage_src.is_weapon ) {
 		// for tvt and dogfight missions, don't scale damage
 		if( (Game_mode & GM_MULTIPLAYER) && ((Netgame.type_flags & NG_TYPE_TEAM) || (Netgame.type_flags & NG_TYPE_DOGFIGHT)) ){
 		} 
@@ -2014,7 +2033,7 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 		int special_check = !MULTIPLAYER_CLIENT;
 
 		// now the actual checks
-		if (other_obj->type == OBJ_BEAM)
+		if (damage_src.is_beam)
 		{
 			Assert((beam_get_weapon_info_index(other_obj) >= 0) && (beam_get_weapon_info_index(other_obj) < Num_weapon_types));
 			if (((Weapon_info[beam_get_weapon_info_index(other_obj)].subtype != WP_LASER) || special_check) && (Player_obj != NULL) && (ship_objp == Player_obj))
@@ -2022,7 +2041,7 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 				ship_hit_pain(damage * difficulty_scale_factor);
 			}	
 		}
-		if (other_obj_is_weapon)
+		if (damage_src.is_weapon)
 		{
 			Assert((Weapons[other_obj->instance].weapon_info_index > -1) && (Weapons[other_obj->instance].weapon_info_index < Num_weapon_types));
 			if (((Weapon_info[Weapons[other_obj->instance].weapon_info_index].subtype != WP_LASER) || special_check) && (Player_obj != NULL) && (ship_objp == Player_obj))
@@ -2067,17 +2086,17 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 			int dmg_type_idx = -1;
 
 			//Do armor stuff
-			if(other_obj_is_weapon) {
+			if(damage_src.is_weapon) {
 				dmg_type_idx = Weapon_info[Weapons[other_obj->instance].weapon_info_index].damage_type_idx;
-			} else if(other_obj_is_beam) {
+			} else if(damage_src.is_beam) {
 				dmg_type_idx = Weapon_info[beam_get_weapon_info_index(other_obj)].damage_type_idx;
-			} else if(other_obj_is_shockwave) {
+			} else if(damage_src.is_shockwave) {
 				dmg_type_idx = shockwave_get_damage_type_idx(other_obj->instance);
-			} else if(other_obj_is_asteroid) {
+			} else if(damage_src.is_asteroid) {
 				dmg_type_idx = Asteroid_info[Asteroids[other_obj->instance].asteroid_type].damage_type_idx;
-			} else if(other_obj_is_debris) {
+			} else if(damage_src.is_debris) {
 				dmg_type_idx = Ships[Objects[Debris[other_obj->instance].source_objnum].instance].debris_damage_type_idx;
-			} else if(other_obj_is_ship) {
+			} else if(damage_src.is_ship) {
 				dmg_type_idx = Ships[other_obj->instance].collision_damage_type_idx;
 			}
 				
@@ -2108,7 +2127,7 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 
 			damage = apply_damage_to_shield(ship_objp, quadrant, damage);
 
-			nprintf(("Damage", " (%.1f), %s\n", damage, shipp->ship_name)); // damage leftover for hull, etc
+			nprintf(("Damage", " (%.1f), %i, %s, %s\n", damage, quadrant, shipp->ship_name, get_damager_name(other_obj, &damage_src))); // damage leftover for hull, etc
 
 			if(damage > 0.0f){
 				subsystem_damage *= (damage / pre_shield);
@@ -2137,7 +2156,7 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 		bool apply_hull_armor = true;
 		bool apply_diff_scale = true;
 
-		subsystem_damage = do_subobj_hit_stuff(ship_objp, other_obj, hitpos, submodel_num, subsystem_damage, &apply_hull_armor);
+		subsystem_damage = do_subobj_hit_stuff(ship_objp, other_obj, hitpos, submodel_num, subsystem_damage, &apply_hull_armor, &damage_src);
 
 		if(subsystem_damage > 0.0f){
 			damage *= (subsystem_damage / pre_subsys);
@@ -2149,17 +2168,17 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 		if (apply_hull_armor)
 		{
 			int dmg_type_idx = -1;
-			if(other_obj_is_weapon) {
+			if(damage_src.is_weapon) {
 				dmg_type_idx = Weapon_info[Weapons[other_obj->instance].weapon_info_index].damage_type_idx;
-			} else if(other_obj_is_beam) {
+			} else if(damage_src.is_beam) {
 				dmg_type_idx = Weapon_info[beam_get_weapon_info_index(other_obj)].damage_type_idx;
-			} else if(other_obj_is_shockwave) {
+			} else if(damage_src.is_shockwave) {
 				dmg_type_idx = shockwave_get_damage_type_idx(other_obj->instance);
-			} else if(other_obj_is_asteroid) {
+			} else if(damage_src.is_asteroid) {
 				dmg_type_idx = Asteroid_info[Asteroids[other_obj->instance].asteroid_type].damage_type_idx;
-			} else if(other_obj_is_debris) {
+			} else if(damage_src.is_debris) {
 				dmg_type_idx = Ships[Objects[Debris[other_obj->instance].source_objnum].instance].debris_damage_type_idx;
-			} else if(other_obj_is_ship) {
+			} else if(damage_src.is_ship) {
 				dmg_type_idx = Ships[other_obj->instance].collision_damage_type_idx;
 			}
 			
@@ -2211,7 +2230,7 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 					}
 				}
 				ship_objp->hull_strength -= damage;
-				nprintf(("Damage", "Damage Hull  : %.1f, %s\n", damage, shipp->ship_name));
+				nprintf(("Damage", "Damage Hull  : %.1f, %s, %s\n", damage, shipp->ship_name, get_damager_name(other_obj, &damage_src)));
 			}
 
 			// let damage gauge know that player ship just took damage
@@ -2227,45 +2246,36 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 
 			if (other_obj)
 			{
-				switch (other_obj->type)
-				{
-					case OBJ_SHOCKWAVE:
-						scoring_add_damage(ship_objp,other_obj,damage);
-						break;
-					case OBJ_ASTEROID:
-						// don't call scoring for asteroids
-						break;
-					case OBJ_WEAPON:
-						if((other_obj->parent < 0) || (other_obj->parent >= MAX_OBJECTS)){
-							scoring_add_damage(ship_objp, NULL, damage);
-						} else {
-							scoring_add_damage(ship_objp, &Objects[other_obj->parent], damage);
-						}
-						break;
-					case OBJ_BEAM://give kills for fighter beams-Bobboau
-					{
-						int bobjn = beam_get_parent(other_obj);
-
-						// Goober5000 - only count beams fired by fighters or bombers unless the ai profile says different
-						if (bobjn >= 0)
-						{
-							if ( !(The_mission.ai_profile->flags & AIPF_INCLUDE_BEAMS_IN_STAT_CALCS) && 
-								 !(Ship_info[Ships[Objects[bobjn].instance].ship_info_index].flags & (SIF_FIGHTER | SIF_BOMBER)) && 
-								 !(Objects[bobjn].flags & OF_PLAYER_SHIP) ) {
-								bobjn = -1;
-							}
-						}
-
-						if(bobjn == -1){
-							scoring_add_damage(ship_objp, NULL, damage);
-						} else {
-							scoring_add_damage(ship_objp, &Objects[bobjn], damage);
-						}
-						break;
-					  }
-					default:
-						break;
+				if (damage_src.is_shockwave) {
+					scoring_add_damage(ship_objp,other_obj,damage);
 				}
+				else if (damage_src.is_weapon) {
+					if((other_obj->parent < 0) || (other_obj->parent >= MAX_OBJECTS)){
+						scoring_add_damage(ship_objp, NULL, damage);
+					} else {
+						scoring_add_damage(ship_objp, &Objects[other_obj->parent], damage);
+					}
+				}
+				else if (damage_src.is_beam) {
+					int bobjn = beam_get_parent(other_obj);
+
+					// Goober5000 - only count beams fired by fighters or bombers unless the ai profile says different
+					if (bobjn >= 0)
+					{
+						if ( !(The_mission.ai_profile->flags & AIPF_INCLUDE_BEAMS_IN_STAT_CALCS) &&
+							 !(Ship_info[Ships[Objects[bobjn].instance].ship_info_index].flags & (SIF_FIGHTER | SIF_BOMBER)) &&
+							 !(Objects[bobjn].flags & OF_PLAYER_SHIP) ) {
+							bobjn = -1;
+						}
+					}
+
+					if(bobjn == -1){
+						scoring_add_damage(ship_objp, NULL, damage);
+					} else {
+						scoring_add_damage(ship_objp, &Objects[bobjn], damage);
+					}
+				}
+				// don't call scoring for asteroids, debris and ships (collisions?)
 			}	// other_obj
 
 			if (ship_objp->hull_strength <= 0.0f) {
@@ -2281,7 +2291,7 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 						// Only small ships can be vaporized
 						if (sip->flags & (SIF_SMALL_SHIP)) {
 							if (other_obj) {	// Goober5000 check for NULL
-								if (other_obj->type == OBJ_BEAM)
+								if (damage_src.is_beam)
 								{
 									int beam_weapon_info_index = beam_get_weapon_info_index(other_obj);
 									if ( (beam_weapon_info_index > -1) && (Weapon_info[beam_weapon_info_index].wi_flags & (WIF_HUGE)) ) {
@@ -2312,7 +2322,7 @@ static void ship_do_damage(object *ship_objp, object *other_obj, vec3d *hitpos, 
 	}
 
 	// if the hitting object is a weapon, maybe do some fun stuff here
-	if(other_obj_is_weapon)
+	if(damage_src.is_weapon)
 	{
 		weapon_info *wip;
 		Assert(other_obj->instance >= 0);

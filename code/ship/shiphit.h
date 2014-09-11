@@ -29,6 +29,23 @@ class object;
 // of whoever is calling these functions.  These functions are strictly
 // for damaging ship's hulls, shields, and subsystems.  Nothing more.
 
+/*
+ * helper class: validate damage sources in one place for array indexing
+ */
+class damage_type {
+public:
+	bool is_weapon;
+	bool is_beam;
+	bool is_shockwave;
+	bool is_asteroid;
+	bool is_debris;
+	bool is_ship;
+
+	damage_type(object *objp);
+};
+
+float do_subobj_hit_stuff(object *ship_obj, object *other_obj, vec3d *hitpos, int submodel_num, float damage, bool *hull_should_apply_armor, damage_type *other);
+
 // function to destroy a subsystem.  Called internally and from multiplayer messaging code
 extern void do_subobj_destroyed_stuff( ship *ship_p, ship_subsys *subsys, vec3d *hitpos, bool no_explosion = false );
 
