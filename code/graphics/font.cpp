@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <limits.h>
 
 #include "graphics/2d.h"
 #include "cfile/cfile.h"
@@ -125,14 +126,13 @@ int get_centered_x(const char *s)
 /**
  * Draws a character centered on x
  */
-void gr_char_centered(int x, int y, char chr)
+void gr_char_centered(int x, int y, char chr, ubyte sc1)
 {
 	char str[2];
-	int w, sc;
+	int w;
 
-	sc = Lcl_special_chars;
 	if (chr == '1')
-		chr = (char)(sc + 1);
+		chr = (char)sc1;
 
 	str[0] = chr;
 	str[1] = 0;
@@ -143,7 +143,8 @@ void gr_char_centered(int x, int y, char chr)
 void gr_print_timestamp(int x, int y, fix timestamp)
 {
 	char h[2], m[3], s[3];
-	int w, c;
+	int w, c, font_num;
+	ubyte sc;
 
 	int time = (int)f2fl(timestamp);  // convert to seconds
 
@@ -158,16 +159,29 @@ void gr_print_timestamp(int x, int y, fix timestamp)
 	gr_string(x + w, y, ":");
 	gr_string(x + w * 3 + c, y, ":");
 
+	font_num = gr_get_current_fontnum();
+	if (font_num == -1) {
+		Warning(LOCATION, "Font not set - timestamps may not work correctly");
+		sc = 0;
+	} else {
+		sc = lcl_get_font_index(font_num);
+	}
+	if (sc == 0) {
+		sc = ubyte ('1'); // make do with non-mono-spaced 1
+	} else {
+		sc += 1;
+	}
+
 	x += w / 2;
-	gr_char_centered(x, y, h[0]);
+	gr_char_centered(x, y, h[0], sc);
 	x += w + c;
-	gr_char_centered(x, y, m[0]);
+	gr_char_centered(x, y, m[0], sc);
 	x += w;
-	gr_char_centered(x, y, m[1]);
+	gr_char_centered(x, y, m[1], sc);
 	x += w + c;
-	gr_char_centered(x, y, s[0]);
+	gr_char_centered(x, y, s[0], sc);
 	x += w;
-	gr_char_centered(x, y, s[1]);
+	gr_char_centered(x, y, s[1], sc);
 }
 
 int gr_get_font_height()
@@ -533,7 +547,7 @@ void gr_set_font(int fontnum)
 
 void parse_fonts_tbl(char *only_parse_first_font, size_t only_parse_first_font_size)
 {
-	int rval;
+	int rval, i;
 	char *filename;
 	
 	// choose file name
@@ -579,6 +593,35 @@ void parse_fonts_tbl(char *only_parse_first_font, size_t only_parse_first_font_s
 		int font_id = gr_create_font(font_filename);
 		if (font_id < 0) {
 			Warning(LOCATION, "Could not create font from typeface '%s'!", font_filename);
+			skip_to_start_of_string_either("#End","$Font:");
+		} else {
+			while (optional_string("+Language:")) {
+				char lang_name[LCL_LANG_NAME_LEN + 1];
+				int special_char_index;
+
+				stuff_string(lang_name, F_NAME, LCL_LANG_NAME_LEN + 1);
+				required_string("+Special Character Index:");
+				stuff_int(&special_char_index);
+
+				// is the index sane?
+				// realistically, it has to be less than UCHAR_MAX to fit all the special chars, but not sure how many there are for all fonts & langs
+				// e.g. English font03.vf has 72 special chars?
+				if (special_char_index < 0 || special_char_index >= UCHAR_MAX) {
+					Error(LOCATION, "Special character index (%d) for font (%s), language (%s) is invalid, must be 0 - %u", special_char_index, font_filename, lang_name, UCHAR_MAX-1);
+				}
+
+				// find language and set the index, or if not found move to the next one
+				for (i = 0; i < (int)Lcl_languages.size(); ++i) {
+					if (!strcmp(Lcl_languages[i].lang_name, lang_name)) {
+						Lcl_languages[i].special_char_indexes[Num_fonts-1] = (ubyte)special_char_index;
+						break;
+					}
+				}
+
+				if (i >= (int)Lcl_languages.size()) {
+					Warning(LOCATION, "Ignoring font (%s) that specified an invalid language (%s); not built-in or in strings.tbl", font_filename, lang_name);
+				}
+			}
 		}
 	}
 
