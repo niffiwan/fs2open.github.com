@@ -31,6 +31,7 @@
 #include "radar/radarsetup.h"
 #include "iff_defs/iff_defs.h"
 #include "globalincs/linklist.h"
+#include "debugconsole/console.h"
 
 int Radar_static_looping = -1;
 
@@ -84,12 +85,7 @@ extern int radar_iff_color[5][2][4];
 
 int See_all = 0;
 
-DCF_BOOL(see_all, See_all)
-
-static const char radar_default_filenames[2][16]=
-{
-	"radar1","2_radar1"
-};
+DCF_BOOL(see_all, See_all);
 
 void radar_stuff_blip_info(object *objp, int is_bright, color **blip_color, int *blip_type)
 {
@@ -319,14 +315,14 @@ void radar_plot_object( object *objp )
 		if (awacs_level < 1.0f)
 			b->flags |= BLIP_DRAW_DISTORTED;
 
-		ship_info Iff_ship_info = Ship_info[Ships[objp->instance].ship_info_index];
+		ship_info *Iff_ship_info = &Ship_info[Ships[objp->instance].ship_info_index];
 
-		if (Iff_ship_info.radar_image_2d_idx >= 0 || Iff_ship_info.radar_color_image_2d_idx >= 0)
+		if (Iff_ship_info->radar_image_2d_idx >= 0 || Iff_ship_info->radar_color_image_2d_idx >= 0)
 		{
-			b->radar_image_2d = Iff_ship_info.radar_image_2d_idx;
-			b->radar_color_image_2d = Iff_ship_info.radar_color_image_2d_idx;
-			b->radar_image_size = Iff_ship_info.radar_image_size;
-			b->radar_projection_size = Iff_ship_info.radar_projection_size_mult;
+			b->radar_image_2d = Iff_ship_info->radar_image_2d_idx;
+			b->radar_color_image_2d = Iff_ship_info->radar_color_image_2d_idx;
+			b->radar_image_size = Iff_ship_info->radar_image_size;
+			b->radar_projection_size = Iff_ship_info->radar_projection_size_mult;
 		}
 	}
 

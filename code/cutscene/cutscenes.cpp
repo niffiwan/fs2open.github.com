@@ -55,12 +55,8 @@ void cutscene_init()
 	int rval;
     cutscene_info cutinfo;
 
-	// open localization
-	lcl_ext_open();
-
 	if ((rval = setjmp(parse_abort)) != 0) {
 		mprintf(("TABLES: Unable to parse '%s'!  Error code = %i.\n", "cutscenes.tbl", rval));
-		lcl_ext_close();
 		return;
 	}
 
@@ -107,9 +103,6 @@ void cutscene_init()
 	}
 
 	required_string("#End");
-
-	// close localization
-	lcl_ext_close();
 }
 
 // function to return 0 based index of which CD a particular movie is on
@@ -261,7 +254,7 @@ int cutscenes_validate_cd(char *mve_name, int prompt_for_cd)
 	int cd_present = 0;
 	int cd_drive_num;
 	int cd_mve_is_on;
-	char volume_name[128];
+	char volume_name[MAX_PATH_LEN];
 
 	int num_attempts = 0;
 
@@ -321,7 +314,7 @@ void cutscenes_screen_play()
 	strcpy_s(name, Cutscenes[which_cutscene].filename );
 //	full_name = cf_add_ext(name, NOX(".mve"));
 
-	main_hall_stop_music();
+	main_hall_stop_music(true);
 	main_hall_stop_ambient();
 	int rval = movie_play(name);
 	main_hall_start_music();
@@ -334,7 +327,7 @@ void cutscenes_screen_play()
 		else
 			sprintf(str, XSTR("Unable to play movie %s.", 204), Cutscenes[which_cutscene].name);
 
-		popup(0, 1, POPUP_OK, str );
+		popup(PF_USE_AFFIRMATIVE_ICON, 1, POPUP_OK, str );
 	}
 	
 }
@@ -581,7 +574,7 @@ void cutscenes_screen_do_frame()
 	GR_MAYBE_CLEAR_RES(Background_bitmap);
 	if (Background_bitmap >= 0) {
 		gr_set_bitmap(Background_bitmap);
-		gr_bitmap(0, 0);
+		gr_bitmap(0, 0, GR_RESIZE_MENU);
 	} 
 
 	Ui_window.draw();
@@ -611,7 +604,7 @@ void cutscenes_screen_do_frame()
 			gr_set_color_fast(&Color_text_normal);
 		}
 
-		gr_printf(Cutscene_list_coords[gr_screen.res][0], Cutscene_list_coords[gr_screen.res][1] + y, Cutscenes[Cutscene_list[z]].name);
+		gr_printf_menu(Cutscene_list_coords[gr_screen.res][0], Cutscene_list_coords[gr_screen.res][1] + y, Cutscenes[Cutscene_list[z]].name);
 
 		y += font_height;
 		z++;
@@ -650,7 +643,7 @@ void cutscenes_screen_do_frame()
 
 			strncpy(line, Text_lines[z], len);
 			line[len] = 0;
-			gr_string(Cutscene_desc_coords[gr_screen.res][0], Cutscene_desc_coords[gr_screen.res][1] + y, line);
+			gr_string(Cutscene_desc_coords[gr_screen.res][0], Cutscene_desc_coords[gr_screen.res][1] + y, line, GR_RESIZE_MENU);
 
 			y += font_height;
 			z++;

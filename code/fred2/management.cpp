@@ -64,6 +64,7 @@
 #include "iff_defs/iff_defs.h"
 #include "menuui/techmenu.h"
 #include "missionui/fictionviewer.h"
+#include "mod_table/mod_table.h"
 
 #include <direct.h>
 #include "cmdline/cmdline.h"
@@ -253,29 +254,16 @@ void parse_medal_tbl()
 }
 */
 
-// an atexit() call!!
-void fred_close()
-{
-	if (Fred_texture_replacements != NULL) {
-		delete[] Fred_texture_replacements;
-		Fred_texture_replacements = NULL;
-	}
-}
-
 void parse_init(bool basic = false);
 void brief_init_colors();
 
 void fred_preload_all_briefing_icons()
 {
-	uint i,j;
-	for (i = 0; i < Species_info.size(); i++)
+	for (SCP_vector<briefing_icon_info>::iterator ii = Briefing_icon_info.begin(); ii != Briefing_icon_info.end(); ++ii)
 	{
-		for (j = 0; j < MAX_BRIEF_ICONS; j++)
-		{
-			generic_anim_load(&Species_info[i].icon_bitmaps[j]);
-			hud_anim_load(&Species_info[i].icon_fade_anims[j]);
-			hud_anim_load(&Species_info[i].icon_highlight_anims[j]);
-		}
+		generic_anim_load(&ii->regular);
+		hud_anim_load(&ii->fade);
+		hud_anim_load(&ii->highlight);
 	}
 }
 
@@ -320,6 +308,9 @@ bool fred_init()
 	if(cfile_init(Fred_exe_dir)){
 		exit(1);
 	}
+
+	// Load game_settings.tbl
+	mod_table_init();
 
 	// initialize localization module. Make sure this is done AFTER initialzing OS.
 	// NOTE : Fred should ALWAYS run in English. Otherwise it might swap in another language
@@ -384,10 +375,10 @@ bool fred_init()
 	iff_init();			// Goober5000
 	species_init();		// Kazan
 
+	brief_parse_icon_tbl();
+
 	// for fred specific replacement texture stuff
-	//Fred_texture_replacements = (texture_replace*) vm_malloc( sizeof(texture_replace) * MAX_SHIPS * MAX_REPLACEMENT_TEXTURES );
-	Fred_texture_replacements = new texture_replace[MAX_SHIPS*MAX_REPLACEMENT_TEXTURES];
-	atexit(fred_close);
+	Fred_texture_replacements.clear();
 
 	// Goober5000
 	for (i = 0; i < MAX_IFFS; i++)
@@ -406,9 +397,7 @@ bool fred_init()
 
 	hud_init_comm_orders();		// Goober5000
 
-	if (!new_alpha_colors_init()) {
-		old_alpha_colors_init();
-	}
+	alpha_colors_init();
 	
 	gamesnd_parse_soundstbl();		// needs to be loaded after species stuff but before interface/weapon/ship stuff - taylor
 	mission_brief_common_init();	
@@ -432,13 +421,12 @@ bool fred_init()
 	neb2_init();						// fullneb stuff
 	stars_init();
 	brief_init_colors();
-	brief_parse_icon_tbl();
 	fred_preload_all_briefing_icons(); //phreak.  This needs to be done or else the briefing icons won't show up
 	event_music_init();
 	fiction_viewer_reset();
 	cmd_brief_reset();
 	Show_waypoints = TRUE;
-	Campaign.filename[0] = 0;  // indicate initialized state
+	mission_campaign_clear();
 
 	stars_post_level_init();
 
@@ -510,8 +498,8 @@ void fix_ship_name(int ship)
 int create_ship(matrix *orient, vec3d *pos, int ship_type)
 {
 	// Save the Current Working dir to restore in a minute - fred is being stupid
-	char pwd[128];
-	getcwd(pwd, 128); // get the present working dir - probably <fs2path>[/modpapth]/data/missions/
+	char pwd[MAX_PATH_LEN];
+	getcwd(pwd, MAX_PATH_LEN); // get the present working dir - probably <fs2path>[/modpapth]/data/missions/
 	
 
 	int obj, z1, z2;
@@ -941,8 +929,8 @@ void clear_mission()
 	event_music_reset_choices();
 	clear_texture_replacements();
 
-	// alternate ship type names
-	mission_parse_reset_alt();
+	mission_parse_reset_alt();		// alternate ship type names
+	mission_parse_reset_callsign();
 
 	strcpy(Cargo_names[0], "Nothing");
 	Num_cargo = 1;
@@ -1462,7 +1450,7 @@ int delete_ship_from_wing(int ship)
 				wing_objects[wing][i] = wing_objects[wing][end];
 				Wings[wing].ship_index[i] = Wings[wing].ship_index[end];
 				if (Objects[wing_objects[wing][i]].type == OBJ_SHIP) {
-					sprintf(name, "%s %d", Wings[wing].name, i + 1);
+					wing_bash_ship_name(name, Wings[wing].name, i + 1);
 					rename_ship(Wings[wing].ship_index[i], name);
 				}
 			}
@@ -2650,11 +2638,9 @@ void stuff_special_arrival_anchor_name(char *buf, int anchor_num, int retail_for
 // Goober5000
 void update_texture_replacements(const char *old_name, const char *new_name)
 {
-	int i;
-
-	for (i = 0; i < Fred_num_texture_replacements; i++)
+	for (SCP_vector<texture_replace>::iterator ii = Fred_texture_replacements.begin(); ii != Fred_texture_replacements.end(); ++ii)
 	{
-		if (!stricmp(Fred_texture_replacements[i].ship_name, old_name))
-			strcpy_s(Fred_texture_replacements[i].ship_name, new_name);
+		if (!stricmp(ii->ship_name, old_name))
+			strcpy_s(ii->ship_name, new_name);
 	}
 }

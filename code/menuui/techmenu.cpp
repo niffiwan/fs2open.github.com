@@ -214,6 +214,8 @@ static int Ships_loaded = 0;
 static int Weapons_loaded = 0;
 static int Intel_loaded = 0;
 
+int Techroom_overlay_id;
+
 // out entry data struct & vars
 typedef struct {
 	int	index;		// index into the master table that its in (ie Ship_info[])
@@ -379,7 +381,7 @@ void techroom_render_desc(int xo, int yo, int ho)
 
 		strncpy(line, Text_lines[z], len);
 		line[len] = 0;
-		gr_string(xo, yo + y, line);
+		gr_string(xo, yo + y, line, GR_RESIZE_MENU);
 
 		y += font_height;
 		z++;
@@ -393,9 +395,9 @@ void techroom_render_desc(int xo, int yo, int ho)
 		int w, h;
 		gr_get_string_size(&w, &h, XSTR("more", 1469), strlen(XSTR("more", 1469)));
 		gr_set_color_fast(&Color_black);
-		gr_rect(more_txt_x-2, more_txt_y, w+3, h);
-		gr_set_color_fast(&Color_red);
-		gr_string(more_txt_x, more_txt_y, XSTR("more", 1469));  // base location on the input x and y?
+		gr_rect(more_txt_x-2, more_txt_y, w+3, h, GR_RESIZE_MENU);
+		gr_set_color_fast(&Color_more_indicator);
+		gr_string(more_txt_x, more_txt_y, XSTR("more", 1469), GR_RESIZE_MENU);  // base location on the input x and y?
 	}
 
 }
@@ -435,7 +437,7 @@ void tech_common_render()
 			lcl_translate_ship_name_gr(buf);
 
 		gr_force_fit_string(buf, 255, Tech_list_coords[gr_screen.res][SHIP_W_COORD]);
-		gr_string(Tech_list_coords[gr_screen.res][SHIP_X_COORD], Tech_list_coords[gr_screen.res][SHIP_Y_COORD] + y, buf);
+		gr_string(Tech_list_coords[gr_screen.res][SHIP_X_COORD], Tech_list_coords[gr_screen.res][SHIP_Y_COORD] + y, buf, GR_RESIZE_MENU);
 
 		List_buttons[z - List_offset].update_dimensions(Tech_list_coords[gr_screen.res][SHIP_X_COORD], Tech_list_coords[gr_screen.res][SHIP_Y_COORD] + y, Tech_list_coords[gr_screen.res][SHIP_W_COORD], font_height);
 		List_buttons[z - List_offset].enable(1);
@@ -462,11 +464,11 @@ void techroom_ships_render(float frametime)
 	// now render the trackball ship, which is unique to the ships tab
 	float rev_rate = REVOLUTION_RATE;
 	angles rot_angles, view_angles;
-	int z;
+	int z, i, j;
 	ship_info *sip = &Ship_info[Cur_entry_index];
 
 	if (sip->uses_team_colors) {
-		gr_set_team_color(sip->default_team_name, "<none>", 0, 0);
+		gr_set_team_color(sip->default_team_name, "none", 0, 0);
 	}
 
 	// get correct revolution rate
@@ -511,7 +513,7 @@ void techroom_ships_render(float frametime)
 		vm_rotate_matrix_by_angles(&Techroom_ship_orient, &rot_angles);
 	}
 
-	gr_set_clip(Tech_ship_display_coords[gr_screen.res][SHIP_X_COORD], Tech_ship_display_coords[gr_screen.res][SHIP_Y_COORD], Tech_ship_display_coords[gr_screen.res][SHIP_W_COORD], Tech_ship_display_coords[gr_screen.res][SHIP_H_COORD]);	
+	gr_set_clip(Tech_ship_display_coords[gr_screen.res][SHIP_X_COORD], Tech_ship_display_coords[gr_screen.res][SHIP_Y_COORD], Tech_ship_display_coords[gr_screen.res][SHIP_W_COORD], Tech_ship_display_coords[gr_screen.res][SHIP_H_COORD], GR_RESIZE_MENU);	
 
 	// render the ship
 	g3_start_frame(1);
@@ -534,7 +536,35 @@ void techroom_ships_render(float frametime)
 
 	model_clear_instance(Techroom_ship_modelnum);
 	model_set_detail_level(0);
-	model_render(Techroom_ship_modelnum, &Techroom_ship_orient, &vmd_zero_vector, MR_LOCK_DETAIL | MR_AUTOCENTER);
+
+	for (i = 0; i < sip->n_subsystems; i++) {
+		model_subsystem *msp = &sip->subsystems[i];
+		if (msp->type == SUBSYSTEM_TURRET) {
+
+			float p = 0.0f;
+			float h = 0.0f;
+												
+			for (j = 0; j < msp->n_triggers; j++) {
+
+				// special case for turrets
+				p = msp->triggers[j].angle.xyz.x;
+				h = msp->triggers[j].angle.xyz.y;
+			}
+			if ( msp->subobj_num >= 0 )	{
+				model_set_instance_techroom(Techroom_ship_modelnum, msp->subobj_num, 0.0f, h );
+			}
+			if ( (msp->subobj_num != msp->turret_gun_sobj) && (msp->turret_gun_sobj >= 0) )		{
+				model_set_instance_techroom(Techroom_ship_modelnum, msp->turret_gun_sobj, p, 0.0f );
+			}
+		}
+	}
+
+	uint render_flags = MR_LOCK_DETAIL | MR_AUTOCENTER;
+
+	if(sip->flags2 & SIF2_NO_LIGHTING)
+				render_flags |= MR_NO_LIGHTING;
+
+	model_render(Techroom_ship_modelnum, &Techroom_ship_orient, &vmd_zero_vector, render_flags);
 
 	Glowpoint_use_depth_buffer = true;
 
@@ -676,7 +706,7 @@ void techroom_anim_render(float frametime)
 		//get the centre point - adjust
 		x = Tech_ani_centre_coords[gr_screen.res][0] - x / 2;
 		y = Tech_ani_centre_coords[gr_screen.res][1] - y / 2;
-		generic_anim_render(&Current_list[Cur_entry].animation, frametime, x, y);
+		generic_anim_render(&Current_list[Cur_entry].animation, frametime, x, y, true);
 	}
 	// if our active item has a bitmap instead of an animation, draw it
 	else if((Cur_entry >= 0) && (Current_list[Cur_entry].bitmap >= 0)){
@@ -686,7 +716,7 @@ void techroom_anim_render(float frametime)
 		x = Tech_ani_centre_coords[gr_screen.res][0] - x / 2;
 		y = Tech_ani_centre_coords[gr_screen.res][1] - y / 2;
 		gr_set_bitmap(Current_list[Cur_entry].bitmap);
-		gr_bitmap(x, y);
+		gr_bitmap(x, y, GR_RESIZE_MENU);
 	}
 }
 
@@ -1002,12 +1032,8 @@ void techroom_intel_init()
 	if (inited)
 		return;
 
-	// open localization
-	lcl_ext_open();
-
 	if ((rval = setjmp(parse_abort)) != 0) {
 		mprintf(("TABLES: Unable to parse '%s'!  Error code = %i.\n", "species.tbl", rval));
-		lcl_ext_close();
 		return;
 	}
 	
@@ -1045,9 +1071,6 @@ void techroom_intel_init()
 	}
 
 	inited = 1;
-
-	// close localization
-	lcl_ext_close();
 }
 
 void techroom_init()
@@ -1127,7 +1150,8 @@ void techroom_init()
 	Buttons[gr_screen.res][SCROLL_LIST_DOWN].button.set_hotkey(KEY_PAGEDOWN);
 
 	// init help overlay states
-	help_overlay_set_state(TECH_ROOM_OVERLAY, 0);
+	Techroom_overlay_id = help_overlay_get_index(TECH_ROOM_OVERLAY);
+	help_overlay_set_state(Techroom_overlay_id, gr_screen.res, 0);
 
 	// setup slider
 	Tech_slider.create(&Ui_window, Tech_slider_coords[gr_screen.res][SHIP_X_COORD], Tech_slider_coords[gr_screen.res][SHIP_Y_COORD], Tech_slider_coords[gr_screen.res][SHIP_W_COORD], Tech_slider_coords[gr_screen.res][SHIP_H_COORD], Num_ship_classes, Tech_slider_filename[gr_screen.res], &tech_scroll_list_up, &tech_scroll_list_down, &tech_ship_scroll_capture);
@@ -1222,7 +1246,7 @@ void techroom_do_frame(float frametime)
 	int i, k;	
 
 	// turn off controls when overlay is on
-	if ( help_overlay_active(TECH_ROOM_OVERLAY) ) {
+	if ( help_overlay_active(Techroom_overlay_id) ) {
 		Buttons[gr_screen.res][HELP_BUTTON].button.reset_status();
 		Ui_window.set_ignore_gadgets(1);
 	}
@@ -1237,14 +1261,14 @@ void techroom_do_frame(float frametime)
 	k = Ui_window.process() & ~KEY_DEBUGGED;
 
 	if ( (k > 0) || B1_JUST_RELEASED ) {
-		if ( help_overlay_active(TECH_ROOM_OVERLAY) ) {
-			help_overlay_set_state(TECH_ROOM_OVERLAY, 0);
+		if ( help_overlay_active(Techroom_overlay_id) ) {
+			help_overlay_set_state(Techroom_overlay_id, gr_screen.res, 0);
 			Ui_window.set_ignore_gadgets(0);
 			k = 0;
 		}
 	}
 
-	if ( !help_overlay_active(TECH_ROOM_OVERLAY) ) {
+	if ( !help_overlay_active(Techroom_overlay_id) ) {
 		Ui_window.set_ignore_gadgets(0);
 	}
 
@@ -1327,7 +1351,7 @@ void techroom_do_frame(float frametime)
 	GR_MAYBE_CLEAR_RES(Tech_background_bitmap);
 	if (Tech_background_bitmap >= 0) {
 		gr_set_bitmap(Tech_background_bitmap);
-		gr_bitmap(0, 0);
+		gr_bitmap(0, 0, GR_RESIZE_MENU);
 	}
 
 	// render
@@ -1363,7 +1387,7 @@ void techroom_do_frame(float frametime)
 	}
 
 	// blit help overlay if active
-	help_overlay_maybe_blit(TECH_ROOM_OVERLAY);
+	help_overlay_maybe_blit(Techroom_overlay_id, gr_screen.res);
 
 	gr_flip();
 }

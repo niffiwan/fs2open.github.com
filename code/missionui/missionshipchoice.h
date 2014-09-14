@@ -12,7 +12,7 @@
 #ifndef __MISSIONSHIPCHOICE_H__
 #define __MISSIONSHIPCHOICE_H__
 
-struct p_object;
+class p_object;
 
 ///////////////////////////////////////////////////////
 // Ships selection hot spots
@@ -58,6 +58,8 @@ extern int Select_default_ship;
 
 extern float ShipSelectScreenShipRot;
 extern int	 ShipSelectModelNum;
+
+extern int Ship_select_overlay_id;
 
 void draw_wing_block(int wb_num, int hot_slot, int selected_slot, int class_select, bool ship_selection = true);
 void ship_select_init();

@@ -77,7 +77,9 @@ typedef struct mevent {
 	char	status;
 } mevent;
 
-typedef struct cmission {
+class cmission
+{
+public:
 	char				*name;					// name of the mission
 	char				*notes;					// mission notes for mission (used by Fred)
 	char				briefing_cutscene[NAME_LENGTH];	// name of the cutscene to be played before this mission
@@ -99,9 +101,11 @@ typedef struct cmission {
 	SCP_string		main_hall;				// which main hall the player is in - converted to SCP_string by CommanderDJ
 	ubyte			debrief_persona_index;	// which persona is used for ranks/badges - Goober5000
 	scoring_struct	stats;
-} cmission;
+};
 
-typedef struct campaign {
+class campaign
+{
+public:
 	char	name[NAME_LENGTH];						// name of the campaign
 	char	filename[MAX_FILENAME_LEN];				// filename the campaign info is in
 	char	*desc;									// description of campaign
@@ -122,7 +126,16 @@ typedef struct campaign {
 	cmission	missions[MAX_CAMPAIGN_MISSIONS];	// decription of the missions
 	int				num_variables;					// number of variables this campaign had - Goober5000
 	sexp_variable	*variables;						// malloced array of sexp_variables (of num_variables size) containing campaign-persistent variables - Goober5000
-} campaign;
+	int				redalert_num_variables;			// These two variables hold the previous state of the above for restoration
+	sexp_variable	*redalert_variables;			// if you replay the previous mission in a Red Alert scenario. -MageKing17
+
+	campaign()
+		: desc(NULL), num_missions(0), variables(NULL)
+	{
+		name[0] = 0;
+		filename[0] = 0;
+	}
+};
 
 extern campaign Campaign;
 
@@ -168,7 +181,7 @@ int mission_campaign_load_by_name_csfe( char *filename, char *callsign );
 
 
 // load up and initialize a new campaign
-int mission_campaign_load( char *filename, player *pl = NULL, int load_savefile = 1 );
+int mission_campaign_load( char *filename, player *pl = NULL, int load_savefile = 1, bool reset_stats = true );
 
 // function to save the state of the campaign between missions or to load a campaign save file
 extern int mission_campaign_save( void );
@@ -231,6 +244,12 @@ int mission_campaign_get_mission_list(const char *filename, char **list, int max
 int mission_load_up_campaign( player *p = NULL );
 
 // stores mission goals and events in Campaign struct
+void mission_campaign_store_goals_and_events();
+
+// stores campaign-persistent variables
+void mission_campaign_store_variables();
+
+// does both of the above
 void mission_campaign_store_goals_and_events_and_variables();
 
 // evaluates next mission and possible loop mission

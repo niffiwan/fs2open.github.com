@@ -133,10 +133,6 @@ void os_set_process_affinity()
 // for the app name, which is where registry keys are stored.
 void os_init(const char * wclass, const char * title, const char *app_name, const char *version_string )
 {
-#ifndef NDEBUG
-	outwnd_init(1);
-#endif
-
 	os_init_registry_stuff(Osreg_company_name, title, version_string);
 
 	strcpy_s( szWinTitle, title );
@@ -371,7 +367,10 @@ void change_window_active_state()
 			// maximize it
 			joy_reacquire_ff();
 
-			game_unpause();
+			if (!Cmdline_no_unfocus_pause)
+			{
+				game_unpause();
+			}
 
 #ifdef THREADED_PROCESS
 			SetThreadPriority( hThread, THREAD_PRIORITY_HIGHEST );
@@ -384,14 +383,18 @@ void change_window_active_state()
             {
                 SetWindowPos(hwndApp, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             }
-		} else {
+		}
+		else {
 			joy_unacquire_ff();
 
 			if (Mouse_hidden)
 				Mouse_hidden = 0;
 
-			// Pause sounds and put up pause screen if necessary
-			game_pause();
+			if(!Cmdline_no_unfocus_pause)
+			{
+				// Pause sounds and put up pause screen if necessary
+				game_pause();
+			}
 
 #ifdef THREADED_PROCESS
 			SetThreadPriority( hThread, THREAD_PRIORITY_NORMAL );
@@ -406,7 +409,10 @@ void change_window_active_state()
             }
 		}
 
-		gr_activate(fAppActive);
+		if (!Cmdline_no_unfocus_pause)
+		{
+			gr_activate(fAppActive);
+		}
 
 		fOldAppActive = fAppActive;
 	}

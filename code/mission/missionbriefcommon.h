@@ -15,6 +15,7 @@
 #include "globalincs/globals.h"
 #include "anim/packunpack.h"
 #include "hud/hud.h"
+#include "graphics/generic.h"
 
 #define MAX_TEXT_STREAMS	2		// how many concurrent streams of text can be displayed
 
@@ -22,7 +23,7 @@
 // names for the icons that can appear in the briefing.  If you modify this list,
 // update the Icons_names[] string array located in MissionParse.cpp
 // ------------------------------------------------------------------------
-#define MAX_BRIEF_ICONS						35		// keep up to date
+#define MIN_BRIEF_ICONS						35		// keep up to date
 
 #define ICON_FIGHTER							0
 #define ICON_FIGHTER_WING					1
@@ -60,6 +61,22 @@
 #define ICON_JUMP_NODE						33
 #define ICON_TRANSPORT						34
 
+typedef struct briefing_icon_info {
+	generic_anim	regular;
+	hud_anim		fade;
+	hud_anim		highlight;
+} briefing_icon_type;
+
+extern SCP_vector<briefing_icon_info> Briefing_icon_info;
+
+struct brief_icon;
+extern briefing_icon_info *brief_get_icon_info(brief_icon *bi);
+
+
+
+// Moving out of missionbriefcommon.cpp so it can be referenced elsewhere -MageKing17
+extern const float		BRIEF_TEXT_WIPE_TIME;		// time in seconds for wipe to occur
+
 // ------------------------------------------------------------------------
 // Structures to hold briefing data
 // ------------------------------------------------------------------------
@@ -86,7 +103,9 @@
 #define		BI_HIGHLIGHT		(1<<0)
 #define		BI_SHOWHIGHLIGHT	(1<<1)
 #define		BI_FADEIN			(1<<2)
-#define		BI_MIRROR_ICON		(1<<3)	//mirror the briefing icon so it points the other way - phreak
+#define		BI_MIRROR_ICON		(1<<3)	// mirror the briefing icon so it points the other way - phreak
+#define		BI_USE_WING_ICON	(1<<4)	// use wing variant of briefing icon
+#define		BI_USE_CARGO_ICON	(1<<5)	// use cargo variant of briefing icon
 
 typedef struct brief_icon {
 	int		x,y,w,h;
@@ -138,8 +157,8 @@ public:
 		  num_icons( 0 ), icons( NULL ), num_lines( 0 ), lines( NULL )
 	{ 
 		voice[ 0 ] = 0;
-		memset( &camera_pos, 0, sizeof( vec3d ) );
-		memset( &camera_orient, 0, sizeof( matrix ) );
+		camera_pos = vmd_zero_vector;
+		camera_orient = vmd_identity_matrix;
 	}
 };
 
@@ -277,7 +296,7 @@ void brief_restart_text_wipe();
 void brief_reset_last_new_stage();
 void brief_blit_stage_num(int stage_num, int stage_max);
 
-void brief_common_get_icon_dimensions(int *w, int *h, int type, int ship_class);
+void brief_common_get_icon_dimensions(int *w, int *h, brief_icon *bi);
 
 // voice streaming interface
 void brief_voice_init();
@@ -289,7 +308,7 @@ void brief_voice_pause(int stage_num);
 void brief_voice_unpause(int stage_num);
 
 // fancy briefing style text functions for use in other modules.
-int brief_color_text_init(const char *src, int w, int instance = 0, int max_lines = MAX_BRIEF_LINES);
+int brief_color_text_init(const char *src, int w, const char default_color = '\0', int instance = 0, int max_lines = MAX_BRIEF_LINES, const bool append = false);
 int brief_render_text(int line_offset, int x, int y, int h, float frametime, int instance = 0, int line_spacing = 0);
 
 void cmd_brief_reset();

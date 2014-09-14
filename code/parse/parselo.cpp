@@ -34,9 +34,9 @@
 // to know that a modular table is currently being parsed
 bool	Parsing_modular_table = false;
 
-char		Current_filename[128];
-char		Current_filename_save[128];
-char		Current_filename_sub[128];	//Last attempted file to load, don't know if ex or not.
+char		Current_filename[MAX_PATH_LEN];
+char		Current_filename_save[MAX_PATH_LEN];
+char		Current_filename_sub[MAX_PATH_LEN];	//Last attempted file to load, don't know if ex or not.
 char		Error_str[ERROR_LENGTH];
 int		my_errno;
 int		Warning_count, Error_count;
@@ -341,7 +341,7 @@ void advance_to_eoln(char *more_terminators)
 	Assert((more_terminators == NULL) || (strlen(more_terminators) < 125));
 
 	terminators[0] = EOLN;
-	terminators[1] = (char)EOF_CHAR;
+	terminators[1] = EOF_CHAR;
 	terminators[2] = 0;
 	if (more_terminators != NULL)
 		strcat_s(terminators, more_terminators);
@@ -740,6 +740,57 @@ int required_string_4(char *str1, char *str2, char *str3, char *str4)
 	return -1;
 }
 
+// Generic version of old required_string_3 and required_string_4; written by ngld, with some tweaks by MageKing17
+int required_string_one_of(int arg_count, ...)
+{
+	Assertion(arg_count > 0, "required_string_one_of() called with arg_count of %d; get a coder!\n", arg_count);
+	int count = 0;
+	int idx;
+	char *expected;
+	SCP_string message = "";
+	va_list vl;
+
+	ignore_white_space();
+
+	while (count < RS_MAX_TRIES) {
+		va_start(vl, arg_count);
+		for (idx = 0; idx < arg_count; idx++) {
+			expected = va_arg(vl, char*);
+			if (strnicmp(expected, Mp, strlen(expected)) == 0) {
+				diag_printf("Found required string [%s]", token_found = expected);
+				va_end(vl);
+				return idx;
+			}
+		}
+		va_end(vl);
+
+		if (!message.compare("")) {
+			va_start(vl, arg_count);
+			message = "Required token = ";
+			for (idx = 0; idx < arg_count; idx++) {
+				message += "[";
+				message += va_arg(vl, char*);
+				message += "]";
+				if (arg_count == 2 && idx == 0) {
+					message += " or ";
+				} else if (idx == arg_count - 2) {
+					message += ", or ";
+				} else if (idx < arg_count - 2) {
+					message += ", ";
+				}
+			}
+			va_end(vl);
+		}
+
+		error_display(1, "%s, found [%.32s]\n", message.c_str(), next_tokens());
+		advance_to_eoln(NULL);
+		ignore_white_space();
+		count++;
+	}
+
+	return -1;
+}
+
 int required_string_either_fred(char *str1, char *str2)
 {
 	ignore_white_space();
@@ -777,7 +828,7 @@ void copy_to_eoln(char *outstr, char *more_terminators, char *instr, int max)
 	Assert((more_terminators == NULL) || (strlen(more_terminators) < 125));
 
 	terminators[0] = EOLN;
-	terminators[1] = (char)EOF_CHAR;
+	terminators[1] = EOF_CHAR;
 	terminators[2] = 0;
 	if (more_terminators != NULL)
 		strcat_s(terminators, more_terminators);
@@ -804,7 +855,7 @@ void copy_to_eoln(SCP_string &outstr, char *more_terminators, char *instr)
 	Assert((more_terminators == NULL) || (strlen(more_terminators) < 125));
 
 	terminators[0] = EOLN;
-	terminators[1] = (char)EOF_CHAR;
+	terminators[1] = EOF_CHAR;
 	terminators[2] = 0;
 	if (more_terminators != NULL)
 		strcat_s(terminators, more_terminators);
@@ -1074,6 +1125,7 @@ int get_string_or_variable (char *str)
 		int sexp_variable_index = get_index_sexp_variable_name(str); 
 		
 		// We only want String variables
+		Assertion (sexp_variable_index != -1, "Didn't find variable name \"%s\"", str);
 		Assert (Sexp_variables[sexp_variable_index].type & SEXP_VARIABLE_STRING);
 
 		result = PARSING_FOUND_VARIABLE; 
@@ -1105,9 +1157,10 @@ int get_string_or_variable (SCP_string &str)
 	{
 		Mp++;
 		stuff_string_white(str); 
-		int sexp_variable_index = get_index_sexp_variable_name(str); 
-		
+		int sexp_variable_index = get_index_sexp_variable_name(str);
+
 		// We only want String variables
+		Assertion (sexp_variable_index != -1, "Didn't find variable name \"%s\"", str.c_str());
 		Assert (Sexp_variables[sexp_variable_index].type & SEXP_VARIABLE_STRING);
 
 		result = PARSING_FOUND_VARIABLE; 
@@ -1129,12 +1182,17 @@ int get_string_or_variable (SCP_string &str)
 
 /**
  * Stuff a string (" chars ") into *str, return length.
+ * Accepts an optional max length parameter. If it is omitted or negative, then no max length is enforced.
  */
-int get_string(char *str)
+int get_string(char *str, int max)
 {
 	int	len;
 
 	len = strcspn(Mp + 1, "\"");
+
+	if (max >= 0 && len >= max)
+		error_display(0, "String too long.  Length = %i.  Max is %i.\n", len, max);
+
 	strncpy(str, Mp + 1, len);
 	str[len] = 0;
 
@@ -1244,7 +1302,7 @@ void stuff_string(char *outstr, int type, int len, char *terminators)
 			copy_to_eoln(read_str, terminators, Mp, read_len);
 			drop_trailing_white_space(read_str);
 			advance_to_eoln(terminators);
-			break;		
+			break;
 
 		default:
 			Error(LOCATION, "Unhandled string type %d in stuff_string!", type);
@@ -1354,7 +1412,7 @@ void stuff_string(SCP_string &outstr, int type, char *terminators)
 			copy_to_eoln(read_str, terminators, Mp);
 			drop_trailing_white_space(read_str);
 			advance_to_eoln(terminators);
-			break;		
+			break;	
 
 		default:
 			Error(LOCATION, "Unhandled string type %d in stuff_string!", type);
@@ -1510,20 +1568,17 @@ void compact_multitext_string(SCP_string &str)
 		str.resize(len-num_cr);
 }
 
+// Converts a character from Windows-1252 to CP437.
 int maybe_convert_foreign_character(int ch)
 {
 	// time to do some special foreign character conversion			
 	switch (ch) {
+		case -57:
+			ch = 128;
+			break;
+
 		case -4:
 			ch = 129;
-			break;
-
-		case -28:
-			ch = 132;
-			break;
-
-		case -10:
-			ch = 148;
 			break;
 
 		case -23:
@@ -1534,8 +1589,24 @@ int maybe_convert_foreign_character(int ch)
 			ch = 131;
 			break;
 
+		case -28:
+			ch = 132;
+			break;
+
+		case -32:
+			ch = 133;
+			break;
+
+		case -27:
+			ch = 134;
+			break;
+
 		case -25:
 			ch = 135;
+			break;
+
+		case -22:
+			ch = 136;
 			break;
 
 		case -21:
@@ -1554,16 +1625,36 @@ int maybe_convert_foreign_character(int ch)
 			ch = 140;
 			break;
 
+		case -20:
+			ch = 141;
+			break;
+
 		case -60:
 			ch = 142;
+			break;
+
+		case -59:
+			ch = 143;
 			break;
 
 		case -55:
 			ch = 144;
 			break;
 
+		case -26:
+			ch = 145;
+			break;
+
+		case -58:
+			ch = 146;
+			break;
+
 		case -12:
 			ch = 147;
+			break;
+
+		case -10:
+			ch = 148;
 			break;
 
 		case -14:
@@ -1578,12 +1669,32 @@ int maybe_convert_foreign_character(int ch)
 			ch = 151;
 			break;
 
+		case -1:
+			ch = 152;
+			break;
+
 		case -42:
 			ch = 153;
 			break;
 
 		case -36:
 			ch = 154;
+			break;
+
+		case -94:
+			ch = 155;
+			break;
+
+		case -93:
+			ch = 156;
+			break;
+
+		case -91:
+			ch = 157;
+			break;
+
+		case -125:
+			ch = 159;
 			break;
 
 		case -31:
@@ -1602,16 +1713,80 @@ int maybe_convert_foreign_character(int ch)
 			ch = 163;
 			break;
 
-		case -32:
-			ch = 133;
+		case -15:
+			ch = 164;
 			break;
 
-		case -22:
-			ch = 136;
+		case -47:
+			ch = 165;
 			break;
 
-		case -20:
-			ch = 141;
+		case -86:
+			ch = 166;
+			break;
+
+		case -70:
+			ch = 167;
+			break;
+
+		case -65:
+			ch = 168;
+			break;
+
+		case -84:
+			ch = 170;
+			break;
+
+		case -67:
+			ch = 171;
+			break;
+
+		case -68:
+			ch = 172;
+			break;
+
+		case -95:
+			ch = 173;
+			break;
+
+		case -85:
+			ch = 174;
+			break;
+
+		case -69:
+			ch = 175;
+			break;
+
+		case -33:
+			ch = 225;
+			break;
+
+		case -75:
+			ch = 230;
+			break;
+
+		case -79:
+			ch = 241;
+			break;
+
+		case -9:
+			ch = 246;
+			break;
+
+		case -80:
+			ch = 248;
+			break;
+
+		case -73:
+			ch = 250;
+			break;
+
+		case -78:
+			ch = 253;
+			break;
+
+		case -96:
+			ch = 255;
 			break;
 	}
 	
@@ -1625,6 +1800,9 @@ void maybe_convert_foreign_characters(char *line)
 	if (Fred_running)
 		return;
 
+	if (Lcl_pl)
+		return;
+
 	for (ch = line; *ch != '\0'; ch++)
 			*ch = (char) maybe_convert_foreign_character(*ch);
 }
@@ -1635,244 +1813,231 @@ void maybe_convert_foreign_characters(SCP_string &line)
 	if (Fred_running)
 		return;
 
+	if (Lcl_pl)
+		return;
+
 	for (SCP_string::iterator ii = line.begin(); ii != line.end(); ++ii)
 		*ii = (char) maybe_convert_foreign_character(*ii);
 }
 
 // Goober5000
-int get_number_before_separator(char *text, char separator)
+bool get_number_before_separator(int &number, int &number_chars, const char *text, char separator)
 {
-	char buf[10];
-	char *ch;
+	char buf[8];
+	const char *ch = text;
+	int len = 0;
 
-	memset(buf, 0, 10);
-	strncpy(buf, text, 9);
+	while (true)
+	{
+		// didn't find separator
+		if (*ch == '\0' || len == 8)
+			return false;
 
-	ch = strchr(buf, separator);
-	if (ch == NULL)
-		return 0;
-	*ch = '\0';
+		// found separator
+		if (*ch == separator)
+			break;
 
-	return atoi(buf);	
+		// found nondigit
+		if (!isdigit(*ch))
+			return false;
+
+		// copying in progress
+		buf[len] = *ch;
+		len++;
+		ch++;
+	}
+
+	// got an integer
+	buf[len] = '\0';
+	number = atoi(buf);
+	number_chars = len;
+	return true;
 }
 
 // Goober5000
-int get_number_before_separator(SCP_string &text, char separator)
+bool get_number_before_separator(int &number, int &number_chars, const SCP_string &text, SCP_string::iterator text_pos, char separator)
 {
-	char buf[10];
-	char *ch;
+	char buf[8];
+	SCP_string::iterator ch = text_pos;
+	int len = 0;
 
-	memset(buf, 0, 10);
-	text.copy(buf, 9);
+	while (true)
+	{
+		// didn't find separator
+		if (ch == text.end() || len == 8)
+			return false;
 
-	ch = strchr(buf, separator);
-	if (ch == NULL)
-		return 0;
-	*ch = '\0';
+		// found separator
+		if (*ch == separator)
+			break;
 
-	return atoi(buf);	
+		// found nondigit
+		if (!isdigit(*ch))
+			return false;
+
+		// copying in progress
+		buf[len] = *ch;
+		len++;
+		++ch;
+	}
+
+	// got an integer
+	buf[len] = '\0';
+	number = atoi(buf);
+	number_chars = len;
+	return true;
+}
+
+bool matches_version_specific_tag(const char *line_start, bool &compatible_version, int &tag_len)
+{
+	// special version-specific comment
+	// formatted like e.g. ;;FSO 3.7.0;;
+	if (strnicmp(line_start, ";;FSO ", 6))
+		return false;
+
+	int major, minor, build, num_len;
+	const char *ch;
+
+	ch = line_start + 6;
+	if (!get_number_before_separator(major, num_len, ch, '.'))
+		return false;
+
+	ch += (num_len + 1);
+	if (!get_number_before_separator(minor, num_len, ch, '.'))
+		return false;
+
+	ch += (num_len + 1);
+	if (!get_number_before_separator(build, num_len, ch, ';'))
+		return false;
+
+	ch += (num_len + 1);
+	if (*ch != ';')
+		return false;
+
+	ch++;
+
+	// tag is a match!
+	tag_len = ch - line_start;
+	compatible_version = true;
+
+	// check whether major, minor, and build line up with this version
+	if (major > FS_VERSION_MAJOR)
+	{
+		compatible_version = false;
+	}
+	else if (major == FS_VERSION_MAJOR)
+	{
+		if (minor > FS_VERSION_MINOR)
+		{
+			compatible_version = false;
+		}
+		else if (minor == FS_VERSION_MINOR)
+		{
+			if (build > FS_VERSION_BUILD)
+			{
+				compatible_version = false;
+			}
+		}
+	}
+
+	// true for tag match
+	return true;
 }
 
 // Strip comments from a line of input.
-// Goober5000 - rewritten to make a lot more sense and to be extensible
-int strip_comments(char *line, int in_multiline_comment)
+// Goober5000 - rewritten for the second time
+void strip_comments(char *line, bool &in_quote, bool &in_multiline_comment_a, bool &in_multiline_comment_b)
 {
-	char *ch;
+	char *writep = line;
+	char *readp = line;
 
-	// if we're in a comment, see if we can close it
-	if (in_multiline_comment)
+	// copy all characters from read to write, unless they're commented
+	while (*readp != '\r' && *readp != '\n' && *readp != '\0')
 	{
-		ch = strstr(line, "*/");
-		if (ch == NULL)
-			ch = strstr(line, "*!");
-		if (ch != NULL)
+		// only check for comments if not quoting
+		if (!in_quote)
 		{
-			char *writep = line;
-			char *readp = ch + 2;
+			bool compatible_version;
+			int tag_len;
 
-			// copy all characters past the close of the comment
-			while (*readp != '\0')
+			// see what sort of comment characters we recognize
+			if (!strncmp(readp, "/*", 2))
 			{
-				*writep = *readp;
-
-				writep++;
-				readp++;
+				// comment styles are mutually exclusive
+				if (!in_multiline_comment_b)
+					in_multiline_comment_a = true;
 			}
-
-			*writep = '\0';
-
-			// recurse with the other characters
-			return strip_comments(line, 0);
-		}
-
-		// can't close it, so drop the whole line
-		ch = line;
-		goto done_with_line;
-	}
-
-
-	/* Goober5000 - this interferes with hyperlinks, heh
-	// search for //
-	ch = strstr(line, "//");
-	if (ch != NULL)
-		goto done_with_line;
-	*/
-
-
-	// special version-specific comment
-	// formatted like e.g. ;;FSO 3.7.0;;
-	ch = stristr(line, ";;FSO ");
-	if (ch != NULL)
-	{
-		int major, minor, build;
-		char *numch, *sep, *linech;
-
-		numch = ch + 6;
-		sep = strchr(numch, '.');
-		if (sep == NULL)
-			goto done_with_line;
-
-		major = get_number_before_separator(numch, '.');
-
-		numch = sep + 1;
-		sep = strchr(numch, '.');
-		if (sep == NULL)
-			goto done_with_line;
-
-		minor = get_number_before_separator(numch, '.');
-
-		numch = sep + 1;
-		sep = strchr(numch, ';');
-		if (sep == NULL)
-			goto done_with_line;
-
-		build = get_number_before_separator(numch, ';');
-
-		if (*(sep + 1) != ';')
-			goto done_with_line;
-
-		linech = sep + 2;
-
-
-		// check whether major, minor, and build line up with this version
-		if (major > FS_VERSION_MAJOR)
-		{
-			goto done_with_line;
-		}
-		else if (major == FS_VERSION_MAJOR)
-		{
-		if (minor > FS_VERSION_MINOR)
+			else if (!strncmp(readp, "!*", 2))
 			{
-			goto done_with_line;
+				// comment styles are mutually exclusive
+				if (!in_multiline_comment_a)
+					in_multiline_comment_b = true;
 			}
-			else if (minor == FS_VERSION_MINOR)
+			else if (!strncmp(readp, "*/", 2))
 			{
-		if (build > FS_VERSION_BUILD)
+				if (in_multiline_comment_a)
 				{
-			goto done_with_line;
+					in_multiline_comment_a = false;
+					readp += 2;
+					continue;
 				}
+			}
+			else if (!strncmp(readp, "*!", 2))
+			{
+				if (in_multiline_comment_b)
+				{
+					in_multiline_comment_b = false;
+					readp += 2;
+					continue;
+				}
+			}
+			// special version-specific comment
+			// formatted like e.g. ;;FSO 3.7.0;;
+			else if (matches_version_specific_tag(readp, compatible_version, tag_len))
+			{
+				// comment passes, so advance pass the tag and keep reading
+				if (compatible_version)
+				{
+					readp += tag_len;
+					continue;
+				}
+				// comment does not pass, so ignore the line
+				else
+				{
+					break;
+				}
+			}
+			// standard comment
+			else if (*readp == ';')
+			{
+				break;
 			}
 		}
 
+		// maybe toggle quoting
+		if (*readp == '\"')
+			in_quote = !in_quote;
 
-		// this version is compatible, so copy the line past the tag
+		// if not inside a comment, copy the characters
+		if (!in_multiline_comment_a && !in_multiline_comment_b)
 		{
-			char *writep = ch;
-			char *readp = linech;
-
-			// copy all characters past the close of the comment
-			while (*readp != '\0')
-			{
+			if (writep != readp)
 				*writep = *readp;
 
-				writep++;
-				readp++;
-			}
-
-			*writep = '\0';
-
-			// recurse with the other characters
-			return strip_comments(ch, 0);
-		}
-	}
-
-
-	// search for ;
-	ch = strchr(line, ';');
-	if (ch != NULL)
-		goto done_with_line;
-
-
-	// start of a multi-line comment?
-	// (You can now use !* *! in addition to /* */ because prior to 3.7.1, a /* would be flagged
-	// even if it appeared after an initial ; such as in a version-specific comment.
-	ch = strstr(line, "/*");
-	if (ch == NULL)
-		ch = strstr(line, "!*");
-	if (ch != NULL)
-	{
-		// treat it as the beginning of a new line and recurse
-		return strip_comments(ch, 1);
-	}
-
-
-	// no comments found... try to find the newline
-	ch = strchr(line, '\n');
-	if (ch != NULL)
-		goto done_with_line;
-
-
-	// just skip to the end of the line
-	ch = line + strlen(line);
-
-
-done_with_line:
-	ch[0] = EOLN;
-	ch[1] = 0;
-
-	return in_multiline_comment;	
-}
-
-/*#if 0
-void strip_all_comments( char *readp, char *writep )
-{
-	int	ch;
-	//char	*writep = readp;
-
-	while ( *readp != EOF_CHAR ) {
-		ch = *readp;
-		if ( ch == COMMENT_CHAR ) {
-			while ( *readp != EOLN )
-				readp++;
-
-			*writep = EOLN;
 			writep++;
-			// get to next character after EOLN
-			readp++;
-		} else if ( (ch == '/') && (readp[1] == '*')) {			// Start of multi-line comment
-			int done;
-			
-			done = 0;
-			while ( !done ) {
-				while ( *readp != '*' )
-					readp++;
-				if ( readp[1] == '/' ) {
-					readp += 2;
-					done = 1;
-				} else {
-					readp++;
-				}
-			}
-		} else {
-			*writep = (char)ch;
-			*writep++;
-			readp++;
 		}
+
+		// read the next character
+		readp++;
 	}
 
-	*writep = (char)EOF_CHAR;
+	// if we moved any characters, or if we haven't reached the end of the string, then mark end-of-line and terminate string
+	if (writep != readp || *readp != '\0')
+	{
+		writep[0] = EOLN;
+		writep[1] = '\0';
+	}
 }
-#endif*/
 
 int parse_get_line(char *lineout, int max_line_len, char *start, int max_size, char *cur)
 {
@@ -2110,7 +2275,9 @@ void process_raw_file_text(char *processed_text, char *raw_text)
 	char	*mp;
 	char	*mp_raw;
 	char outbuf[PARSE_BUF_SIZE], *str;
-	int in_multiline_comment = 0;
+	bool in_quote = false;
+	bool in_multiline_comment_a = false;
+	bool in_multiline_comment_b = false;
 	int raw_text_len = strlen(raw_text);
 
 	if (processed_text == NULL)
@@ -2130,13 +2297,30 @@ void process_raw_file_text(char *processed_text, char *raw_text)
 	while ( (num_chars_read = parse_get_line(outbuf, PARSE_BUF_SIZE, raw_text, raw_text_len, mp_raw)) != 0 ) {
 		mp_raw += num_chars_read;
 
-		in_multiline_comment = strip_comments(outbuf, in_multiline_comment);
+		// stupid hacks to make retail data work with fixed parser, per Mantis #3072
+		if (!strcmp(outbuf, "1402, \"Sie haben IPX-Protokoll als Protokoll ausgew\xE4hlt, aber dieses Protokoll ist auf Ihrer Maschine nicht installiert.\".\"\n")) {
+			outbuf[121] = ' ';
+			outbuf[122] = ' ';
+		} else if (!strcmp(outbuf, "1117, \"\\r\\n\"Aucun web browser trouva. Del\xE0 isn't on emm\xE9nagea ou if \\r\\non est emm\xE9nagea, ca isn't set pour soient la default browser.\\r\\n\\r\\n\"\n")) {
+			char *ch = &outbuf[11];
+			do {
+				*ch = *(ch+1);
+				++ch;
+			} while (*ch);
+		} else if (!strcmp(outbuf, "1337, \"(fr)Loading\"\n")) {
+			outbuf[3] = '6';
+		} else if (!strcmp(outbuf, "3966, \"Es sieht so aus, als habe Staffel Kappa Zugriff auf die GTVA-Zugangscodes f\xFCr das System gehabt. Das ist ein ernstes Sicherheitsleck. Ihre IFF-Kennung erschien als \"verb\xFCndet\", so da\xDF sie sich dem Konvoi ungehindert n\xE4hern konnten. Zum Gl\xFC\x63k flogen Sie und  Alpha 2 Geleitschutz und lie\xDF\x65n den Schwindel auffliegen, bevor Kappa ihren Befehl ausf\xFChren konnte.\"\n")) {
+			outbuf[171] = '\'';
+			outbuf[181] = '\'';
+		}
+
+		strip_comments(outbuf, in_quote, in_multiline_comment_a, in_multiline_comment_b);
 
 		maybe_convert_foreign_characters(outbuf);
 
 		str = outbuf;
 		while (*str) {
-			if (*str == -33) {
+			if (*str == (Lcl_pl ? -33 : -31)) {
 				*mp++ = 's';
 				*mp++ = 's';
 				str++;
@@ -2149,7 +2333,7 @@ void process_raw_file_text(char *processed_text, char *raw_text)
 //		mp += strlen(outbuf);
 	}
 
-	*mp = *mp_raw = (char)EOF_CHAR;
+	*mp = *mp_raw = EOF_CHAR;
 /*
 	while (cfgets(outbuf, PARSE_BUF_SIZE, mf) != NULL) {
 		if (strlen(outbuf) >= PARSE_BUF_SIZE-1)
@@ -2166,7 +2350,7 @@ void process_raw_file_text(char *processed_text, char *raw_text)
 		mp += strlen(outbuf);
 	}
 	
-	*mp = *mp_raw = (char)EOF_CHAR;
+	*mp = *mp_raw = EOF_CHAR;
 */
 
 }
@@ -2802,6 +2986,11 @@ int stuff_loadout_list (int *ilp, int max_ints, int lookup_type)
 		if (variable_found) {
 			Assert (lookup_type != CAMPAIGN_LOADOUT_SHIP_LIST );
 			sexp_variable_index = get_index_sexp_variable_name(str);
+			
+			if(sexp_variable_index<0) {
+				Error(LOCATION, "Invalid SEXP variable name \"%s\" found in stuff_loadout_list.", str);
+			}
+        
 			strcpy_s (str, Sexp_variables[sexp_variable_index].text);
 		}
 
@@ -3378,6 +3567,8 @@ int split_str(const char *src, int max_pixel_w, int *n_chars, const char **p_str
 			last_was_white = 0;
 		}
 
+		Assertion(buf_index < SPLIT_STR_BUFFER_SIZE - 1, "buffer overflow in split_str: screen width causes this text to be longer than %d characters!", SPLIT_STR_BUFFER_SIZE - 1);
+
 		// throw it in our buffer
 		buffer[buf_index] = *src;
 		buf_index++;
@@ -3490,6 +3681,8 @@ int split_str(const char *src, int max_pixel_w, SCP_vector<int> &n_chars, SCP_ve
 			// indicate next time around that this wasn't a whitespace character
 			last_was_white = 0;
 		}
+
+		Assertion(buf_index < SPLIT_STR_BUFFER_SIZE - 1, "buffer overflow in split_str: screen width causes this text to be longer than %d characters!", SPLIT_STR_BUFFER_SIZE - 1);
 
 		// throw it in our buffer
 		buffer[buf_index] = *src;
@@ -3688,8 +3881,8 @@ void vsprintf(SCP_string &dest, const char *format, va_list ap)
 	const char *handled_types = "diouxXcfsn%";
 
 	int buf_src_len;
-	char buf_src[MAX_BUF+1];
-	char buf_dest[MAX_BUF+1];
+	char buf_src[MAX_BUF];
+	char buf_dest[MAX_BUF];
 
 	const char *p;
 	int *pint;
@@ -3713,9 +3906,9 @@ void vsprintf(SCP_string &dest, const char *format, va_list ap)
 		buf_src_len = 1;
 		do {
 			++p;
-			if (!*p || (buf_src_len >= MAX_BUF))
+			if (!*p || (buf_src_len >= MAX_BUF-1))
 			{
-				Warning(LOCATION, "Could not find a sprintf specifier within %d characters for format '%s', pos %d!", MAX_BUF, format, (p - format));
+				Warning(LOCATION, "Could not find a sprintf specifier within %d characters for format '%s', pos %d!", MAX_BUF-1, format, (p - format));
 
 				// unsafe to continue handling this va_list
 				dest += buf_src;
@@ -3744,10 +3937,10 @@ void vsprintf(SCP_string &dest, const char *format, va_list ap)
 			}
 			case 'c':
 			{
-				dest += (char) va_arg(ap, char);
+				dest += (char) va_arg(ap, int);
 				break;
 			}
-			case 'f':
+			case 'f':			
 			{
 				dval = va_arg(ap, double);
 				sprintf(buf_dest, buf_src, dval);
@@ -3798,7 +3991,7 @@ bool end_string_at_first_hash_symbol(char *src)
 	p = get_pointer_to_first_hash_symbol(src);
 	if (p)
 	{
-		while (*(p-1) == ' ')
+		while ((p != src) && (*(p-1) == ' '))
 			p--;
 
 		*p = '\0';
@@ -3826,6 +4019,13 @@ bool end_string_at_first_hash_symbol(SCP_string &src)
 
 // Goober5000
 char *get_pointer_to_first_hash_symbol(char *src)
+{
+	Assert(src);
+	return strchr(src, '#');
+}
+
+// Goober5000
+const char *get_pointer_to_first_hash_symbol(const char *src)
 {
 	Assert(src);
 	return strchr(src, '#');

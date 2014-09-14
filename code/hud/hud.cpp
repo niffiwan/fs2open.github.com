@@ -398,12 +398,18 @@ disabled_views(VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY), cus
 	}
 }
 
+HudGauge::~HudGauge() {};
+
 void HudGauge::initPosition(int x, int y)
 {
-	Assert(x >= 0 && y >= 0);
-
 	position[0] = x;
 	position[1] = y;
+}
+
+void HudGauge::getPosition(int *x, int *y)
+{
+	*x = position[0];
+	*y = position[1];
 }
 
 void HudGauge::initBaseResolution(int w, int h)
@@ -419,10 +425,10 @@ void HudGauge::initSlew(bool slew)
 	reticle_follow = slew;
 }
 
-void HudGauge::initFont(int font)
+void HudGauge::initFont(int input_font_num)
 {
-	if ( font >= 0 && font < Num_fonts) {
-		font_num = font;
+	if ( input_font_num >= 0 && input_font_num < Num_fonts) {
+		font_num = input_font_num;
 	}
 }
 
@@ -580,9 +586,9 @@ void HudGauge::updateActive(bool show)
 	active = show;
 }
 
-void HudGauge::initRenderStatus(bool render)
+void HudGauge::initRenderStatus(bool do_render)
 {
-	off_by_default = !render;
+	off_by_default = !do_render;
 }
 
 bool HudGauge::isOffbyDefault()
@@ -707,7 +713,7 @@ void HudGauge::renderString(int x, int y, const char *str)
 	int nx = 0, ny = 0;
 
 	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 	} else {
 		if ( reticle_follow ) {
 			nx = HUD_nose_x;
@@ -730,7 +736,7 @@ void HudGauge::renderString(int x, int y, int gauge_id, const char *str)
 	int nx = 0, ny = 0;
 
 	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 	} else {
 		if ( reticle_follow ) {
 			nx = HUD_nose_x;
@@ -798,7 +804,7 @@ void HudGauge::renderBitmapColor(int frame, int x, int y)
 	emp_hud_jitter(&x, &y);
 
 	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 	} else {
 		if ( reticle_follow ) {
 			nx = HUD_nose_x;
@@ -828,7 +834,7 @@ void HudGauge::renderBitmap(int x, int y)
 	emp_hud_jitter(&x, &y);
 
 	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 	} else {
 		if ( reticle_follow ) {
 			nx = HUD_nose_x;
@@ -866,7 +872,7 @@ void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int
 	gr_set_bitmap(frame);
 
 	if( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 	} else {
 		if ( reticle_follow ) {
 			nx = HUD_nose_x;
@@ -890,7 +896,7 @@ void HudGauge::renderLine(int x1, int y1, int x2, int y2)
 	int nx = 0, ny = 0;
 
 	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 	} else {
 		if ( reticle_follow ) {
 			nx = HUD_nose_x;
@@ -913,7 +919,7 @@ void HudGauge::renderGradientLine(int x1, int y1, int x2, int y2)
 	int nx = 0, ny = 0;
 
 	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 	} else {
 		if(reticle_follow) {
 			nx = HUD_nose_x;
@@ -936,7 +942,7 @@ void HudGauge::renderRect(int x, int y, int w, int h)
 	int nx = 0, ny = 0;
 
 	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 	} else {
 		if ( reticle_follow ) {
 			nx = HUD_nose_x;
@@ -959,7 +965,7 @@ void HudGauge::renderCircle(int x, int y, int diameter)
 	int nx = 0, ny = 0;
 
 	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 	} else {
 		if ( reticle_follow ) {
 			nx = HUD_nose_x;
@@ -983,7 +989,7 @@ void HudGauge::setClip(int x, int y, int w, int h)
 	int hy = fl2i(HUD_offset_y);
 
 	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 
 		hx = display_offset_x;
 		hy = display_offset_y;
@@ -1005,10 +1011,9 @@ void HudGauge::setClip(int x, int y, int w, int h)
 		gr_resize_screen_pos(&hx, &hy);
 
 		gr_set_screen_scale(base_w, base_h);
-		gr_resize_screen_pos(&x, &y);
-		gr_resize_screen_pos(&w, &h);
+		gr_resize_screen_pos(&x, &y, &w, &h);
 
-		gr_set_clip(hx+x, hy+y, w, h, false);
+		gr_set_clip(hx+x, hy+y, w, h, GR_RESIZE_NONE);
 	}
 
 	gr_reset_screen_scale();
@@ -1020,7 +1025,7 @@ void HudGauge::resetClip()
 	int w, h;
 
 	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, target_w, target_h);
+		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, true);
 		
 		hx = display_offset_x;
 		hy = display_offset_y;
@@ -1042,7 +1047,7 @@ void HudGauge::resetClip()
 		h = gr_screen.max_h;
 
 		// clip the screen based on the actual resolution
-		gr_set_clip(hx, hy, w, h, false);
+		gr_set_clip(hx, hy, w, h, GR_RESIZE_NONE);
 	}
 
 	gr_reset_screen_scale();
@@ -1304,7 +1309,7 @@ void hud_close()
 	num_gauges = default_hud_gauges.size();
 
 	for(j = 0; j < num_gauges; j++) {
-		vm_free(default_hud_gauges[j]);
+		delete default_hud_gauges[j];
 		default_hud_gauges[j] = NULL;
 	}
 	default_hud_gauges.clear();
@@ -1578,7 +1583,7 @@ void hud_update_frame(float frametime)
 	}
 
 	// Make sure that the player isn't targeting a 3rd stage local ssm
-	if (Objects[Player_ai->target_objnum].type == OBJ_WEAPON)
+	if (Player_ai->target_objnum >= 0 && Objects[Player_ai->target_objnum].type == OBJ_WEAPON)
 	{
 		if (Weapons[Objects[Player_ai->target_objnum].instance].lssm_stage==3)
 		{
@@ -1746,7 +1751,11 @@ void hud_maybe_display_supernova()
 	}
 
 	gr_set_color_fast(&Color_bright_red);
-	gr_printf(Supernova_coords[gr_screen.res][0], Supernova_coords[gr_screen.res][1], "Supernova Warning: %.2f s", time_left);
+	if (Lcl_pl) {
+		gr_printf(Supernova_coords[gr_screen.res][0], Supernova_coords[gr_screen.res][1], "Wybuch supernowej: %.2f s", time_left);
+	} else {
+		gr_printf(Supernova_coords[gr_screen.res][0], Supernova_coords[gr_screen.res][1], "Supernova Warning: %.2f s", time_left);
+	}
 }
 
 /**
@@ -2264,7 +2273,7 @@ int hud_anim_load(hud_anim *ha)
  * @param resize		Resize for non-standard resolutions
  * @param mirror		Mirror along y-axis so icon points left instead of right
  */
-int hud_anim_render(hud_anim *ha, float frametime, int draw_alpha, int loop, int hold_last, int reverse, bool resize, bool mirror)
+int hud_anim_render(hud_anim *ha, float frametime, int draw_alpha, int loop, int hold_last, int reverse, int resize_mode, bool mirror)
 {
 	int framenum;
 
@@ -2299,9 +2308,9 @@ int hud_anim_render(hud_anim *ha, float frametime, int draw_alpha, int loop, int
 	if(emp_should_blit_gauge()){
 		gr_set_bitmap(ha->first_frame + framenum);
 		if ( draw_alpha ){
-			gr_aabitmap(ha->sx, ha->sy, resize, mirror);
+			gr_aabitmap(ha->sx, ha->sy, resize_mode, mirror);
 		} else {
-			gr_bitmap(ha->sx, ha->sy, resize);
+			gr_bitmap(ha->sx, ha->sy, resize_mode);
 		}
 	}
 
@@ -2389,11 +2398,8 @@ int HudGaugeTextWarnings::maybeTextFlash()
 
 void HudGaugeTextWarnings::render(float frametime)
 {
-	if ( timestamp_elapsed(Hud_text_flash_timer) || !Hud_text_flash) {
-		return;
-	}
-
-	if(strlen(Hud_text_flash) <= 0) {
+	// note: Hud_text_flash globally allocated, address can't be NULL
+	if ( timestamp_elapsed(Hud_text_flash_timer) || Hud_text_flash[0] == '\0' ) {
 		return;
 	}
 
@@ -3588,14 +3594,13 @@ void HUD_set_offsets(object *viewer_obj, int wiggedy_wack, matrix *eye_orient)
 	if ( (viewer_obj == Player_obj) && wiggedy_wack ){		
 		vec3d tmp;
 		vertex pt;
-		ubyte flags;		
 
 		HUD_offset_x = 0.0f;
 		HUD_offset_y = 0.0f;
 
 		vm_vec_scale_add( &tmp, &Eye_position, &eye_orient->vec.fvec, 100.0f );
 		
-		flags = g3_rotate_vertex(&pt,&tmp);
+		(void) g3_rotate_vertex(&pt,&tmp);
 
 		g3_project_vertex(&pt);
 
@@ -3913,7 +3918,11 @@ void HudGaugeSupernova::render(float frametime)
 	}
 
 	gr_set_color_fast(&Color_bright_red);
-	renderPrintf(position[0], position[1], "Supernova Warning: %.2f s", time_left);
+	if (Lcl_pl) {
+		renderPrintf(position[0], position[1], "Wybuch supernowej: %.2f s", time_left);
+	} else {
+		renderPrintf(position[0], position[1], "Supernova Warning: %.2f s", time_left);
+	}
 }
 
 HudGaugeFlightPath::HudGaugeFlightPath():

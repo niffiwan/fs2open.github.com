@@ -831,6 +831,8 @@ void sexp_tree::right_clicked(int mode)
 							case OP_CUTSCENES_SHOW_SUBTITLE:
 							case OP_ORDER:
 							case OP_TECH_ADD_INTEL:
+							case OP_HUD_GAUGE_SET_ACTIVE:
+							case OP_HUD_ACTIVATE_GAUGE_TYPE:
 								j = Num_op_menus;	// don't allow these operators to be visible
 								break;
 						}
@@ -871,6 +873,8 @@ void sexp_tree::right_clicked(int mode)
 							case OP_CUTSCENES_SHOW_SUBTITLE:
 							case OP_ORDER:
 							case OP_TECH_ADD_INTEL:
+							case OP_HUD_GAUGE_SET_ACTIVE:
+							case OP_HUD_ACTIVATE_GAUGE_TYPE:
 								j = Num_submenus;	// don't allow these operators to be visible
 								break;
 						}
@@ -2199,7 +2203,8 @@ int sexp_tree::add_default_operator(int op, int argnum)
 				(argnum == 1 && Operators[op].value == OP_INT_TO_STRING) ||
 				(argnum == 3 && Operators[op].value == OP_STRING_GET_SUBSTRING) ||
 				(argnum == 4 && Operators[op].value == OP_STRING_SET_SUBSTRING) ||
-				(argnum == 1 && Operators[op].value == OP_COPY_VARIABLE_FROM_INDEX))
+				(argnum == 1 && Operators[op].value == OP_COPY_VARIABLE_FROM_INDEX) ||
+				(argnum == 1 && Operators[op].value == OP_SCRIPT_EVAL_STRING))
 			{
 
 				int sexp_var_index = get_index_sexp_variable_name(item.text);
@@ -2630,6 +2635,7 @@ int sexp_tree::query_default_argument_available(int op, int i)
 		case OPF_FLEXIBLE_ARGUMENT:
 		case OPF_ANYTHING:
 		case OPF_SKYBOX_MODEL_NAME:
+		case OPF_SKYBOX_FLAGS:
 		case OPF_SHIP_OR_NONE:
 		case OPF_SUBSYSTEM_OR_NONE:
 		case OPF_SHIP_WING_POINT_OR_NONE:
@@ -4343,6 +4349,10 @@ sexp_list_item *sexp_tree::get_listing_opf(int opf, int parent_node, int arg_ind
 			list = get_listing_opf_skybox_model();
 			break;
 
+		case OPF_SKYBOX_FLAGS:
+			list = get_listing_opf_skybox_flags();
+			break;
+
 		case OPF_BACKGROUND_BITMAP:
 			list = get_listing_opf_background_bitmap();
 			break;
@@ -5784,6 +5794,17 @@ sexp_list_item *sexp_tree::get_listing_opf_skybox_model()
 
 	sexp_list_item head;
 	head.add_data("default");
+	return head.next;
+}
+
+sexp_list_item *sexp_tree::get_listing_opf_skybox_flags()
+{
+	sexp_list_item head;
+	int i;
+
+	for (i = 0; i < Num_skybox_flags; ++i) {
+		head.add_data(Skybox_flags[i]);
+	}
 	return head.next;
 }
 

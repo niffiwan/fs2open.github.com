@@ -16,7 +16,7 @@
 #include "radar/radarsetup.h"
 #include "ship/ship.h"
 
-struct object;
+class object;
 
 #define TBOX_FLASH_DURATION	1400
 #define TBOX_FLASH_INTERVAL	200
@@ -84,7 +84,6 @@ class HudGaugeTargetBox: public HudGauge // HUD_TARGET_MONITOR
 	// first element is time flashing expires, second element is time of next flash
 	int Next_flash_timers[NUM_TBOX_FLASH_TIMERS];
 
-	int Last_ts;
 	int flash_flags;
 public:
 	HudGaugeTargetBox();

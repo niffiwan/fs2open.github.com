@@ -18,6 +18,7 @@
 
 
 #include "ai/ai.h"
+#include "debugconsole/console.h"
 #include "globalincs/linklist.h"
 #include "object/object.h"
 #include "physics/physics.h"
@@ -780,9 +781,6 @@ void reset_ai_class_names()
 #define AI_CLASS_INCREMENT		10
 void parse_aitbl()
 {
-	// open localization
-	lcl_ext_open();
-
 	read_file_text("ai.tbl", CF_TYPE_TABLES);
 	reset_parse();
 
@@ -814,9 +812,6 @@ void parse_aitbl()
 			reset_ai_class_names();
 		}
 	}
-
-	// close localization
-	lcl_ext_close();
 	
 	atexit(free_ai_stuff);
 }
@@ -836,7 +831,6 @@ void ai_init()
 
 		if ((rval = setjmp(parse_abort)) != 0) {
 			mprintf(("TABLES: Unable to parse '%s'!  Error code = %i.\n", "ai.tbl", rval));
-			lcl_ext_close();
 		} else {			
 			parse_aitbl();			
 		}
@@ -2303,7 +2297,8 @@ void ai_attack_object(object *attacker, object *attacked, ship_subsys *ssp)
 	aip->ok_to_target_timestamp = timestamp(DELAY_TARGET_TIME);	//	No dynamic targeting for 7 seconds.
 
 	// Goober5000
-	if ((temp = find_ignore_new_object_index(aip, aip->target_objnum)) >= 0)
+	temp = find_ignore_new_object_index(aip, aip->target_objnum);
+	if (temp >= 0)
 	{
 		aip->ignore_new_objnums[temp] = UNUSED_OBJNUM;
 	}
@@ -5863,8 +5858,8 @@ void ai_select_secondary_weapon(object *objp, ship_weapon *swp, int priority1 = 
 				int ignore_mask_to_use = ((aip->ai_profile_flags & AIPF_SMART_SECONDARY_WEAPON_SELECTION) && (wi_flags & WIF_BOMBER_PLUS)) ? ignore_mask_without_huge : ignore_mask;
 
 				if (!(wi_flags & ignore_mask_to_use)) {					//	Maybe bombs are illegal.
-					if (swp->secondary_bank_ammo[i] > 0) {
-						swp->current_secondary_bank = i;
+					if (swp->secondary_bank_ammo[weapon_bank_list[i]] > 0) {
+						swp->current_secondary_bank = weapon_bank_list[i];
 						break;
 					}
 				}
@@ -6014,6 +6009,11 @@ int check_ok_to_fire(int objnum, int target_objnum, weapon_info *wip)
 			}
 		}
 	}
+	else
+	{
+		// We have no valid target object, we should not fire at it...
+		return 0;
+	}
 
 	return 1;
 }
@@ -6130,7 +6130,9 @@ void render_all_ship_bay_paths(object *objp)
 	if ( pm->ship_bay == NULL )
 		return;
 
-	for ( i = 0; i < pm->ship_bay->num_paths; i++ ) {
+	memset(&v, 0, sizeof(v));
+    
+    for ( i = 0; i < pm->ship_bay->num_paths; i++ ) {
 		mp = &pm->paths[pm->ship_bay->path_indexes[i]];
 
 		for ( j = 0; j < mp->nverts; j++ ) {
@@ -6172,6 +6174,8 @@ void render_all_subsys_paths(object *objp)
 
 	if ( pm->ship_bay == NULL )
 		return;
+    
+    memset(&v, 0, sizeof(v));
 
 	for ( i = 0; i < pm->n_paths; i++ ) {
 		mp = &pm->paths[i];
@@ -6233,6 +6237,8 @@ void render_path_points(object *objp)
 
 		for (i=0; i<num_points; i++) {
 			vertex	v0;
+            
+            memset(&v0, 0, sizeof(v0));
 
 			g3_rotate_vertex( &v0, &pp->pos );
 
@@ -6288,6 +6294,23 @@ float ai_get_weapon_speed(ship_weapon *swp)
 	}
 
 	return Weapon_info[weapon_num].max_speed;
+}
+
+weapon_info* ai_get_weapon(ship_weapon *swp)
+{
+	int	bank_num, weapon_num;
+
+	bank_num = swp->current_primary_bank;
+	if (bank_num < 0)
+		return NULL;
+
+	weapon_num = swp->primary_bank_weapons[bank_num];
+
+	if (weapon_num == -1) {
+		return NULL;
+	}
+
+	return &Weapon_info[weapon_num];
 }
 
 //	Compute the predicted position of a ship to be fired upon from a turret.
@@ -6353,17 +6376,23 @@ void set_predicted_enemy_pos(vec3d *predicted_enemy_pos, object *pobjp, vec3d *e
 {
 	float	weapon_speed, range_time;
 	ship	*shipp = &Ships[pobjp->instance];
+	weapon_info *wip;
 	vec3d	target_moving_direction;
 
 	Assert( enemy_pos != NULL );
 	Assert( enemy_vel != NULL );
 
+	wip = ai_get_weapon(&shipp->weapons);
 	target_moving_direction = *enemy_vel;
 
-	if (The_mission.ai_profile->flags & AIPF_USE_ADDITIVE_WEAPON_VELOCITY)
-		vm_vec_sub2(&target_moving_direction, &pobjp->phys_info.vel);
+	if (wip != NULL && The_mission.ai_profile->flags & AIPF_USE_ADDITIVE_WEAPON_VELOCITY)
+		vm_vec_scale_sub2(&target_moving_direction, &pobjp->phys_info.vel, wip->vel_inherit_amount);
 
-	weapon_speed = ai_get_weapon_speed(&shipp->weapons);
+	if (wip != NULL)
+		weapon_speed = wip->max_speed;
+	else
+		weapon_speed = 100.0f;
+
 	weapon_speed = MAX(weapon_speed, 1.0f);		// set not less than 1
 
 	range_time = 2.0f;
@@ -7340,7 +7369,8 @@ int ai_set_attack_subsystem(object *objp, int subnum)
 		aip->ignore_objnum = UNUSED_OBJNUM;
 
 	// Goober5000
-	if ((temp = find_ignore_new_object_index(aip, aip->target_objnum)) >= 0)
+	temp = find_ignore_new_object_index(aip, aip->target_objnum);
+	if (temp >= 0)
 	{
 		aip->ignore_new_objnums[temp] = UNUSED_OBJNUM;
 	}
@@ -8791,29 +8821,30 @@ void ai_chase()
 										if (ai_fire_secondary_weapon(Pl_objp)) {
 											//	Only if weapon was fired do we specify time until next fire.  If not fired, done in ai_fire_secondary...
 											float t;
+											int current_bank_adjusted = MAX_SHIP_PRIMARY_BANKS + current_bank;
 											
 											if ((aip->ai_flags & AIF_UNLOAD_SECONDARIES) || (swip->burst_flags & WBF_FAST_FIRING)) {
-												if (swip->burst_shots > swp->burst_counter[current_bank]) {
+												if (swip->burst_shots > swp->burst_counter[current_bank_adjusted]) {
 													t = swip->burst_delay;
-													swp->burst_counter[current_bank]++;
+													swp->burst_counter[current_bank_adjusted]++;
 												} else {
 													t = swip->fire_wait;
 													if ((swip->burst_shots > 0) && (swip->burst_flags & WBF_RANDOM_LENGTH)) {
-														swp->burst_counter[current_bank] = myrand() % swip->burst_shots;
+														swp->burst_counter[current_bank_adjusted] = myrand() % swip->burst_shots;
 													} else {
-														swp->burst_counter[current_bank] = 0;
+														swp->burst_counter[current_bank_adjusted] = 0;
 													}
 												}
 											} else {
-												if (swip->burst_shots > swp->burst_counter[current_bank]) {
+												if (swip->burst_shots > swp->burst_counter[current_bank_adjusted]) {
 													t = set_secondary_fire_delay(aip, temp_shipp, swip, true);
-													swp->burst_counter[current_bank]++;
+													swp->burst_counter[current_bank_adjusted]++;
 												} else {
 													t = set_secondary_fire_delay(aip, temp_shipp, swip, false);
 													if ((swip->burst_shots > 0) && (swip->burst_flags & WBF_RANDOM_LENGTH)) {
-														swp->burst_counter[current_bank] = myrand() % swip->burst_shots;
+														swp->burst_counter[current_bank_adjusted] = myrand() % swip->burst_shots;
 													} else {
-														swp->burst_counter[current_bank] = 0;
+														swp->burst_counter[current_bank_adjusted] = 0;
 													}
 												}
 											}
@@ -10154,8 +10185,10 @@ void ai_do_objects_repairing_stuff( object *repaired_objp, object *repair_objp, 
 
 	if(Game_mode & GM_MULTIPLAYER){
 		p_index = multi_find_player_by_object(repaired_objp);
-		p_team = Net_players[p_index].p_info.team;
-	} else {		
+		if (p_index >= 0) {
+			p_team = Net_players[p_index].p_info.team;
+		}
+	} else {
 		if(repaired_objp == Player_obj){
 			p_index = Player_num;
 		}
@@ -10812,12 +10845,17 @@ void ai_dock()
 		{
 			// call the ai_abort rearm request code
 			ai_abort_rearm_request( Pl_objp );
+			// Goober5000 - add missionlog for support ships, per Mantis #2999
+			mission_log_add_entry(LOG_SHIP_UNDOCKED, shipp->ship_name, goal_shipp->ship_name);
 		}
 		//	Make sure repair has not broken off.
 		else if (dist > 5.0f)	//	Oops, too far away!
 		{
-			if ( goal_aip->ai_flags & AIF_BEING_REPAIRED )
+			if ( goal_aip->ai_flags & AIF_BEING_REPAIRED ) {
 				ai_do_objects_repairing_stuff( goal_objp, Pl_objp, REPAIR_INFO_BROKEN);
+				// Goober5000 - add missionlog for support ships, per Mantis #2999
+				mission_log_add_entry(LOG_SHIP_UNDOCKED, shipp->ship_name, goal_shipp->ship_name);
+			}
 
 			if (dist > Pl_objp->radius*2 + goal_objp->radius*2) {
 				//	Got real far away from goal, so move back a couple modes and try again.
@@ -10831,8 +10869,11 @@ void ai_dock()
 		}
 		else
 		{
-			if ( goal_aip->ai_flags & AIF_AWAITING_REPAIR )
+			if ( goal_aip->ai_flags & AIF_AWAITING_REPAIR ) {
 				ai_do_objects_repairing_stuff( goal_objp, Pl_objp, REPAIR_INFO_BEGIN );
+				// Goober5000 - add missionlog for support ships, per Mantis #2999
+				mission_log_add_entry(LOG_SHIP_DOCKED, shipp->ship_name, goal_shipp->ship_name);
+			}
 		}
 
 		break;
@@ -10949,9 +10990,8 @@ void ai_dock()
 			model_anim_start_type(goal_shipp, TRIGGER_TYPE_DOCKING_STAGE_2, dockee_index, -1);
 
 			// don't add undock log entries for support ships.
-			if ( !(sip->flags & SIF_SUPPORT) ) {
-				mission_log_add_entry(LOG_SHIP_UNDOCKED, shipp->ship_name, goal_shipp->ship_name);
-			}
+			// Goober5000 - deliberately contravening Volition's above comment - add missionlog for support ships, per Mantis #2999
+			mission_log_add_entry(LOG_SHIP_UNDOCKED, shipp->ship_name, goal_shipp->ship_name);
 		}
 		break;
 	}
@@ -11336,16 +11376,14 @@ float get_wing_largest_radius(object *objp, int formation_object_flag)
 
 float Wing_y_scale = 2.0f;
 float Wing_scale = 1.0f;
-DCF(wing_y_scale, "")
+DCF(wing_y_scale, "Adjusts the wing formation scale along the Y axis (Default is 2.0)")
 {
-	dc_get_arg(ARG_FLOAT);
-	Wing_y_scale = Dc_arg_float;
+	dc_stuff_float(&Wing_y_scale);
 }
 
-DCF(wing_scale, "")
+DCF(wing_scale, "Adjusts the wing formation scale. (Default is 1.0f)")
 {
-	dc_get_arg(ARG_FLOAT);
-	Wing_scale = Dc_arg_float;
+	dc_stuff_float(&Wing_scale);
 }
 
 /**
@@ -12200,10 +12238,10 @@ void ai_transfer_shield(object *objp, int quadrant_num)
 	transfer_amount = 0.0f;
 	transfer_delta = (SHIELD_BALANCE_RATE/2) * max_quadrant_strength;
 
-	if (objp->shield_quadrant[quadrant_num] + (MAX_SHIELD_SECTIONS-1)*transfer_delta > max_quadrant_strength)
-		transfer_delta = (max_quadrant_strength - objp->shield_quadrant[quadrant_num])/(MAX_SHIELD_SECTIONS-1);
+	if (objp->shield_quadrant[quadrant_num] + (objp->n_quadrants-1)*transfer_delta > max_quadrant_strength)
+		transfer_delta = (max_quadrant_strength - objp->shield_quadrant[quadrant_num])/(objp->n_quadrants-1);
 
-	for (i=0; i<MAX_SHIELD_SECTIONS; i++)
+	for (i=0; i<objp->n_quadrants; i++)
 		if (i != quadrant_num) {
 			if (objp->shield_quadrant[i] >= transfer_delta) {
 				objp->shield_quadrant[i] -= transfer_delta;
@@ -12228,17 +12266,17 @@ void ai_balance_shield(object *objp)
 		return;
 
 
-	shield_strength_avg = shield_get_strength(objp)/MAX_SHIELD_SECTIONS;
+	shield_strength_avg = shield_get_strength(objp)/objp->n_quadrants;
 
 	delta = SHIELD_BALANCE_RATE * shield_strength_avg;
 
-	for (i=0; i<MAX_SHIELD_SECTIONS; i++) {
+	for (i=0; i<objp->n_quadrants; i++) {
 		if (objp->shield_quadrant[i] < shield_strength_avg) {
 			// only do it the retail way if using smart shields (since that's a bigger thing) - taylor
 			if (Ai_info[Ships[objp->instance].ai_index].ai_profile_flags & AIPF_SMART_SHIELD_MANAGEMENT)
 				shield_add_strength(objp, delta);
 			else
-				objp->shield_quadrant[i] += delta/MAX_SHIELD_SECTIONS;
+				objp->shield_quadrant[i] += delta/objp->n_quadrants;
 
 			if (objp->shield_quadrant[i] > shield_strength_avg)
 				objp->shield_quadrant[i] = shield_strength_avg;
@@ -12248,7 +12286,7 @@ void ai_balance_shield(object *objp)
 			if (Ai_info[Ships[objp->instance].ai_index].ai_profile_flags & AIPF_SMART_SHIELD_MANAGEMENT)
 				shield_add_strength(objp, -delta);
 			else
-				objp->shield_quadrant[i] -= delta/MAX_SHIELD_SECTIONS;
+				objp->shield_quadrant[i] -= delta/objp->n_quadrants;
 
 			if (objp->shield_quadrant[i] < shield_strength_avg)
 				objp->shield_quadrant[i] = shield_strength_avg;
@@ -12613,6 +12651,8 @@ int ai_acquire_emerge_path(object *pl_objp, int parent_objnum, int allowed_path_
 	{
 		int i, num_allowed_paths = 0, allowed_bay_paths[MAX_SHIP_BAY_PATHS];
 
+		memset(allowed_bay_paths, 0, sizeof(allowed_bay_paths));
+        
 		for (i = 0; i < bay->num_paths; i++)
 		{
 			if (allowed_path_mask & (1 << i))
@@ -12836,8 +12876,10 @@ int ai_acquire_depart_path(object *pl_objp, int parent_objnum, int allowed_path_
 
 	if ( parent_objnum < 0 )
 	{
+		Warning(LOCATION, "In ai_acquire_depart_path(), specified a negative object number for the parent ship!  (Departing ship is %s.)  Looking for another ship...", shipp->ship_name);
+
 		// try to locate a capital ship on the same team:
-		int shipnum = ship_get_ship_with_dock_bay(shipp->team);
+		int shipnum = ship_get_ship_for_departure(shipp->team);
 
 		if (shipnum >= 0)
 			parent_objnum = Ships[shipnum].objnum;
@@ -12859,6 +12901,10 @@ int ai_acquire_depart_path(object *pl_objp, int parent_objnum, int allowed_path_
 
 	// take the closest path we can find
 	ship_bay_path = ai_find_closest_depart_path(aip, pm, allowed_path_mask);
+    
+	if ( ship_bay_path < 0 )
+		return -1;
+    
 	path_index = bay->path_indexes[ship_bay_path];
 	aip->submode_parm0 = ship_bay_path;
 	bay->depart_flags |= (1<<ship_bay_path);
@@ -12908,22 +12954,9 @@ void ai_bay_depart()
 
 	// check if parent ship valid; if not, abort depart
 	anchor_shipnum = ship_name_lookup(Parse_names[Ships[Pl_objp->instance].departure_anchor]);
-	if (anchor_shipnum >= 0)
+	if (anchor_shipnum < 0 || !ship_useful_for_departure(anchor_shipnum, Ships[Pl_objp->instance].departure_path_mask))
 	{
-		// make sure not dying or departing
-		if ( Ships[anchor_shipnum].flags & (SF_DYING | SF_DEPARTING))
-		{
-			anchor_shipnum = -1;
-		}
-		// make sure fighterbays not destroyed
-		else if ( ship_fighterbays_all_destroyed(&Ships[anchor_shipnum]) )
-		{
-			anchor_shipnum = -1;
-		}
-	}
-
-	if (anchor_shipnum < 0)
-	{
+		mprintf(("Aborting bay departure!\n"));
 		aip->mode = AIM_NONE;
 		
 		Ships[Pl_objp->instance].flags &= ~SF_DEPART_DOCKBAY;
@@ -13147,9 +13180,6 @@ int maybe_request_support(object *objp)
 	aip = &Ai_info[shipp->ai_index];
 	sip = &Ship_info[shipp->ship_info_index];
 
-	if (!timestamp_elapsed(aip->next_rearm_request_timestamp))
-		return 0;
-
 	//	Only fighters and bombers request support.
 	if (!(sip->flags & (SIF_FIGHTER | SIF_BOMBER)))
 		return 0;
@@ -13158,7 +13188,11 @@ int maybe_request_support(object *objp)
 	if (aip->ai_flags & (AIF_AWAITING_REPAIR | AIF_BEING_REPAIRED))
 		return 0;
 
-	if (!is_support_allowed(objp))
+	if (!timestamp_elapsed(aip->next_rearm_request_timestamp))
+		return 0;
+
+	// just do a simple check first, and the more expensive check later
+	if (!is_support_allowed(objp, true))
 		return 0;
 
 	// Goober5000 - a ship that is currently docked shouldn't request repair.
@@ -13220,22 +13254,30 @@ int maybe_request_support(object *objp)
 		return 0;
 	}
 
+	bool try_to_rearm = false;
+
 	//	Compute danger threshold.
 	//	Balance this with desire and maybe request support.
 	if (ai_good_time_to_rearm( objp )) {
-		ai_issue_rearm_request(objp);
-		return 1;
+		try_to_rearm = true;
 	} else if (num_allies_rearming(objp) < 2) {
 		if (desire >= 8) {	//	guarantees disabled will cause repair request
-			ai_issue_rearm_request(objp);
+			try_to_rearm = true;
 		} else if (desire >= 3) {		//	>= 3 means having a single subsystem fully blown will cause repair.
 			int	count;
 			int objnum = find_nearby_threat(OBJ_INDEX(objp), iff_get_attacker_mask(obj_team(objp)), 2000.0f, &count);
 
 			if ((objnum == -1) || (count < 2) || (vm_vec_dist_quick(&objp->pos, &Objects[objnum].pos) > 3000.0f*count/desire)) {
-				ai_issue_rearm_request(objp);
-				return 1;
+				try_to_rearm = true;
 			}
+		}
+	}
+
+	if (try_to_rearm) {
+		// Now do the more thorough check
+		if (is_support_allowed(objp)) {
+			ai_issue_rearm_request(objp);
+			return 1;
 		}
 	}
 
@@ -13278,8 +13320,13 @@ void ai_maybe_depart(object *objp)
 		if ( timestamp_elapsed(aip->warp_out_timestamp) ) {
 			ai_process_mission_orders( OBJ_INDEX(objp), aip );
 			if ( (aip->support_ship_objnum == -1) && (get_hull_pct(objp) < 0.25f) ) {
-				if (!(shipp->flags & SF_DEPARTING))
-					mission_do_departure(objp);
+				if (!(shipp->flags & SF_DEPARTING)) {
+					if (!mission_do_departure(objp)) {
+						// if departure failed, try again at a later point
+						// (timestamp taken from ai_do_objects_repairing_stuff)
+						aip->warp_out_timestamp = timestamp((int) ((30 + 10*frand()) * 1000));
+					}
+				}
 			}
 		}
 	}
@@ -13980,8 +14027,12 @@ void ai_frame(int objnum)
 				if (target_objnum != -1) {
 					if (aip->target_objnum != target_objnum)
 						aip->aspect_locked_time = 0.0f;
-					set_target_objnum(aip, target_objnum);
-					En_objp = &Objects[target_objnum];
+					target_objnum = set_target_objnum(aip, target_objnum);
+
+					if (target_objnum >= 0)
+					{
+						En_objp = &Objects[target_objnum];
+					}
 				}
 			}
 		}
@@ -14483,20 +14534,6 @@ void init_aip_from_class_and_profile(ai_info *aip, ai_class *aicp, ai_profile_t 
 	aip->ai_profile_flags2 = combine_flags(profile->flags2, aicp->ai_profile_flags2, aicp->ai_profile_flags2_set);
 }
 
-void ai_set_default_behavior(object *obj, int classnum)
-{
-	ai_info	*aip;
-
-	Assert(obj != NULL);
-	Assert(obj->instance != -1);
-	Assert(Ships[obj->instance].ai_index != -1);
-
-	aip = &Ai_info[Ships[obj->instance].ai_index];
-
-	aip->behavior = AIM_NONE;
-
-}
-
 void ai_do_default_behavior(object *obj)
 {
 	Assert(obj != NULL);
@@ -14758,14 +14795,17 @@ int firing_aspect_seeking_bomb(object *objp)
 
 	bank_index = swp->current_secondary_bank;
 
-	if (bank_index != -1)
-		if (swp->secondary_bank_ammo[bank_index] > 0) {
-			if (Weapon_info[swp->secondary_bank_weapons[bank_index]].wi_flags & WIF_BOMB) {
-				if (Weapon_info[swp->secondary_bank_weapons[bank_index]].wi_flags & WIF_HOMING_ASPECT) {
-					return 1;
+	if (bank_index != -1) {
+		if (swp->secondary_bank_weapons[bank_index] > 0) {
+			if (swp->secondary_bank_ammo[bank_index] > 0) {
+				if (Weapon_info[swp->secondary_bank_weapons[bank_index]].wi_flags & WIF_BOMB) {
+					if (Weapon_info[swp->secondary_bank_weapons[bank_index]].wi_flags & WIF_HOMING_ASPECT) {
+						return 1;
+					}
 				}
 			}
 		}
+	}
 
 	return 0;
 }
@@ -15378,42 +15418,46 @@ void ai_add_rearm_goal( object *requester_objp, object *support_objp )
 //	Success means you found someone to rearm you and you weren't previously rearming.
 int ai_issue_rearm_request(object *requester_objp)
 {
-	object	*objp;
+	object	*objp = NULL;
 	ship		*requester_shipp;
 	ai_info	*requester_aip;
 
 	Assert(requester_objp->type == OBJ_SHIP);
 	Assert((requester_objp->instance >= 0) && (requester_objp->instance < MAX_SHIPS));
 	requester_shipp = &Ships[requester_objp->instance];
+
 	Assert((requester_shipp->ai_index >= 0) && (requester_shipp->ai_index < MAX_AI_INFO));
 	requester_aip = &Ai_info[requester_shipp->ai_index];
 	
-	//	Make sure not already awaiting repair.
-	if (requester_aip->ai_flags & AIF_AWAITING_REPAIR) {
-		nprintf(("AI", "Ship %s already awaiting rearm by ship %s.\n", requester_shipp->ship_name, &Ships[Objects[requester_aip->support_ship_objnum].instance].ship_name));	
-		return -1;
-	}
-
-	if ( !is_support_allowed(requester_objp) )
-		return -1;
+	// these should have already been caught by the time we get here!
+	Assert(!(requester_aip->ai_flags & AIF_AWAITING_REPAIR));
+	Assert(is_support_allowed(requester_objp));
 
 	requester_aip->next_rearm_request_timestamp = timestamp(NEXT_REARM_TIMESTAMP);	//	Might request again after this much time.
 
 	// call ship_find_repair_ship to get a support ship.  If none is found, then we will warp one in.  This
 	// function will return the next available ship which can repair requester
-	objp = ship_find_repair_ship( requester_objp );
-	ai_do_objects_repairing_stuff( requester_objp, objp, REPAIR_INFO_QUEUE );
-	if ( objp ) {
-		return OBJ_INDEX(objp);
-	} else {
-		// call to warp in repair ship!!!!  for now, warp in any number of ships needed.  Should cap it to
-		// some reasonable max (or let support ships warp out).  We should assume here that ship_find_repair_ship()
-		// would have returned a valid object if there are too many support ships already in the mission
-		mission_bring_in_support_ship( requester_objp );
+	int result = ship_find_repair_ship( requester_objp, &objp );
 
+	// we are able to call in a ship, or a ship is warping in
+	// (Arriving_support_ship may be non-NULL in either of these cases, but mission_bring_in_support_ship has a check for that)
+	if (result == 0 || result == 2) {
+		ai_do_objects_repairing_stuff( requester_objp, NULL, REPAIR_INFO_QUEUE );
+		mission_bring_in_support_ship( requester_objp );
 		return -1;
 	}
-
+	// we are able to service a request
+	else if (result == 1 || result == 3) {
+		Assert(objp != NULL);
+		ai_do_objects_repairing_stuff( requester_objp, objp, REPAIR_INFO_QUEUE );
+		return OBJ_INDEX(objp);
+	}
+	// we aren't able to do anything!
+	else {
+		Assert(result == 4);
+		Assertion(false, "This case should have already been caught by the is_support_allowed precheck!");
+		return -1;
+	}
 }
 
 /**

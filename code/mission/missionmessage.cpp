@@ -34,6 +34,7 @@
 #include "network/multimsgs.h"
 #include "network/multiutil.h"
 #include "mod_table/mod_table.h"
+#include "parse/scripting.h"
 
 SCP_vector<SCP_string> Builtin_moods;
 int Current_mission_mood;
@@ -214,8 +215,9 @@ int Head_coords[GR_NUM_RESOLUTIONS][2] = {
 	}
 };
 
-// forward declaration
-void message_maybe_distort_text(char *text);
+// forward declarations
+void message_maybe_distort_text(char *text, int shipnum);
+int comm_between_player_and_ship(int other_shipnum);
 
 // following functions to parse messages.tbl -- code pretty much ripped from weapon/ship table parsing code
 
@@ -320,7 +322,7 @@ int add_avi( char *avi_name )
 	return ((int)Message_avis.size() - 1);
 }
 
-int add_wave( char *wave_name )
+int add_wave( const char *wave_name )
 {
 	int i;
 	message_extra extra; 
@@ -531,9 +533,6 @@ void parse_msgtbl()
 {
 	int i, j;
 
-	// open localization
-	lcl_ext_open();
-
 	//speed things up a little by setting the capacities for the message vectors to roughly the FS2 amounts
 	Messages.reserve(500);
 	Message_waves.reserve(300);
@@ -644,13 +643,8 @@ void parse_msgtbl()
 
 		required_string("#End");
 	}
-
-	
-	// close localization
-	lcl_ext_close();
 }
 
-extern bool Sexp_Messages_Scrambled;
 // this is called at the start of each level
 void messages_init()
 {
@@ -727,9 +721,6 @@ void messages_init()
 	Messages.erase((Messages.begin()+Num_builtin_messages), Messages.end()); 
 	Message_avis.erase((Message_avis.begin()+Num_builtin_avis), Message_avis.end()); 
 	Message_waves.erase((Message_waves.begin()+Num_builtin_waves), Message_waves.end());
-
-	// stop scrambling messages
-	Sexp_Messages_Scrambled = false;
 }
 
 // free a loaded avi
@@ -990,10 +981,7 @@ void message_remove_from_queue(message_q *q)
 //
 void message_load_wave(int index, const char *filename)
 {
-	if (index == -1) {
-		Int3();
-		return;
-	}
+	Assertion(index >= 0, "Invalid index passed!");
 
 	if ( Message_waves[index].num >= 0) {
 		return;
@@ -1283,6 +1271,7 @@ void message_queue_process()
 	message_q *q;
 	int i;
 	MissionMessage *m;
+	bool builtinMessage = false; // gcc doesn't like var decls crossed by goto's
 
 	// Don't play messages until first frame has been rendered
 	if ( Framecount < 2 ) {
@@ -1554,7 +1543,7 @@ void message_queue_process()
 	message_play_anim(q);
 	
 	// distort the message if comms system is damaged
-	message_maybe_distort_text(buf);
+	message_maybe_distort_text(buf, Message_shipnum);
 
 #ifndef NDEBUG
 	// debug only -- if the message is a builtin message, put in parens whether or not the voice played
@@ -1585,6 +1574,29 @@ void message_queue_process()
 	if ( Message_shipnum >= 0 ) {
 		hud_target_last_transmit_add(Message_shipnum);
 	}
+
+	Script_system.SetHookVar("Name", 's', m->name);
+	Script_system.SetHookVar("Message", 's', buf);
+	Script_system.SetHookVar("SenderString", 's', who_from);
+
+	builtinMessage = q->builtin_type != -1;
+	Script_system.SetHookVar("Builtin", 'b', &builtinMessage);
+	if (Message_shipnum >= 0)
+	{
+		object* sender = &Objects[Ships[Message_shipnum].objnum];
+
+		Script_system.SetHookObject("Sender", sender);
+
+		Script_system.RunCondition(CHA_MSGRECEIVED, 0, NULL, sender);
+
+		Script_system.RemHookVar("Sender");
+	}
+	else
+	{
+		Script_system.RunCondition(CHA_MSGRECEIVED);
+	}
+
+	Script_system.RemHookVars(4, "Name", "Message", "SenderString", "Builtin");
 
 all_done:
 	Num_messages_playing++;
@@ -1861,9 +1873,6 @@ void message_send_unique_to_player( char *id, void *data, int m_source, int prio
 				shipp = (ship *)data;
 				who_from = shipp->ship_name;
 				source = HUD_team_get_source(shipp->team);
-
-				// be sure that this ship can actually send a message!!! (i.e. not-not-flyable -- get it!)
-				Assert( !(Ship_info[shipp->ship_info_index].flags & SIF_NOT_FLYABLE) );		// get allender or alan
 			} else if ( m_source == MESSAGE_SOURCE_NONE ) {
 				who_from = "<none>";
 			}
@@ -2144,7 +2153,7 @@ void message_maybe_distort()
 
 		was_muted = 0;
 
-		if ( (hud_communications_state(Player_ship) != COMM_OK) ) {
+		if ( comm_between_player_and_ship(Playing_messages[i].shipnum) != COMM_OK) {
 			was_muted = Message_wave_muted;
 			if ( timestamp_elapsed(Next_mute_time) ) {
 				Next_mute_time = fl2i(Distort_patterns[Distort_num][Distort_next++] * Message_wave_duration);
@@ -2175,11 +2184,11 @@ void message_maybe_distort()
 //					 Blank out portions of the sound based on Distort_num, this this is that same
 //					 data that will be used to blank out portions of the audio playback
 //
-void message_maybe_distort_text(char *text)
+void message_maybe_distort_text(char *text, int shipnum)
 {
 	int i, j, len, run, curr_offset, voice_duration, next_distort;
 
-	if ( (hud_communications_state(Player_ship) == COMM_OK) ) { 
+	if ( comm_between_player_and_ship(shipnum) == COMM_OK ) { 
 		return;
 	}
 
@@ -2302,4 +2311,36 @@ bool change_message(char *name, char *message, int persona_index, int multi_team
 
 	// not found.. fall through
 	return add_message(name, message, persona_index, multi_team);
+}
+
+/**
+ * Ideally, this would return the minimum of the comm state between the player and the other ship.  In practice, retail has no checks whatsoever on a ship's ability
+ * to send messages unless that ship is the player, so such a change would require an AI profiles option and we must default to the player's state.  However, we
+ * have a bit of wiggle room with COMM_SCRAMBLED, because EMP effects are either transient or set by the newly enhanced scramble-messages SEXP.  Thus any comm
+ * dropout does not cause an unanticipated deviation in the mission design.
+ */
+int comm_between_player_and_ship(int other_shipnum)
+{
+	int player_comm_state = hud_communications_state(Player_ship);
+
+	if (other_shipnum < 0)
+		return player_comm_state;
+
+	int other_comm_state = hud_communications_state(&Ships[other_shipnum]);
+
+	/* here is where you would check the flag
+	if (hypothetical_ai_profiles_flag)
+	{
+		return MIN(player_comm_state, other_comm_state);
+	}
+	else
+	*/
+	{
+		if (player_comm_state == COMM_OK && other_comm_state == COMM_OK)
+			return COMM_OK;
+		else if (player_comm_state == COMM_SCRAMBLED || other_comm_state == COMM_SCRAMBLED)
+			return COMM_SCRAMBLED;
+		else
+			return player_comm_state;
+	}
 }

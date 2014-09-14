@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <stdarg.h>
 
+#include "cmdline/cmdline.h"
 #include "globalincs/pstypes.h"
 #include "io/key.h"
 #include "io/mouse.h"
@@ -67,10 +68,6 @@ const char *detect_home(void)
 // for the app name, which is where registry keys are stored.
 void os_init(const char * wclass, const char * title, const char *app_name, const char *version_string )
 {
-#ifndef NDEBUG
-	outwnd_init(1);
-#endif	
-
 	// create default ini entries for the user
 	if (os_config_read_string(NULL, NOX("VideocardFs2open"), NULL) == NULL)
 		os_config_write_string(NULL, NOX("VideocardFs2open"), NOX("OGL -(640x480)x16 bit"));
@@ -165,10 +162,13 @@ DWORD unix_process(DWORD lparam)
 			case SDL_ACTIVEEVENT:
 				if( (event.active.state & SDL_APPACTIVE) || (event.active.state & SDL_APPINPUTFOCUS) ) {
 					if (fAppActive != event.active.gain) {
-						if (fAppActive)
-							game_pause();
-						else
-							game_unpause();
+						if(!Cmdline_no_unfocus_pause)
+						{
+							if (fAppActive)
+								game_pause();
+							else
+								game_unpause();
+						}
 					}
 					fAppActive = event.active.gain;
 					gr_activate(fAppActive);

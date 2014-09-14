@@ -15,10 +15,11 @@
 #include "globalincs/pstypes.h"
 #include "graphics/grbatch.h"
 
-struct object;
+class object;
 class ship;
 class ship_info;
-struct ship_subsys;
+class game_snd;
+class ship_subsys;
 struct shockwave_create_info;
 struct vec3d;
 struct matrix;
@@ -198,7 +199,6 @@ private:
 	int total_time_start;
 	int total_time_end;
 	//Stage data
-	int stage;
 	int stage_time_start;
 	int	stage_time_end;			// pops when ship is completely warped out or warped in.  Used for both warp in and out.
 
@@ -260,9 +260,9 @@ private:
 	//Sound
 	float snd_range_factor;
 	int snd_start;
-	struct game_snd *snd_start_gs;
+	game_snd *snd_start_gs;
 	int snd_end;
-	struct game_snd *snd_end_gs;
+	game_snd *snd_end_gs;
 
 public:
 	WE_BSG(object *n_objp, int n_direction);
@@ -304,7 +304,7 @@ private:
 	//sound
 	int snd;
 	float snd_range_factor;
-	struct game_snd *snd_gs;
+	game_snd *snd_gs;
 
 	//sweeper polygon and clip effect
 	vec3d	pos;

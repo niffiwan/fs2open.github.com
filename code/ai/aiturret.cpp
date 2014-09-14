@@ -22,6 +22,7 @@
 #include "iff_defs/iff_defs.h"
 #include "weapon/muzzleflash.h"
 #include "parse/scripting.h"
+#include "debugconsole/console.h"
 
 #include <limits.h>
 
@@ -38,8 +39,7 @@
 float Lethality_range_const = 2.0f;
 DCF(lethality_range, "N for modifying range: 1 / (1+N) at 100")
 {
-	dc_get_arg(ARG_FLOAT);
-	Lethality_range_const = Dc_arg_float;
+	dc_stuff_float(&Lethality_range_const);
 }
 
 float Player_lethality_bump[NUM_SKILL_LEVELS] = {
@@ -479,7 +479,7 @@ int valid_turret_enemy(object *objp, object *turret_parent)
 		}
 
 		// don't shoot at ships without collision check
-		if (sip->flags & SIF_NO_COLLIDE) {
+		if (!(objp->flags & OF_COLLIDES)) {
 			return 0;
 		}
 
@@ -1319,7 +1319,7 @@ void turret_ai_update_aim(ai_info *aip, object *En_Objp, ship_subsys *ss)
  */
 int aifft_rotate_turret(ship *shipp, int parent_objnum, ship_subsys *ss, object *objp, object *lep, vec3d *predicted_enemy_pos, vec3d *gvec)
 {
-	int ret_val = 0;
+	int ret_val __attribute__((__unused__)) = 0; // to be used in future, see comment @ end of function
 
 	if (ss->turret_enemy_objnum != -1) {
 		model_subsystem *tp = ss->system_info;
@@ -1365,7 +1365,7 @@ int aifft_rotate_turret(ship *shipp, int parent_objnum, ship_subsys *ss, object 
 
 		//Try to guess where the enemy will be, and store that spot in predicted_enemy_pos
 		if (The_mission.ai_profile->flags & AIPF_USE_ADDITIVE_WEAPON_VELOCITY) {
-			vm_vec_sub2(&target_moving_direction, &objp->phys_info.vel);
+			vm_vec_scale_sub2(&target_moving_direction, &objp->phys_info.vel, wip->vel_inherit_amount);
 		}
 
 		set_predicted_enemy_pos_turret(predicted_enemy_pos, &gun_pos, objp, &enemy_point, &target_moving_direction, wip->max_speed, ss->turret_time_enemy_in_range * (weapon_system_strength + 1.0f)/2.0f);
@@ -1466,10 +1466,16 @@ ship_subsys *aifft_list[MAX_AIFFT_TURRETS];
 float aifft_rank[MAX_AIFFT_TURRETS];
 int aifft_list_size = 0;
 int aifft_max_checks = 5;
-DCF(mf, "")
+DCF(mf, "Adjusts the maximum number of tries an AI may do when trying to pick a subsystem to attack (Default is 5)")
 {
-	dc_get_arg(ARG_INT);
-	aifft_max_checks = Dc_arg_int;
+	dc_stuff_int(&aifft_max_checks);
+
+	if (aifft_max_checks <= 0) {
+		dc_printf("Value must be a non-negative, non-zero integer\n");
+		dc_printf("aifft_max_checks set to default value of 5\n");
+
+		aifft_max_checks = 5;
+	}
 }
 
 
@@ -1829,13 +1835,12 @@ bool turret_fire_weapon(int weapon_num, ship_subsys *turret, int parent_objnum, 
 				weapon_objnum = weapon_create( turret_pos, &turret_orient, turret_weapon_class, parent_objnum, -1, 1, 0,0.0f, turret);
 				weapon_set_tracking_info(weapon_objnum, parent_objnum, turret->turret_enemy_objnum, 1, turret->targeted_subsys);		
 			
-
-				objp=&Objects[weapon_objnum];
-				wp=&Weapons[objp->instance];
-				wip=&Weapon_info[wp->weapon_info_index];
-
 				//nprintf(("AI", "Turret_time_enemy_in_range = %7.3f\n", ss->turret_time_enemy_in_range));		
 				if (weapon_objnum != -1) {
+					objp=&Objects[weapon_objnum];
+					wp=&Weapons[objp->instance];
+					wip=&Weapon_info[wp->weapon_info_index];
+
 					parent_ship->last_fired_turret = turret;
 					turret->last_fired_weapon_info_index = wp->weapon_info_index;
 

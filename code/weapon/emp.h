@@ -63,7 +63,7 @@ struct vec3d;
 #define EG_SQ9						34				// squadmsg 9
 #define EG_SQ10					35				// squadmsg 10
 
-struct object;
+class object;
 class ship;
 struct weapon_info;
 
@@ -102,7 +102,7 @@ void emp_process_local();
 int emp_should_blit_gauge();
 
 // emp hud string
-void emp_hud_string(int x, int y, int gauge_id, const char *str, bool resize);
+void emp_hud_string(int x, int y, int gauge_id, const char *str, int resize_mode);
 
 // emp hud printf
 void emp_hud_printf(int x, int y, int gauge_id, const char *format, ...);

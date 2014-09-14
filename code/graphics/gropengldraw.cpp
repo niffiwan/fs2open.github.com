@@ -54,12 +54,12 @@ int Scene_texture_height;
 GLfloat Scene_texture_u_scale = 1.0f;
 GLfloat Scene_texture_v_scale = 1.0f;
 
-void gr_opengl_pixel(int x, int y, bool resize)
+void gr_opengl_pixel(int x, int y, int resize_mode)
 {
-	gr_line(x, y, x, y, resize);
+	gr_line(x, y, x, y, resize_mode);
 }
 
-void opengl_aabitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, bool resize, bool mirror)
+void opengl_aabitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, int resize_mode, bool mirror)
 {
 	if ( (w < 1) || (h < 1) ) {
 		return;
@@ -86,7 +86,7 @@ void opengl_aabitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, boo
 	float x1, x2, y1, y2;
 	int bw, bh, do_resize;
 
-	if ( resize && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
 		do_resize = 1;
 	} else {
 		do_resize = 0;
@@ -106,8 +106,8 @@ void opengl_aabitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, boo
 	y2 = y1 + i2fl(h);
 
 	if (do_resize) {
-		gr_resize_screen_posf(&x1, &y1);
-		gr_resize_screen_posf(&x2, &y2);
+		gr_resize_screen_posf(&x1, &y1, NULL, NULL, resize_mode);
+		gr_resize_screen_posf(&x2, &y2, NULL, NULL, resize_mode);
 	}
 
 	GL_state.Color(gr_screen.current_color.red, gr_screen.current_color.green, gr_screen.current_color.blue, gr_screen.current_color.alpha);
@@ -127,7 +127,7 @@ void opengl_aabitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, boo
 	GL_CHECK_FOR_ERRORS("end of aabitmap_ex_internal()");
 }
 
-void gr_opengl_aabitmap_ex(int x, int y, int w, int h, int sx, int sy, bool resize, bool mirror)
+void gr_opengl_aabitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode, bool mirror)
 {
 	int reclip;
 #ifndef NDEBUG
@@ -143,7 +143,7 @@ void gr_opengl_aabitmap_ex(int x, int y, int w, int h, int sx, int sy, bool resi
 
 	bm_get_info(gr_screen.current_bitmap, &bw, &bh);
 
-	if ( resize && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
 		do_resize = 1;
 	} else {
 		do_resize = 0;
@@ -242,16 +242,16 @@ void gr_opengl_aabitmap_ex(int x, int y, int w, int h, int sx, int sy, bool resi
 #endif
 
 	// We now have dx1,dy1 and dx2,dy2 and sx, sy all set validly within clip regions.
-	opengl_aabitmap_ex_internal(dx1, dy1, (dx2 - dx1 + 1), (dy2 - dy1 + 1), sx, sy, resize, mirror);
+	opengl_aabitmap_ex_internal(dx1, dy1, (dx2 - dx1 + 1), (dy2 - dy1 + 1), sx, sy, resize_mode, mirror);
 }
 
-void gr_opengl_aabitmap(int x, int y, bool resize, bool mirror)
+void gr_opengl_aabitmap(int x, int y, int resize_mode, bool mirror)
 {
 	int w, h, do_resize;
 
 	bm_get_info(gr_screen.current_bitmap, &w, &h);
 
-	if ( resize && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
 		do_resize = 1;
 	} else {
 		do_resize = 0;
@@ -303,15 +303,16 @@ void gr_opengl_aabitmap(int x, int y, bool resize, bool mirror)
 	}
 
 	// Draw bitmap bm[sx,sy] into (dx1,dy1)-(dx2,dy2)
-	opengl_aabitmap_ex_internal(dx1, dy1, (dx2 - dx1 + 1), (dy2 - dy1 + 1), sx, sy, resize, mirror);
+	opengl_aabitmap_ex_internal(dx1, dy1, (dx2 - dx1 + 1), (dy2 - dy1 + 1), sx, sy, resize_mode, mirror);
 }
 
 struct v4 { GLfloat x,y,u,v; };
 
-void gr_opengl_string(int sx, int sy, const char *s, bool resize)
+void gr_opengl_string(int sx, int sy, const char *s, int resize_mode)
 {
 	int width, spacing, letter;
-	int x, y, do_resize;
+	int x, y;
+	bool do_resize;
 	float bw, bh;
 	float u0, u1, v0, v1;
 	int x1, x2, y1, y2;
@@ -352,10 +353,10 @@ void gr_opengl_string(int sx, int sy, const char *s, bool resize)
 	}
 
 //	if ( (gr_screen.custom_size && resize) || (gr_screen.rendering_to_texture != -1) ) {
-	if ( resize && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
-		do_resize = 1;
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+		do_resize = true;
 	} else {
-		do_resize = 0;
+		do_resize = false;
 	}
 
 	int clip_left = ((do_resize) ? gr_screen.clip_left_unscaled : gr_screen.clip_left);
@@ -368,7 +369,7 @@ void gr_opengl_string(int sx, int sy, const char *s, bool resize)
 
 	if (sx == 0x8000) {
 		// centered
-		x = get_centered_x(s);
+		x = get_centered_x(s, !do_resize);
 	} else {
 		x = sx;
 	}
@@ -387,7 +388,7 @@ void gr_opengl_string(int sx, int sy, const char *s, bool resize)
 
 			if (sx == 0x8000) {
 				// centered
-				x = get_centered_x(s);
+				x = get_centered_x(s, !do_resize);
 			} else {
 				x = sx;
 			}
@@ -462,8 +463,8 @@ void gr_opengl_string(int sx, int sy, const char *s, bool resize)
 		y2 = y1 + hc;
 
 		if (do_resize) {
-			gr_resize_screen_pos( &x1, &y1 );
-			gr_resize_screen_pos( &x2, &y2 );
+			gr_resize_screen_pos( &x1, &y1, NULL, NULL, resize_mode );
+			gr_resize_screen_pos( &x2, &y2, NULL, NULL, resize_mode );
 		}
 
 		u0 = u_scale * (i2fl(u+xd) / bw);
@@ -519,13 +520,13 @@ void gr_opengl_string(int sx, int sy, const char *s, bool resize)
 	GL_CHECK_FOR_ERRORS("end of string()");
 }
 
-void gr_opengl_line(int x1,int y1,int x2,int y2, bool resize)
+void gr_opengl_line(int x1,int y1,int x2,int y2, int resize_mode)
 {
-	int do_resize, clipped = 0, swapped = 0;
+	int do_resize;
 	float sx1, sy1;
 	float sx2, sy2;
 
-	if ( resize && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
 		do_resize = 1;
 	} else {
 		do_resize = 0;
@@ -539,7 +540,7 @@ void gr_opengl_line(int x1,int y1,int x2,int y2, bool resize)
 	int offset_y = ((do_resize) ? gr_screen.offset_y_unscaled : gr_screen.offset_y);
 
 
-	INT_CLIPLINE(x1, y1, x2, y2, clip_left, clip_top, clip_right, clip_bottom, return, clipped = 1, swapped = 1);
+	INT_CLIPLINE(x1, y1, x2, y2, clip_left, clip_top, clip_right, clip_bottom, return, ;, ;);
 
 	sx1 = i2fl(x1 + offset_x);
 	sy1 = i2fl(y1 + offset_y);
@@ -548,8 +549,8 @@ void gr_opengl_line(int x1,int y1,int x2,int y2, bool resize)
 
 
 	if (do_resize) {
-		gr_resize_screen_posf(&sx1, &sy1);
-		gr_resize_screen_posf(&sx2, &sy2);
+		gr_resize_screen_posf(&sx1, &sy1, NULL, NULL, resize_mode);
+		gr_resize_screen_posf(&sx2, &sy2, NULL, NULL, resize_mode);
 	}
 
 	GL_state.SetTextureSource(TEXTURE_SOURCE_NONE);
@@ -656,7 +657,6 @@ void gr_opengl_aaline(vertex *v1, vertex *v2)
 //	glHint( GL_LINE_SMOOTH_HINT, GL_FASTEST );
 //	glLineWidth( 1.0 );
 
-	int clipped = 0, swapped = 0;
 	float x1 = v1->screen.xyw.x;
 	float y1 = v1->screen.xyw.y;
 	float x2 = v2->screen.xyw.x;
@@ -665,7 +665,7 @@ void gr_opengl_aaline(vertex *v1, vertex *v2)
 	float sx2, sy2;
 
 
-	FL_CLIPLINE(x1, y1, x2, y2, (float)gr_screen.clip_left, (float)gr_screen.clip_top, (float)gr_screen.clip_right, (float)gr_screen.clip_bottom, return, clipped = 1, swapped = 1);
+	FL_CLIPLINE(x1, y1, x2, y2, (float)gr_screen.clip_left, (float)gr_screen.clip_top, (float)gr_screen.clip_right, (float)gr_screen.clip_bottom, return, ;, ;);
 
 	sx1 = x1 + (float)gr_screen.offset_x;
 	sy1 = y1 + (float)gr_screen.offset_y;
@@ -733,21 +733,21 @@ void gr_opengl_aaline(vertex *v1, vertex *v2)
 //	glDisable( GL_LINE_SMOOTH );
 }
 
-void gr_opengl_gradient(int x1, int y1, int x2, int y2, bool resize)
+void gr_opengl_gradient(int x1, int y1, int x2, int y2, int resize_mode)
 {
-	int clipped = 0, swapped = 0;
+	int swapped = 0;
 
 	if ( !gr_screen.current_color.is_alphacolor ) {
-		gr_opengl_line(x1, y1, x2, y2, resize);
+		gr_opengl_line(x1, y1, x2, y2, resize_mode);
 		return;
 	}
 
-	if ( resize && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
-		gr_resize_screen_pos(&x1, &y1);
-		gr_resize_screen_pos(&x2, &y2);
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+		gr_resize_screen_pos(&x1, &y1, NULL, NULL, resize_mode);
+		gr_resize_screen_pos(&x2, &y2, NULL, NULL, resize_mode);
 	}
 
-	INT_CLIPLINE(x1, y1, x2, y2, gr_screen.clip_left, gr_screen.clip_top, gr_screen.clip_right, gr_screen.clip_bottom, return, clipped = 1, swapped = 1);
+	INT_CLIPLINE(x1, y1, x2, y2, gr_screen.clip_left, gr_screen.clip_top, gr_screen.clip_right, gr_screen.clip_bottom, return, ;, swapped = 1);
 
 	GL_state.SetTextureSource(TEXTURE_SOURCE_NONE);
 	GL_state.SetAlphaBlendMode(ALPHA_BLEND_ALPHA_BLEND_ALPHA);
@@ -800,67 +800,229 @@ void gr_opengl_gradient(int x1, int y1, int x2, int y2, bool resize)
 
 }
 
-void gr_opengl_circle(int xc, int yc, int d, bool resize)
+void gr_opengl_circle(int xc, int yc, int d, int resize_mode)
 {
-	int p, x, y, r;
-
-	if ( resize && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
-		gr_resize_screen_pos(&xc, &yc);
-	}
-
-	r = d / 2;
-	p = 3 - d;
-	x = 0;
-	y = r;
-
-	// Big clip
-	if ( (xc+r) < gr_screen.clip_left ) {
-		return;
-	}
-
-	if ( (xc-r) > gr_screen.clip_right ) {
-		return;
-	}
-
-	if ( (yc+r) < gr_screen.clip_top ) {
-		return;
-	}
-
-	if ( (yc-r) > gr_screen.clip_bottom ) {
-		return;
-	}
-
-	while (x < y) {
-		// Draw the first octant
-		gr_opengl_line(xc-y, yc-x, xc+y, yc-x, false);
-		if (x > 0) // Don't draw the center horizontal line twice
-			gr_opengl_line(xc-y, yc+x, xc+y, yc+x, false);
-
-		if (p < 0) {
-			p += (x << 2) + 6;
-		} else {
-			// Draw the second octant
-			gr_opengl_line(xc-x, yc-y, xc+x, yc-y, false);
-			gr_opengl_line(xc-x, yc+y, xc+x, yc+y, false);
-
-			p += ((x - y) << 2) + 10;
-			y--;
-		}
-
-		x++;
-	}
-
-	if (x == y) {
-		gr_opengl_line(xc-x, yc-y, xc+x, yc-y, false);
-		gr_opengl_line(xc-x, yc+y, xc+x, yc+y, false);
-	}
+	gr_opengl_arc(xc, yc, d / 2.0f, 0.0f, 360.0f, true, resize_mode);
 }
 
-void gr_opengl_curve(int xc, int yc, int r, int direction)
+void gr_opengl_unfilled_circle(int xc, int yc, int d, int resize_mode)
+{
+	int r = d / 2;
+	int segments = 4 + (int)(r); // seems like a good approximation
+	float theta = 2 * PI / float(segments - 1); 
+	float c = cosf(theta);
+	float s = sinf(theta);
+	float t;
+
+	float x1 = 1.0f;
+	float y1 = 0.0f; 
+	float x2 = x1;
+	float y2 = y1;
+
+	float linewidth;
+	glGetFloatv(GL_LINE_WIDTH, &linewidth);
+
+	float halflinewidth = linewidth / 2.0f;
+	float inner_rad = r - halflinewidth;
+	float outer_rad = r + halflinewidth;
+
+	int do_resize = 0;
+
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+		gr_resize_screen_pos(&xc, &yc, NULL, NULL, resize_mode);
+		do_resize = 1;
+	}
+
+	// Big clip
+	if ( (xc+outer_rad) < gr_screen.clip_left ) {
+		return;
+	}
+
+	if ( (xc-outer_rad) > gr_screen.clip_right ) {
+		return;
+	}
+
+	if ( (yc+outer_rad) < gr_screen.clip_top ) {
+		return;
+	}
+
+	if ( (yc-outer_rad) > gr_screen.clip_bottom ) {
+		return;
+	}
+
+	int offset_x = ((do_resize) ? gr_screen.offset_x_unscaled : gr_screen.offset_x);
+	int offset_y = ((do_resize) ? gr_screen.offset_y_unscaled : gr_screen.offset_y);
+
+	GL_state.SetTextureSource(TEXTURE_SOURCE_NONE);
+	GL_state.SetAlphaBlendMode(ALPHA_BLEND_ALPHA_BLEND_ALPHA);
+	GL_state.SetZbufferType(ZBUFFER_TYPE_NONE);
+
+	GLfloat *circle = new GLfloat[segments * 4];
+
+	for (int i=0; i < segments * 4; i+=4) {
+		circle[i] = i2fl(xc + (x2 * outer_rad) + offset_x);
+		circle[i+1] = i2fl(yc + (y2 * outer_rad) + offset_y);
+
+		circle[i+2] = i2fl(xc + (x2 * inner_rad) + offset_x);
+		circle[i+3] = i2fl(yc + (y2 * inner_rad) + offset_y);
+
+		t = x2;
+		x2 = c * x1 - s * y1;
+		y2 = s * t + c * y1;
+
+		x1 = x2;
+		y1 = y2;
+	}
+
+	gr_opengl_set_2d_matrix();
+
+	GL_state.Color(gr_screen.current_color.red, gr_screen.current_color.green, gr_screen.current_color.blue, gr_screen.current_color.alpha);
+
+	GL_state.Array.EnableClientVertex();
+	GL_state.Array.VertexPointer(2, GL_FLOAT, 0, circle);
+
+	glDrawArrays(GL_QUAD_STRIP, 0, segments * 2);
+
+	GL_state.Array.DisableClientVertex();
+
+	GL_CHECK_FOR_ERRORS("end of opengl_unfilled_circle()");
+
+	gr_opengl_end_2d_matrix();
+
+	delete [] circle;
+}
+
+void gr_opengl_arc(int xc, int yc, float r, float angle_start, float angle_end, bool fill, int resize_mode)
+{
+	// Ensure that angle_start < angle_end
+	if (angle_end < angle_start) {
+		float temp = angle_start;
+		angle_start = angle_end;
+		angle_end = temp;
+	}
+
+	float arc_length_ratio;
+	arc_length_ratio = MIN(angle_end - angle_start, 360.0f) / 360.0f;
+
+	int segments = 4 + (int)(r * arc_length_ratio); // seems like a good approximation
+	float theta = 2 * PI / float(segments - 1) * arc_length_ratio; 
+	float c = cosf(theta);
+	float s = sinf(theta);
+	float t;
+
+	float x1 = cosf(ANG_TO_RAD(angle_start));
+	float y1 = sinf(ANG_TO_RAD(angle_start));
+	float x2 = x1;
+	float y2 = y1;
+
+	float halflinewidth = 0.0f;
+	float inner_rad = 0.0f; // only used if fill==false
+	float outer_rad = r;
+
+	if (!fill) {
+		float linewidth;
+		glGetFloatv(GL_LINE_WIDTH, &linewidth);
+
+		halflinewidth = linewidth / 2.0f;
+		inner_rad = r - halflinewidth;
+		outer_rad = r + halflinewidth;
+	}
+
+	int do_resize = 0;
+
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+		gr_resize_screen_pos(&xc, &yc, NULL, NULL, resize_mode);
+		do_resize = 1;
+	}
+
+	// Big clip
+	if ( (xc+outer_rad) < gr_screen.clip_left ) {
+		return;
+	}
+
+	if ( (xc-outer_rad) > gr_screen.clip_right ) {
+		return;
+	}
+
+	if ( (yc+outer_rad) < gr_screen.clip_top ) {
+		return;
+	}
+
+	if ( (yc-outer_rad) > gr_screen.clip_bottom ) {
+		return;
+	}
+
+	int offset_x = ((do_resize) ? gr_screen.offset_x_unscaled : gr_screen.offset_x);
+	int offset_y = ((do_resize) ? gr_screen.offset_y_unscaled : gr_screen.offset_y);
+
+	GL_state.SetTextureSource(TEXTURE_SOURCE_NONE);
+	GL_state.SetAlphaBlendMode(ALPHA_BLEND_ALPHA_BLEND_ALPHA);
+	GL_state.SetZbufferType(ZBUFFER_TYPE_NONE);
+
+	GLfloat *arc;
+
+	gr_opengl_set_2d_matrix();
+	GL_state.Color(gr_screen.current_color.red, gr_screen.current_color.green, gr_screen.current_color.blue, gr_screen.current_color.alpha);
+	GL_state.Array.EnableClientVertex();
+
+	if (fill) {
+		arc = new GLfloat[segments * 2 + 2];
+
+		arc[0] = i2fl(xc);
+		arc[1] = i2fl(yc);
+
+		for (int i=2; i < segments * 2 + 2; i+=2) {
+			arc[i] = i2fl(xc + (x2 * outer_rad) + offset_x);
+			arc[i+1] = i2fl(yc + (y2 * outer_rad) + offset_y);
+
+			t = x2;
+			x2 = c * x1 - s * y1;
+			y2 = s * t + c * y1;
+
+			x1 = x2;
+			y1 = y2;
+		}
+
+		GL_state.Array.VertexPointer(2, GL_FLOAT, 0, arc);
+		glDrawArrays(GL_TRIANGLE_FAN, 0, segments + 1);
+	} else {
+		arc = new GLfloat[segments * 4];
+
+		for (int i=0; i < segments * 4; i+=4) {
+			arc[i] = i2fl(xc + (x2 * outer_rad) + offset_x);
+			arc[i+1] = i2fl(yc + (y2 * outer_rad) + offset_y);
+
+			arc[i+2] = i2fl(xc + (x2 * inner_rad) + offset_x);
+			arc[i+3] = i2fl(yc + (y2 * inner_rad) + offset_y);
+
+			t = x2;
+			x2 = c * x1 - s * y1;
+			y2 = s * t + c * y1;
+
+			x1 = x2;
+			y1 = y2;
+		}
+
+		GL_state.Array.VertexPointer(2, GL_FLOAT, 0, arc);
+		glDrawArrays(GL_QUAD_STRIP, 0, segments * 2);
+	}
+
+	GL_state.Array.DisableClientVertex();
+
+	GL_CHECK_FOR_ERRORS("end of opengl_arc()");
+
+	gr_opengl_end_2d_matrix();
+
+	delete [] arc;
+}
+
+void gr_opengl_curve(int xc, int yc, int r, int direction, int resize_mode)
 {
 	int a, b, p;
 
-	gr_resize_screen_pos(&xc, &yc);
+	if (resize_mode != GR_RESIZE_NONE) {
+		gr_resize_screen_pos(&xc, &yc, NULL, NULL, resize_mode);
+	}
 
 	if ( (xc + r) < gr_screen.clip_left ) {
 		return;
@@ -881,13 +1043,13 @@ void gr_opengl_curve(int xc, int yc, int r, int direction)
 
 			while (a < b) {
 				// Draw the first octant
-				gr_opengl_line(xc - b + 1, yc - a, xc - b, yc - a, false);
+				gr_opengl_line(xc - b + 1, yc - a, xc - b, yc - a, GR_RESIZE_NONE);
 
 				if (p < 0) {
 					p += (a << 2) + 6;
 				} else {
 					// Draw the second octant
-					gr_opengl_line(xc - a + 1, yc - b, xc - a, yc - b, false);
+					gr_opengl_line(xc - a + 1, yc - b, xc - a, yc - b, GR_RESIZE_NONE);
 					p += ((a - b) << 2) + 10;
 					b--;
 				}
@@ -903,13 +1065,13 @@ void gr_opengl_curve(int xc, int yc, int r, int direction)
 
 			while (a < b) {
 				// Draw the first octant
-				gr_opengl_line(xc + b - 1, yc - a, xc + b, yc - a, false);
+				gr_opengl_line(xc + b - 1, yc - a, xc + b, yc - a, GR_RESIZE_NONE);
 
 				if (p < 0) {
 					p += (a << 2) + 6;
 				} else {
 					// Draw the second octant
-					gr_opengl_line(xc + a - 1, yc - b, xc + a, yc - b, false);
+					gr_opengl_line(xc + a - 1, yc - b, xc + a, yc - b, GR_RESIZE_NONE);
 					p += ((a - b) << 2) + 10;
 					b--;
 				}
@@ -925,13 +1087,13 @@ void gr_opengl_curve(int xc, int yc, int r, int direction)
 
 			while (a < b) {
 				// Draw the first octant
-				gr_opengl_line(xc - b + 1, yc + a, xc - b, yc + a, false);
+				gr_opengl_line(xc - b + 1, yc + a, xc - b, yc + a, GR_RESIZE_NONE);
 
 				if (p < 0) {
 					p += (a << 2) + 6;
 				} else {
 					// Draw the second octant
-					gr_opengl_line(xc - a + 1, yc + b, xc - a, yc + b, false);
+					gr_opengl_line(xc - a + 1, yc + b, xc - a, yc + b, GR_RESIZE_NONE);
 					p += ((a - b) << 2) + 10;
 					b--;
 				}
@@ -945,13 +1107,13 @@ void gr_opengl_curve(int xc, int yc, int r, int direction)
 		case 3: {
 			while (a < b) {
 				// Draw the first octant
-				gr_opengl_line(xc + b - 1, yc + a, xc + b, yc + a, false);
+				gr_opengl_line(xc + b - 1, yc + a, xc + b, yc + a, GR_RESIZE_NONE);
 
 				if (p < 0) {
 					p += (a << 2) + 6;
 				} else {
 					// Draw the second octant
-					gr_opengl_line(xc + a - 1, yc + b, xc + a, yc + b, false);
+					gr_opengl_line(xc + a - 1, yc + b, xc + a, yc + b, GR_RESIZE_NONE);
 					p += ((a - b) << 2) + 10;
 					b--;
 				}
@@ -1744,20 +1906,19 @@ void gr_opengl_scaler(vertex *va, vertex *vb, bool bw_bitmap = false)
 
 
 // cross fade
-void gr_opengl_cross_fade(int bmap1, int bmap2, int x1, int y1, int x2, int y2, float pct)
+void gr_opengl_cross_fade(int bmap1, int bmap2, int x1, int y1, int x2, int y2, float pct, int resize_mode)
 {
    	gr_set_bitmap(bmap1, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 1.0f - pct);
-	gr_bitmap(x1, y1);
+	gr_bitmap(x1, y1, resize_mode);
 
   	gr_set_bitmap(bmap2, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, pct);
-	gr_bitmap(x2, y2);
+	gr_bitmap(x2, y2, resize_mode);
 }
 
-void gr_opengl_shade(int x, int y, int w, int h, bool resize)
+void gr_opengl_shade(int x, int y, int w, int h, int resize_mode)
 {
-	if (resize) {
-		gr_resize_screen_pos(&x, &y);
-		gr_resize_screen_pos(&w, &h);
+	if (resize_mode != GR_RESIZE_NONE) {
+		gr_resize_screen_pos(&x, &y, &w, &h, resize_mode);
 	}
 
 	int x1 = (gr_screen.offset_x + x);
@@ -1846,7 +2007,7 @@ void gr_opengl_fade_out(int instantaneous)
 	// Empty - DDOI
 }
 
-void opengl_bitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, bool resize)
+void opengl_bitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, int resize_mode)
 {
 	if ( (w < 1) || (h < 1) ) {
 		return;
@@ -1865,7 +2026,7 @@ void opengl_bitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, bool 
 		return;
 	}
 
-	if ( resize && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
 		do_resize = 1;
 	} else {
 		do_resize = 0;
@@ -1885,8 +2046,8 @@ void opengl_bitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, bool 
 	y2 = y1 + i2fl(h);
 
 	if (do_resize) {
-		gr_resize_screen_posf(&x1, &y1);
-		gr_resize_screen_posf(&x2, &y2);
+		gr_resize_screen_posf(&x1, &y1, NULL, NULL, resize_mode);
+		gr_resize_screen_posf(&x2, &y2, NULL, NULL, resize_mode);
 	}
 
 	GL_state.Color(255, 255, 255, (GLubyte)(gr_screen.current_alpha * 255));
@@ -1896,7 +2057,7 @@ void opengl_bitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, bool 
 
 
 //these are penguins bitmap functions
-void gr_opengl_bitmap_ex(int x, int y, int w, int h, int sx, int sy, bool resize)
+void gr_opengl_bitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode)
 {
 	int reclip;
 #ifndef NDEBUG
@@ -1912,7 +2073,7 @@ void gr_opengl_bitmap_ex(int x, int y, int w, int h, int sx, int sy, bool resize
 
 	bm_get_info(gr_screen.current_bitmap, &bw, &bh);
 
-	if ( resize && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
 		do_resize = 1;
 	} else {
 		do_resize = 0;
@@ -1948,7 +2109,7 @@ void gr_opengl_bitmap_ex(int x, int y, int w, int h, int sx, int sy, bool resize
 		}
 
 		if ( dy1 < clip_top ) {
-			sy += clip_top-dx1;
+			sy += clip_top-dy1;
 			dy1 = clip_top;
 		}
 
@@ -2010,16 +2171,16 @@ void gr_opengl_bitmap_ex(int x, int y, int w, int h, int sx, int sy, bool resize
 #endif
 
 	// We now have dx1,dy1 and dx2,dy2 and sx, sy all set validly within clip regions.
-	opengl_bitmap_ex_internal(dx1, dy1, (dx2 - dx1 + 1), (dy2 - dy1 + 1), sx, sy, resize);
+	opengl_bitmap_ex_internal(dx1, dy1, (dx2 - dx1 + 1), (dy2 - dy1 + 1), sx, sy, resize_mode);
 }
 
-/*void gr_opengl_bitmap(int x, int y, bool resize)
+/*void gr_opengl_bitmap(int x, int y, int resize_mode)
 {
 	int w, h, do_resize;
 
 	bm_get_info( gr_screen.current_bitmap, &w, &h, NULL );
 
-	if ( resize && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+	if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
 		do_resize = 1;
 	} else {
 		do_resize = 0;
@@ -2047,7 +2208,7 @@ void gr_opengl_bitmap_ex(int x, int y, int w, int h, int sx, int sy, bool resize
 	if ( sy >= h ) return;
 
 	// Draw bitmap bm[sx,sy] into (dx1,dy1)-(dx2,dy2)
-	gr_opengl_bitmap_ex(dx1, dy1, dx2-dx1+1, dy2-dy1+1, sx, sy, resize);
+	gr_opengl_bitmap_ex(dx1, dy1, dx2-dx1+1, dy2-dy1+1, sx, sy, resize_mode);
 }*/
 
 void opengl_render_timer_bar(int colour, float x, float y, float w, float h)
@@ -2138,6 +2299,7 @@ void opengl_setup_scene_textures()
 	if ( !Use_GLSL || Cmdline_no_fbo || !Is_Extension_Enabled(OGL_EXT_FRAMEBUFFER_OBJECT) ) {
 		Cmdline_postprocess = 0;
 		Cmdline_softparticles = 0;
+		Cmdline_fb_explosions = 0;
 
 		Scene_color_texture = 0;
 		Scene_effect_texture = 0;
@@ -2373,11 +2535,9 @@ void opengl_scene_texture_shutdown()
 		Scene_framebuffer = 0;
 	}
 
-	if ( Distortion_texture ) {
-		glDeleteTextures(2, Distortion_texture);
-		Distortion_texture[0] = 0;
-		Distortion_texture[1] = 0;
-	}
+	glDeleteTextures(2, Distortion_texture);
+	Distortion_texture[0] = 0;
+	Distortion_texture[1] = 0;
 
 	if ( Distortion_framebuffer ) {
 		vglDeleteFramebuffersEXT(1, &Distortion_framebuffer);
@@ -2468,10 +2628,10 @@ void gr_opengl_scene_texture_end()
 			};
 
 			GLfloat uvcoords[8] = {
-				Scene_texture_u_scale, 0.0f,
 				0.0f, 0.0f,
+				Scene_texture_u_scale, 0.0f,
+				Scene_texture_u_scale, Scene_texture_v_scale,
 				0.0f, Scene_texture_v_scale,
-				Scene_texture_u_scale, Scene_texture_v_scale
 			};
 
 			GL_state.Array.EnableClientVertex();
@@ -2481,7 +2641,7 @@ void gr_opengl_scene_texture_end()
 			GL_state.Array.EnableClientTexture();
 			GL_state.Array.TexPointer(2, GL_FLOAT, 0, uvcoords);
 		
-			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+			glDrawArrays(GL_QUADS, 0, 4);
 			
 			GL_state.Array.DisableClientVertex();
 			GL_state.Array.DisableClientTexture();
@@ -2586,9 +2746,9 @@ void gr_opengl_update_distortion()
 	GL_state.Texture.Disable();
 
 	SCP_vector<ubyte> colours;
-	SCP_vector<GLfloat> vertex;
+	SCP_vector<GLfloat> distortion_vertex;
 	colours.reserve(33 * 4);
-	vertex.reserve(33 * 2);
+	distortion_vertex.reserve(33 * 2);
 	for(int i = 0; i < 33; i++)
 	{
 		colours.push_back((ubyte) rand()%256);
@@ -2596,12 +2756,12 @@ void gr_opengl_update_distortion()
 		colours.push_back(255);
 		colours.push_back(255);
 
-		vertex.push_back(0.04f);
-		vertex.push_back((float)gr_screen.max_h*0.03125f*i);
+		distortion_vertex.push_back(0.04f);
+		distortion_vertex.push_back((float)gr_screen.max_h*0.03125f*i);
 	}
 
 	GL_state.Array.EnableClientVertex();
-	GL_state.Array.VertexPointer(2, GL_FLOAT, 0, &vertex.front());
+	GL_state.Array.VertexPointer(2, GL_FLOAT, 0, &distortion_vertex.front());
 
 	GL_state.Array.EnableClientColor();
 	GL_state.Array.ColorPointer(4, GL_UNSIGNED_BYTE, 0, &colours.front());

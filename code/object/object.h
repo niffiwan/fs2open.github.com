@@ -21,7 +21,7 @@
  *		CONSTANTS
  */
 
-#define MAX_SHIELD_SECTIONS	4					//	Number of sections in shield.
+#define DEFAULT_SHIELD_SECTIONS	4	//	Number of sections in standard shields.
 
 #ifndef NDEBUG
 #define OBJECT_CHECK 
@@ -132,29 +132,32 @@ typedef struct obj_flag_name {
 	int flag_list;
 } obj_flag_name;
 
-#define MAX_OBJECT_FLAG_NAMES			9
+#define MAX_OBJECT_FLAG_NAMES			10
 extern obj_flag_name Object_flag_names[];
 
 struct dock_instance;
 
-typedef struct object {
-	struct object	*next, *prev;	// for linked lists of objects
+class object
+{
+public:
+	class object	*next, *prev;	// for linked lists of objects
 	int				signature;		// Every object ever has a unique signature...
-	char				type;				// what type of object this is... robot, weapon, hostage, powerup, fireball
+	char			type;				// what type of object this is... robot, weapon, hostage, powerup, fireball
 	int				parent;			// This object's parent.
 	int				parent_sig;		// This object's parent's signature
-	char				parent_type;	// This object's parent's type
+	char			parent_type;	// This object's parent's type
 	int				instance;		// which instance.  ie.. if type is Robot, then this indexes into the Robots array
-	uint				flags;			// misc flags.  Call obj_set_flags to change this.
+	uint			flags;			// misc flags.  Call obj_set_flags to change this.
 	vec3d			pos;				// absolute x,y,z coordinate of center of object
 	matrix			orient;			// orientation of object in world
-	float				radius;			// 3d size of object - for collision detection
+	float			radius;			// 3d size of object - for collision detection
 	vec3d			last_pos;		// where object was last frame
 	matrix			last_orient;	// how the object was oriented last frame
 	physics_info	phys_info;		// a physics object
-	float				shield_quadrant[MAX_SHIELD_SECTIONS];	//	Shield is broken into components.  Quadrants on 4/24/97.
-	float				hull_strength;	//	Remaining hull strength.
-	float				sim_hull_strength;	// Simulated hull strength - used with training weapons.
+	int				n_quadrants;	// how many shield quadrants the ship has
+	SCP_vector<float>	shield_quadrant;	//	Shield is broken into components, quadrants by default.
+	float			hull_strength;	//	Remaining hull strength.
+	float			sim_hull_strength;	// Simulated hull strength - used with training weapons.
 	SCP_vector<int> objsnd_num;		// Index of persistant sound struct.
 	ushort			net_signature;
 	int				num_pairs;		// How many object pairs this is associated with.  When 0 then there are no more.
@@ -163,7 +166,11 @@ typedef struct object {
 	dock_instance	*dead_dock_list;	// Goober5000 - objects this object was docked to when destroyed; replaces dock_objnum_when_dead
 
 	int				collision_group_id; // This is a bitfield. Collision checks will be skipped if A->collision_group_id & B->collision_group_id returns nonzero
-} object;
+
+	object();
+	~object();
+	void clear();
+};
 
 struct object_h {
 	object *objp;
@@ -218,7 +225,8 @@ extern object *Player_obj;	// Which object is the player. Has to be valid.
 // Use this instead of "objp - Objects" to get an object number
 // given it's pointer.  This way, we can replace it with a macro
 // to check that the pointer is valid for debugging.
-#define OBJ_INDEX(objp) (objp-Objects)
+// https://stackoverflow.com/questions/7954439/c-which-character-should-be-used-for-ptrdiff-t-in-printf
+#define OBJ_INDEX(objp) (ptrdiff_t)(objp-Objects)
 
 /*
  *		FUNCTIONS

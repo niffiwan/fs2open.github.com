@@ -111,7 +111,7 @@ int get_char_width(ubyte c1,ubyte c2,int *width,int *spacing)
 }
 
 // NOTE: this returns an unscaled size for non-standard resolutions
-int get_centered_x(const char *s)
+int get_centered_x(const char *s, bool scaled)
 {
 	int w,w2,s2;
 
@@ -120,13 +120,13 @@ int get_centered_x(const char *s)
 		w += s2;
 	}
 
-	return ((gr_screen.clip_width_unscaled - w) / 2);
+	return (((scaled ? gr_screen.clip_width : gr_screen.clip_width_unscaled) - w) / 2);
 }
 
 /**
  * Draws a character centered on x
  */
-void gr_char_centered(int x, int y, char chr, ubyte sc1)
+void gr_char_centered(int x, int y, char chr, ubyte sc1, int resize_mode)
 {
 	char str[2];
 	int w;
@@ -137,10 +137,10 @@ void gr_char_centered(int x, int y, char chr, ubyte sc1)
 	str[0] = chr;
 	str[1] = 0;
 	gr_get_string_size(&w, NULL, str);
-	gr_string(x - w / 2, y, str);
+	gr_string(x - w / 2, y, str, resize_mode);
 }
 
-void gr_print_timestamp(int x, int y, fix timestamp)
+void gr_print_timestamp(int x, int y, fix timestamp, int resize_mode)
 {
 	char h[2], m[3], s[3];
 	int w, c, font_num;
@@ -156,8 +156,8 @@ void gr_print_timestamp(int x, int y, fix timestamp)
 	gr_get_string_size(&w, NULL, "0");
 	gr_get_string_size(&c, NULL, ":");
 
-	gr_string(x + w, y, ":");
-	gr_string(x + w * 3 + c, y, ":");
+	gr_string(x + w, y, ":", resize_mode);
+	gr_string(x + w * 3 + c, y, ":", resize_mode);
 
 	font_num = gr_get_current_fontnum();
 	if (font_num == -1) {
@@ -173,15 +173,15 @@ void gr_print_timestamp(int x, int y, fix timestamp)
 	}
 
 	x += w / 2;
-	gr_char_centered(x, y, h[0], sc);
+	gr_char_centered(x, y, h[0], sc, resize_mode);
 	x += w + c;
-	gr_char_centered(x, y, m[0], sc);
+	gr_char_centered(x, y, m[0], sc, resize_mode);
 	x += w;
-	gr_char_centered(x, y, m[1], sc);
+	gr_char_centered(x, y, m[1], sc, resize_mode);
 	x += w + c;
-	gr_char_centered(x, y, s[0], sc);
+	gr_char_centered(x, y, s[0], sc, resize_mode);
 	x += w;
-	gr_char_centered(x, y, s[1], sc);
+	gr_char_centered(x, y, s[1], sc, resize_mode);
 }
 
 int gr_get_font_height()
@@ -310,6 +310,32 @@ void _cdecl gr_printf( int x, int y, const char * format, ... )
 	gr_string(x,y,grx_printf_text);
 }
 
+void _cdecl gr_printf_menu( int x, int y, const char * format, ... )
+{
+	va_list args;
+
+	if ( !Current_font ) return;
+	
+	va_start(args, format);
+	vsprintf(grx_printf_text,format,args);
+	va_end(args);
+
+	gr_string(x,y,grx_printf_text,GR_RESIZE_MENU);
+}
+
+void _cdecl gr_printf_menu_zoomed( int x, int y, const char * format, ... )
+{
+	va_list args;
+
+	if ( !Current_font ) return;
+
+	va_start(args, format);
+	vsprintf(grx_printf_text,format,args);
+	va_end(args);
+
+	gr_string(x,y,grx_printf_text,GR_RESIZE_MENU_ZOOMED);
+}
+
 void _cdecl gr_printf_no_resize( int x, int y, const char * format, ... )
 {
 	va_list args;
@@ -320,7 +346,7 @@ void _cdecl gr_printf_no_resize( int x, int y, const char * format, ... )
 	vsprintf(grx_printf_text,format,args);
 	va_end(args);
 
-	gr_string(x,y,grx_printf_text,false);
+	gr_string(x,y,grx_printf_text,GR_RESIZE_NONE);
 }
 
 void gr_font_close()
@@ -537,11 +563,13 @@ void gr_set_font(int fontnum)
 {
 	if ( fontnum < 0 ) {
 		Current_font = NULL;
+		Lcl_special_chars = 0;
 		return;
 	}
 
 	if ( fontnum >= 0 && fontnum < Num_fonts) {
 		Current_font = &Fonts[fontnum];
+		Lcl_special_chars = lcl_get_font_index(fontnum);
 	}
 }
 
