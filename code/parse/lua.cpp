@@ -3,6 +3,7 @@
 #include "asteroid/asteroid.h"
 #include "camera/camera.h"
 #include "cfile/cfilesystem.h"
+#include "cutscene/movie.h"
 #include "debris/debris.h"
 #include "cmdline/cmdline.h"
 #include "freespace2/freespace.h"
@@ -15130,9 +15131,6 @@ ADE_FUNC(createWeapon, l_Mission, "[weaponclass Class=WeaponClass[1], orientatio
 
 ADE_FUNC(getMissionFilename, l_Mission, NULL, "Gets mission filename", "string", "Mission filename, or empty string if game is not in a mission")
 {
-	if(!(Game_mode & GM_IN_MISSION))
-		return ade_set_error(L, "s", "");
-
 	return ade_set_args(L, "s", Game_current_mission_filename);
 }
 
@@ -15583,6 +15581,18 @@ ADE_FUNC(isPXOEnabled, l_Testing, NULL, "Returns whether PXO is currently enable
 	return ADE_RETURN_TRUE;
 }
 
+ADE_FUNC(playCutscene, l_Testing, NULL, "Forces a cutscene by the specified filename string to play. Should really only be used in a non-gameplay state (i.e. start of GS_STATE_BRIEFING) otherwise odd side effects may occur. Highly Experimental.", "string", NULL)
+{
+	//This whole thing is a quick hack and can probably be done way better, but is currently functioning fine for my purposes.
+	char *filename;
+
+	if (!ade_get_args(L, "s", &filename))
+		return ADE_RETURN_FALSE;
+
+	movie_play(filename);
+
+	return ADE_RETURN_TRUE;
+}
 
 // *************************Helper functions*********************
 //WMC - This should be used anywhere that an 'object' is set, so
