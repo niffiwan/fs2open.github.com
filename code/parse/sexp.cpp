@@ -687,14 +687,14 @@ sexp_oper Operators[] = {
 	{ "do-nothing",						OP_NOP,									0,	0,			SEXP_ACTION_OPERATOR,	},
 	
 	//AI Goals Category
-	{ "ai-chase",						OP_AI_CHASE,							2,	2,			SEXP_GOAL_OPERATOR,	},
-	{ "ai-chase-wing",					OP_AI_CHASE_WING,						2,	2,			SEXP_GOAL_OPERATOR,	},
+	{ "ai-chase",						OP_AI_CHASE,							2,	3,			SEXP_GOAL_OPERATOR,	},
+	{ "ai-chase-wing",					OP_AI_CHASE_WING,						2,	3,			SEXP_GOAL_OPERATOR,	},
 	{ "ai-chase-any",					OP_AI_CHASE_ANY,						1,	1,			SEXP_GOAL_OPERATOR,	},
 	{ "ai-guard",						OP_AI_GUARD,							2,	2,			SEXP_GOAL_OPERATOR,	},
 	{ "ai-guard-wing",					OP_AI_GUARD_WING,						2,	2,			SEXP_GOAL_OPERATOR,	},
-	{ "ai-destroy-subsystem",			OP_AI_DESTROY_SUBSYS,					3,	3,			SEXP_GOAL_OPERATOR,	},
-	{ "ai-disable-ship",				OP_AI_DISABLE_SHIP,						2,	2,			SEXP_GOAL_OPERATOR,	},
-	{ "ai-disarm-ship",					OP_AI_DISARM_SHIP,						2,	2,			SEXP_GOAL_OPERATOR,	},
+	{ "ai-destroy-subsystem",			OP_AI_DESTROY_SUBSYS,					3,	4,			SEXP_GOAL_OPERATOR,	},
+	{ "ai-disable-ship",				OP_AI_DISABLE_SHIP,						2,	3,			SEXP_GOAL_OPERATOR,	},
+	{ "ai-disarm-ship",					OP_AI_DISARM_SHIP,						2,	3,			SEXP_GOAL_OPERATOR,	},
 	{ "ai-warp",						OP_AI_WARP,								2,	2,			SEXP_GOAL_OPERATOR,	},
 	{ "ai-warp-out",					OP_AI_WARP_OUT,							1,	1,			SEXP_GOAL_OPERATOR,	},
 	{ "ai-dock",						OP_AI_DOCK,								4,	4,			SEXP_GOAL_OPERATOR,	},
@@ -12697,12 +12697,17 @@ void multi_sexp_deal_with_ship_flag()
 				}
 			}
 
-			if (ship_flag2 == SF2_STEALTH && !set_it) {
+			if ((ship_flag2 == SF2_STEALTH) && !set_it) {
 				if (shipp->flags & SF_ESCORT) {
 					hud_add_ship_to_escort(shipp->objnum, 1);
 				}			
 			}
-			if ((ship_flag2 == SF2_FRIENDLY_STEALTH_INVIS) || (ship_flag == SF_HIDDEN_FROM_SENSORS)) {
+			if ((ship_flag2 == SF2_FRIENDLY_STEALTH_INVIS) && !set_it && (shipp->flags2 & SF2_STEALTH) && (shipp->team == Player_ship->team)) {
+				if (shipp->flags & SF_ESCORT) {
+					hud_add_ship_to_escort(shipp->objnum, 1);
+				}			
+			}
+			if (ship_flag == SF_HIDDEN_FROM_SENSORS) {
 				if (set_it) {
 					if (Player_ai->target_objnum == shipp->objnum) {
 						hud_cease_targeting(); 
@@ -12710,7 +12715,7 @@ void multi_sexp_deal_with_ship_flag()
 				}
 				else {
 					if (shipp->flags & SF_ESCORT) {
-					hud_add_ship_to_escort(shipp->objnum, 1);
+						hud_add_ship_to_escort(shipp->objnum, 1);
 					}		
 				}
 			}
@@ -14016,9 +14021,8 @@ void sexp_ships_visible(int n, bool visible)
 		if (!visible && Player_ai->target_objnum == Ships[shipnum].objnum) {
 			hud_cease_targeting(); 
 		}
-
 		else if (visible && (Ships[shipnum].flags & SF_ESCORT)) {
-				hud_add_ship_to_escort(Ships[shipnum].objnum, 1);
+			hud_add_ship_to_escort(Ships[shipnum].objnum, 1);
 		}		
 	}
 }
@@ -14057,8 +14061,11 @@ void sexp_friendly_stealth_invisible(int n, bool invisible)
 			if (shipnum < 0)
 				continue;
 
-			if (Ships[shipnum].flags & SF_ESCORT)
-				hud_add_ship_to_escort(Ships[shipnum].objnum, 1);
+			if (Ships[shipnum].flags2 & SF2_STEALTH && Player_ship->team == Ships[shipnum].team)
+			{
+				if (Ships[shipnum].flags & SF_ESCORT)
+					hud_add_ship_to_escort(Ships[shipnum].objnum, 1);
+			}
 		}
 	}
 }
@@ -26165,6 +26172,13 @@ int query_operator_argument_type(int op, int argnum)
 
 		case OP_AI_DISABLE_SHIP:
 		case OP_AI_DISARM_SHIP:
+			if (argnum == 0)
+				return OPF_SHIP;
+			else if (argnum == 1)
+				return OPF_POSITIVE;
+			else
+				return OPF_BOOL;
+
 		case OP_AI_EVADE_SHIP:
 		case OP_AI_STAY_NEAR_SHIP:
 		case OP_AI_IGNORE:
@@ -26175,6 +26189,13 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_POSITIVE;
 
 		case OP_AI_CHASE:
+			if (argnum == 0)
+				return OPF_SHIP_WING;
+			else if (argnum == 1)
+				return OPF_POSITIVE;
+			else
+				return OPF_BOOL;
+
 		case OP_AI_GUARD:
 			if (!argnum)
 				return OPF_SHIP_WING;
@@ -26201,6 +26222,13 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_SHIP;
 
 		case OP_AI_CHASE_WING:
+			if (argnum == 0)
+				return OPF_WING;
+			else if (argnum == 1)
+				return OPF_POSITIVE;
+			else
+				return OPF_BOOL;
+
 		case OP_AI_GUARD_WING:
 			if (!argnum)
 				return OPF_WING;
@@ -26212,8 +26240,10 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_SHIP;
 			else if (argnum == 1)
 				return OPF_SUBSYSTEM;
-			else
+			else if (argnum == 2)
 				return OPF_POSITIVE;
+			else
+				return OPF_BOOL;
 			
 		case OP_GOALS_ID:
 			return OPF_AI_GOAL;
@@ -30701,9 +30731,11 @@ sexp_help_struct Sexp_help[] = {
 
 	{ OP_AI_CHASE, "Ai-chase (Ship goal)\r\n"
 		"\tCauses the specified ship to chase and attack the specified target.\r\n\r\n"
-		"Takes 2 arguments...\r\n"
+		"Takes 2 or 3 arguments...\r\n"
 		"\t1:\tName of ship to chase.\r\n"
-		"\t2:\tGoal priority (number between 0 and 200. Player orders have a priority of 90-100)." },
+		"\t2:\tGoal priority (number between 0 and 200. Player orders have a priority of 90-100).\r\n"
+		"\t3 (optional):\tWhether to attack the target even if it is on the same team; defaults to false."
+	},
 
 	{ OP_AI_DOCK, "Ai-dock (Ship goal)\r\n"
 		"\tCauses one ship to dock with another ship.\r\n\r\n"
@@ -30741,16 +30773,20 @@ sexp_help_struct Sexp_help[] = {
 	{ OP_AI_DESTROY_SUBSYS, "Ai-destroy subsys (Ship goal)\r\n"
 		"\tCauses the specified ship to attack and try and destroy the specified subsystem "
 		"on the specified ship.\r\n\r\n"
-		"Takes 3 arguments...\r\n"
+		"Takes 3 or 4 arguments...\r\n"
 		"\t1:\tName of ship subsystem is on.\r\n"
 		"\t2:\tName of subsystem on the ship to attack and destroy.\r\n"
-		"\t3:\tGoal priority (number between 0 and 200. Player orders have a priority of 90-100)." },
+		"\t3:\tGoal priority (number between 0 and 200. Player orders have a priority of 90-100).\r\n"
+		"\t4 (optional):\tWhether to attack the target even if it is on the same team; defaults to false."
+	},
 
 	{ OP_AI_CHASE_WING, "Ai-chase wing (Ship goal)\r\n"
 		"\tCauses the specified ship to chase and attack the specified target.\r\n\r\n"
-		"Takes 2 arguments...\r\n"
+		"Takes 2 or 3 arguments...\r\n"
 		"\t1:\tName of wing to chase.\r\n"
-		"\t2:\tGoal priority (number between 0 and 200. Player orders have a priority of 90-100)." },
+		"\t2:\tGoal priority (number between 0 and 200. Player orders have a priority of 90-100).\r\n"
+		"\t3 (optional):\tWhether to attack the target even if it is on the same team; defaults to false."
+	},
 
 	{ OP_AI_DISABLE_SHIP, "Ai-disable-ship (Ship/wing goal)\r\n"
 		"\tThis AI goal causes a ship/wing to destroy all of the engine subsystems on "
@@ -30760,9 +30796,11 @@ sexp_help_struct Sexp_help[] = {
 		"Please note that this goal may call \"protect-ship\" on the target "
 		"to prevent overzealous AI ships from destroying it in the process of disabling it.  "
 		"If the ship must be destroyed later on, be sure to call an \"unprotect-ship\" sexp.\r\n\r\n"
-		"Takes 2 arguments...\r\n"
+		"Takes 2 or 3 arguments...\r\n"
 		"\t1:\tName of ship whose engine subsystems should be destroyed\r\n"
-		"\t2:\tGoal priority (number between 0 and 200. Player orders have a priority of 90-100)." },
+		"\t2:\tGoal priority (number between 0 and 200. Player orders have a priority of 90-100).\r\n"
+		"\t3 (optional):\tWhether to attack the target even if it is on the same team; defaults to false."
+	},
 
 	{ OP_AI_DISARM_SHIP, "Ai-disarm-ship (Ship/wing goal)\r\n"
 		"\tThis AI goal causes a ship/wing to destroy all of the turret subsystems on "
@@ -30774,7 +30812,9 @@ sexp_help_struct Sexp_help[] = {
 		"If the ship must be destroyed later on, be sure to call an \"unprotect-ship\" sexp.\r\n\r\n"
 		"Takes 2 arguments...\r\n"
 		"\t1:\tName of ship whose turret subsystems should be destroyed\r\n"
-		"\t2:\tGoal priority (number between 0 and 200. Player orders have a priority of 90-100)." },
+		"\t2:\tGoal priority (number between 0 and 200. Player orders have a priority of 90-100).\r\n"
+		"\t3 (optional):\tWhether to attack the target even if it is on the same team; defaults to false."
+	},
 
 	{ OP_AI_GUARD, "Ai-guard (Ship goal)\r\n"
 		"\tCauses the specified ship to guard a ship from other ships not on the same team.\r\n\r\n"
