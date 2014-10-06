@@ -617,6 +617,13 @@ void parse_fonts_tbl(char *only_parse_first_font, size_t only_parse_first_font_s
 			return;
 		}
 
+		// 'default' special char index for all languages using this font
+		// if not provided, use 0 (i.e. the default for Lcl_builtin_languages)
+		int default_special_char_index = 0;
+		if (optional_string("+Default Special Character Index:")) {
+			stuff_int(&default_special_char_index);
+		}
+
 		// create font
 		int font_id = gr_create_font(font_filename);
 		if (font_id < 0) {
@@ -628,14 +635,16 @@ void parse_fonts_tbl(char *only_parse_first_font, size_t only_parse_first_font_s
 				int special_char_index;
 
 				stuff_string(lang_name, F_NAME, LCL_LANG_NAME_LEN + 1);
-				required_string("+Special Character Index:");
-				stuff_int(&special_char_index);
 
-				// is the index sane?
-				// realistically, it has to be less than UCHAR_MAX to fit all the special chars, but not sure how many there are for all fonts & langs
-				// e.g. English font03.vf has 72 special chars?
-				if (special_char_index < 0 || special_char_index >= UCHAR_MAX) {
-					Error(LOCATION, "Special character index (%d) for font (%s), language (%s) is invalid, must be 0 - %u", special_char_index, font_filename, lang_name, UCHAR_MAX-1);
+				if (optional_string("+Special Character Index:")) {
+					stuff_int(&special_char_index);
+				} else {
+					special_char_index = default_special_char_index;
+				}
+
+				// is the index sane? i.e. needs to be 7 special chars less than UCHAR_MAX
+				if (special_char_index < 0 || special_char_index >= UCHAR_MAX-6) {
+					Error(LOCATION, "Special character index (%d) for font (%s), language (%s) is invalid, must be 0 - %u", special_char_index, font_filename, lang_name, UCHAR_MAX-6);
 				}
 
 				// find language and set the index, or if not found move to the next one
@@ -647,7 +656,7 @@ void parse_fonts_tbl(char *only_parse_first_font, size_t only_parse_first_font_s
 				}
 
 				if (i >= (int)Lcl_languages.size()) {
-					Warning(LOCATION, "Ignoring font (%s) that specified an invalid language (%s); not built-in or in strings.tbl", font_filename, lang_name);
+					Warning(LOCATION, "Ignoring invalid language (%s) specified by font (%s); not built-in or in strings.tbl", lang_name, font_filename );
 				}
 			}
 		}
