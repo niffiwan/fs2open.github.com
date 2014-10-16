@@ -621,19 +621,30 @@ void parse_fonts_tbl(char *only_parse_first_font, size_t only_parse_first_font_s
 			return;
 		}
 
-		// 'default' special char index for all languages using this font
-		// if not provided, use 0 (i.e. the default for Lcl_builtin_languages)
-		int default_special_char_index = 0;
-		if (optional_string("+Default Special Character Index:")) {
-			stuff_int(&default_special_char_index);
-		}
-
 		// create font
 		int font_id = gr_create_font(font_filename);
 		if (font_id < 0) {
 			Warning(LOCATION, "Could not create font from typeface '%s'!", font_filename);
 			skip_to_start_of_string_either("#End","$Font:");
 		} else {
+			// max allowed special char index; i.e. 7 special chars in retail fonts 1 & 3
+			static const int MAX_SPECIAL_CHAR_IDX = UCHAR_MAX-6;
+
+			// 'default' special char index for all languages using this font
+			// if not provided, use 0 (i.e. the default for Lcl_builtin_languages)
+			int default_special_char_index = 0;
+			if (optional_string("+Default Special Character Index:")) {
+				stuff_int(&default_special_char_index);
+
+				if (default_special_char_index < 0 || default_special_char_index >= MAX_SPECIAL_CHAR_IDX) {
+					Error(LOCATION, "Default special character index (%d) for font (%s), must be 0 - %u", default_special_char_index, font_filename, MAX_SPECIAL_CHAR_IDX);
+				}
+
+				for (i = 0; i < (int)Lcl_languages.size(); ++i) {
+					Lcl_languages[i].special_char_indexes[font_id] = (ubyte)default_special_char_index;
+				}
+			}
+
 			while (optional_string("+Language:")) {
 				char lang_name[LCL_LANG_NAME_LEN + 1];
 				int special_char_index;
@@ -646,15 +657,14 @@ void parse_fonts_tbl(char *only_parse_first_font, size_t only_parse_first_font_s
 					special_char_index = default_special_char_index;
 				}
 
-				// is the index sane? i.e. needs to be 7 special chars less than UCHAR_MAX
-				if (special_char_index < 0 || special_char_index >= UCHAR_MAX-6) {
-					Error(LOCATION, "Special character index (%d) for font (%s), language (%s) is invalid, must be 0 - %u", special_char_index, font_filename, lang_name, UCHAR_MAX-6);
+				if (special_char_index < 0 || special_char_index >= MAX_SPECIAL_CHAR_IDX) {
+					Error(LOCATION, "Special character index (%d) for font (%s), language (%s) is invalid, must be 0 - %u", special_char_index, font_filename, lang_name, MAX_SPECIAL_CHAR_IDX);
 				}
 
 				// find language and set the index, or if not found move to the next one
 				for (i = 0; i < (int)Lcl_languages.size(); ++i) {
 					if (!strcmp(Lcl_languages[i].lang_name, lang_name)) {
-						Lcl_languages[i].special_char_indexes[Num_fonts-1] = (ubyte)special_char_index;
+						Lcl_languages[i].special_char_indexes[font_id] = (ubyte)special_char_index;
 						break;
 					}
 				}
