@@ -647,30 +647,31 @@ void parse_fonts_tbl(char *only_parse_first_font, size_t only_parse_first_font_s
 
 			while (optional_string("+Language:")) {
 				char lang_name[LCL_LANG_NAME_LEN + 1];
-				int special_char_index;
+				int special_char_index, lang_idx = -1;
 
 				stuff_string(lang_name, F_NAME, LCL_LANG_NAME_LEN + 1);
-
-				if (optional_string("+Special Character Index:")) {
-					stuff_int(&special_char_index);
-				} else {
-					special_char_index = default_special_char_index;
-				}
-
-				if (special_char_index < 0 || special_char_index >= MAX_SPECIAL_CHAR_IDX) {
-					Error(LOCATION, "Special character index (%d) for font (%s), language (%s) is invalid, must be 0 - %u", special_char_index, font_filename, lang_name, MAX_SPECIAL_CHAR_IDX);
-				}
 
 				// find language and set the index, or if not found move to the next one
 				for (i = 0; i < (int)Lcl_languages.size(); ++i) {
 					if (!strcmp(Lcl_languages[i].lang_name, lang_name)) {
-						Lcl_languages[i].special_char_indexes[font_id] = (ubyte)special_char_index;
+						lang_idx = i;
 						break;
 					}
 				}
 
-				if (i >= (int)Lcl_languages.size()) {
+				if (lang_idx == -1) {
 					Warning(LOCATION, "Ignoring invalid language (%s) specified by font (%s); not built-in or in strings.tbl", lang_name, font_filename );
+					skip_to_start_of_string_either("+Language:","$Font:","#End");
+				}
+
+				if (optional_string("+Special Character Index:")) {
+					stuff_int(&special_char_index);
+
+					if (special_char_index < 0 || special_char_index >= MAX_SPECIAL_CHAR_IDX) {
+						Error(LOCATION, "Special character index (%d) for font (%s), language (%s) is invalid, must be 0 - %u", special_char_index, font_filename, lang_name, MAX_SPECIAL_CHAR_IDX);
+					}
+
+					Lcl_languages[lang_idx].special_char_indexes[font_id] = (ubyte)special_char_index;
 				}
 			}
 		}
