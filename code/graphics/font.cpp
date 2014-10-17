@@ -631,7 +631,6 @@ void parse_fonts_tbl(char *only_parse_first_font, size_t only_parse_first_font_s
 			static const int MAX_SPECIAL_CHAR_IDX = UCHAR_MAX-6;
 
 			// 'default' special char index for all languages using this font
-			// if not provided, use 0 (i.e. the default for Lcl_builtin_languages)
 			int default_special_char_index = 0;
 			if (optional_string("+Default Special Character Index:")) {
 				stuff_int(&default_special_char_index);
