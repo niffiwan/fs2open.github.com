@@ -661,6 +661,7 @@ void parse_fonts_tbl(char *only_parse_first_font, size_t only_parse_first_font_s
 				if (lang_idx == -1) {
 					Warning(LOCATION, "Ignoring invalid language (%s) specified by font (%s); not built-in or in strings.tbl", lang_name, font_filename );
 					skip_to_start_of_string_either("+Language:","$Font:","#End");
+					continue;
 				}
 
 				if (optional_string("+Special Character Index:")) {
