@@ -52,7 +52,9 @@ typedef struct _obj_snd {
 #define MIN_FORWARD_SPEED		5
 #define SPEED_SOUND				600.0f				// speed of sound in FreeSpace
 
-#define MAX_OBJ_SOUNDS_PLAYING						5
+// jg18 - FIXMETEMPoverriding for enhanced sound
+//#define MAX_OBJ_SOUNDS_PLAYING						5
+#define MAX_OBJ_SOUNDS_PLAYING						12
 static	int Num_obj_sounds_playing;
 
 #define OBJSND_CHANGE_FREQUENCY_THRESHOLD			10

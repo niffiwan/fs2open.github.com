@@ -280,6 +280,37 @@ enum GameSoundsIndex {
 	MIN_GAME_SOUNDS = 202
 };
 
+// jg18 - new priority system
+enum SoundPriorityLevel
+{
+	GAME_SND_PRIORITY_MUST_PLAY = 0,
+	GAME_SND_PRIORITY_HIGH = 1,
+	GAME_SND_PRIORITY_MEDIUM_HIGH = 2,
+	GAME_SND_PRIORITY_MEDIUM = 3,
+	GAME_SND_PRIORITY_MEDIUM_LOW = 4,
+	GAME_SND_PRIORITY_LOW = 5,
+	GAME_SND_PRIORITY_INVALID = 6
+};
+
+struct SoundPriority
+{
+	int level;
+	unsigned int limit;
+
+	SoundPriority() :
+	level(GAME_SND_PRIORITY_INVALID), limit(0)
+	{
+	}
+
+	SoundPriority(const int new_level, const unsigned int new_limit) :
+	level(new_level), limit(new_limit)
+	{
+		Assert(level >= GAME_SND_PRIORITY_MUST_PLAY && level <= GAME_SND_PRIORITY_LOW);
+		Assert(limit > 0);
+	}
+};
+
+const SoundPriority * gamesnd_get_sound_priority(int snd_id);
 /**
  * Interface sounds
  */

@@ -11,6 +11,7 @@
 
 #include "globalincs/pstypes.h"
 #include "cfile/cfile.h"
+#include "gamesnd/gamesnd.h" // jg18 - for enhanced sound
 #include "sound/openal.h"
 #include "sound/ds.h"
 #include "sound/ds3d.h"
@@ -20,6 +21,8 @@
 #include "sound/dscap.h"
 
 
+// jg18 - temporary while testing enhanced sound
+bool Enhanced_sound_enabled = true; // FIXMETEMP - replace with launcher flag support
 typedef struct sound_buffer
 {
 	ALuint buf_id;		// OpenAL buffer id
@@ -39,7 +42,7 @@ typedef struct sound_buffer
 } sound_buffer;
 
 
-static int MAX_CHANNELS = 32;		// initialized properly in ds_init_channels()
+static int MAX_CHANNELS;		// initialized properly in ds_init_channels()
 channel *Channels = NULL;
 static int channel_next_sig = 1;
 
@@ -1006,6 +1009,8 @@ int ds_load_buffer(int *sid, int *final_size, void *header, sound_info *si, int 
  */
 void ds_init_channels()
 {
+	MAX_CHANNELS = Enhanced_sound_enabled ? 128 : 32;
+
 	try {
 		Channels = new channel[MAX_CHANNELS];
 	} catch (std::bad_alloc) {
@@ -1314,6 +1319,7 @@ void ds_close()
 
 /**
  * Find a free channel to play a sound on.  If no free channels exists, free up one based on volume levels.
+ * This is the original retail version of ds_get_free_channel().
  *
  * @param new_volume Volume for sound to play at
  * @param snd_id Which kind of sound to play
@@ -1323,7 +1329,7 @@ void ds_close()
  *
  * NOTE: snd_id is needed since we limit the number of concurrent samples
  */
-int ds_get_free_channel(float new_volume, int snd_id, int priority)
+int ds_get_free_channel_retail(float new_volume, int snd_id, int priority)
 {
 	int			i, first_free_channel, limit = 100;
 	int			instance_count;	// number of instances of sound already playing
@@ -1445,6 +1451,180 @@ int ds_get_free_channel(float new_volume, int snd_id, int priority)
 }
 
 /**
+ * Find a free channel to play a sound on.  If no free channels exists, free up one based on priority and volume levels.
+ * Special version for enhanced mode.
+ *
+ * @param new_volume Volume for sound to play at
+ * @param snd_id Which kind of sound to play
+ * @param new_priority Priority level, see SoundPriorityLevel enum in gamesnd.h
+ * @param limit Per-sound concurrency limit
+ *
+ * @returns	Channel number to play sound on, or -1 if no channel could be found
+ *
+ * NOTE: snd_id is needed since we limit the number of concurrent samples
+ */
+int ds_get_free_channel_enhanced(float new_volume, int snd_id, int new_priority, unsigned int limit)
+{
+	int			i, first_free_channel;
+	int			instance_count;	// number of instances of sound already playing
+	// least important means lowest volume among lowest priority
+	int			least_important_index = -1, lowest_instance_vol_index = -1;
+	// FIXME shouldn't these be 1.1f or otherwise out of bounds value?
+	// ditto for initial priority of least important sound. maybe it should be something like -1
+	// initial values out of range so we can pick up 1.0f
+	float		least_important_vol = 1.1f, lowest_instance_vol = 1.1f;
+	//float		least_important_vol = 1.0f, lowest_instance_vol = 1.0f;
+	int			least_important_priority = -1;
+	//int			least_important_priority = GAME_SND_PRIORITY_MUST_PLAY;
+	channel		*chp;
+	int status;
+
+	instance_count = 0;
+	first_free_channel = -1;
+
+	// Look for a channel to use to play this sample
+	for ( i = 0; i < MAX_CHANNELS; i++ ) {
+		chp = &Channels[i];
+
+		// source not created yet
+		if (chp->source_id == 0) {
+			if (first_free_channel == -1) {
+				first_free_channel = i;
+			}
+			continue;
+		}
+
+		// source not bound to a buffer
+		if (chp->sid == -1) {
+			if (first_free_channel == -1) {
+				first_free_channel = i;
+			}
+			continue;
+		}
+
+		OpenAL_ErrorCheck( alGetSourcei(chp->source_id, AL_SOURCE_STATE, &status), continue );
+
+		if ( (status == AL_INITIAL) || (status == AL_STOPPED) ) {
+			ds_close_channel_fast(i);
+
+			if (first_free_channel == -1) {
+				first_free_channel = i;
+			}
+			continue;
+		} else { // TODO does this mean channel's status is AL_PLAYING?
+			if ( chp->snd_id == snd_id ) {
+				instance_count++;
+				// FIXME TODO: should we take priority into account as well?
+				// some playing instances might have MUST_PLAY priority
+				// then again retail ignores this and all is fine I think
+				if ( (chp->vol < lowest_instance_vol) && (chp->looping == FALSE) ) {
+					lowest_instance_vol = chp->vol;
+					lowest_instance_vol_index = i;
+				}
+			} else if ( chp->is_voice_msg || (chp->looping == TRUE) ) {
+				// a playing voice message or looping sound is not allowed to be preempted.
+			} else if ( (chp->priority > least_important_priority) ) {
+				least_important_index = i;
+				least_important_vol = chp->vol;
+				least_important_priority = chp->priority;
+			} else if ( (chp->priority == least_important_priority) && (chp->vol < least_important_vol) ) {
+				least_important_index = i;
+				least_important_vol = chp->vol;
+				least_important_priority = chp->priority;
+			}
+		}
+	}
+
+	// If we've exceeded the limit, then maybe stop the duplicate if it is lower volume
+	if ( ((unsigned int)instance_count >= limit) && (lowest_instance_vol_index >= 0) ) {
+		// If there is a lower volume duplicate, stop it.... otherwise, don't play the sound
+		if (lowest_instance_vol <= new_volume) {
+			ds_close_channel_fast(lowest_instance_vol_index);
+			first_free_channel = lowest_instance_vol_index;
+			mprintf(("Trashing duplicate sound with id %d and priority %d and limit %d\n", snd_id, new_priority, (int)limit));
+		} else {
+			// don't exceed per-sound limits, even if there are spare channels
+			first_free_channel = -1;
+		}
+	} else if (first_free_channel == -1) {
+		// there is no limit barrier to play the sound, but we have run out of channels
+		// stop the least important sound to play our sound if priority demands it
+		if ( (least_important_index != -1)) {
+			// Check if the priority difference is great enough (must play or at least 3 levels away)
+			// and if the least important sound's volume playing is less than the volume of the requested sound.
+			// If so, then we are going to trash the least important sound.
+			if ( (new_priority == GAME_SND_PRIORITY_MUST_PLAY) || (Channels[least_important_index].priority - new_priority >= 3)) {
+				if ( Channels[least_important_index].vol <= new_volume ) {
+					ds_close_channel_fast(least_important_index);
+					first_free_channel = least_important_index;
+					mprintf(("Trashing least important sound with id %d and priority %d and replacing with sound id %d with priority %d and limit %d\n",
+						Channels[least_important_index].snd_id, Channels[least_important_index].priority, snd_id, new_priority, (int)limit));
+				}
+			}
+		}
+	}
+
+	if ( (first_free_channel >= 0) && (Channels[first_free_channel].source_id == 0) ) {
+		OpenAL_ErrorCheck( alGenSources(1, &Channels[first_free_channel].source_id), return -1 );
+	}
+	return first_free_channel;
+}
+
+/**
+ * Generic function for getting a free channel
+ *  If enhanced soudn is used, set priority to the computed priority.
+ *  Returns -1 if no free channel could be found.
+ */
+
+/**
+ * Find a free channel to play a sound on.  If no free channels exists, free up one based on volume levels.
+ * This is the new generic version of ds_get_free_channel().
+ *
+ * @param new_volume Volume for sound to play at
+ * @param snd_id Which kind of sound to play
+ * @param priority From retail :DS_MUST_PLAY, ::DS_LIMIT_ONE, ::DS_LIMIT_TWO, ::DS_LIMIT_THREE
+ * @param enhanced_priority Output param that's updated with correct priority if enhanced sound is enabled
+ *
+ * @returns	Channel number to play sound on, or -1 if no channel could be found
+ *
+ * NOTE: snd_id is needed since we limit the number of concurrent samples
+ *       snd_id is expected to be an index in Sound_priorities array in from gamesnd.h/.cpp
+ *          and should be between 0 and MIN_GAME_SOUNDS inclusive
+ */
+int ds_get_free_channel(float volume, int snd_id, int priority, int & enhanced_priority)
+{
+	int first_free_channel = -1;
+	unsigned int enhanced_limit = 0;
+
+	if (Enhanced_sound_enabled) {
+		const SoundPriority * official_priority = gamesnd_get_sound_priority(snd_id);
+		Assert(official_priority );
+		if (official_priority) {
+			enhanced_priority = official_priority->level;
+			enhanced_limit = official_priority->limit;
+			//mprintf(("Retrieved priority %d and limit %d for sound id %d",
+			//	enhanced_priority, enhanced_limit, snd_id));
+		} else { // FIXME What to do in this case?
+			enhanced_priority = GAME_SND_PRIORITY_HIGH;
+			enhanced_limit = 1;
+		}
+
+		// exception: if retail priority is must play, we assume it's for a good reason
+		// and thus follow suit with enhanced sound
+		if (priority == DS_MUST_PLAY) {
+			enhanced_priority = GAME_SND_PRIORITY_MUST_PLAY;
+		}
+
+		first_free_channel = ds_get_free_channel_enhanced(volume, snd_id, enhanced_priority, enhanced_limit);
+	} else { // enhanced sound off
+		first_free_channel = ds_get_free_channel_retail(volume, snd_id, priority);
+	}
+
+	return first_free_channel;
+}
+
+
+/**
  * Create a sound buffer in software, without locking any data in
  */
 int ds_create_buffer(int frequency, int bits_per_sample, int nchannels, int nseconds)
@@ -1524,7 +1704,12 @@ int ds_play_easy(int sid, float volume)
 		return -1;
 	}
 
-	int ch_idx = ds_get_free_channel(volume, -1, DS_MUST_PLAY);
+	int ch_idx = -1;
+	if (Enhanced_sound_enabled) {
+		ds_get_free_channel_enhanced(volume, -1, GAME_SND_PRIORITY_MUST_PLAY, 20);
+	} else {
+		ds_get_free_channel_retail(volume, -1, DS_MUST_PLAY);
+	}
 
 	if (ch_idx < 0) {
 		return -1;
@@ -1572,12 +1757,14 @@ int ds_play_easy(int sid, float volume)
 int ds_play(int sid, int snd_id, int priority, float volume, float pan, int looping, bool is_voice_msg)
 {
 	int ch_idx;
+	int enhanced_priority = GAME_SND_PRIORITY_INVALID;
+	//unsigned int enhanced_limit = 0;
 
 	if (!ds_initialized) {
 		return -1;
 	}
 
-	ch_idx = ds_get_free_channel(volume, snd_id, priority);
+	ch_idx = ds_get_free_channel(volume, snd_id, priority, enhanced_priority);
 
 	if (ch_idx < 0) {
 		return -1;
@@ -1629,7 +1816,8 @@ int ds_play(int sid, int snd_id, int priority, float volume, float pan, int loop
 	Channels[ch_idx].is_voice_msg = is_voice_msg;
 	Channels[ch_idx].vol = volume;
 	Channels[ch_idx].looping = looping;
-	Channels[ch_idx].priority = priority;
+	Channels[ch_idx].priority = enhanced_priority;
+
 
 	if (channel_next_sig < 0) {
 		channel_next_sig = 1;
@@ -1820,12 +2008,14 @@ void ds_chg_loop_status(int channel, int loop)
 int ds3d_play(int sid, int snd_id, vec3d *pos, vec3d *vel, float min, float max, int looping, float max_volume, float estimated_vol, int priority )
 {
 	int channel;
+	int enhanced_priority = GAME_SND_PRIORITY_INVALID;
+	//unsigned int enhanced_limit = 0;
 
 	if (!ds_initialized) {
 		return -1;
 	}
 
-	channel = ds_get_free_channel(estimated_vol, snd_id, priority);
+	channel = ds_get_free_channel(estimated_vol, snd_id, priority, enhanced_priority);
 
 	if (channel < 0) {
 		return -1;
@@ -1873,7 +2063,7 @@ int ds3d_play(int sid, int snd_id, vec3d *pos, vec3d *vel, float min, float max,
 	Channels[channel].is_voice_msg = false;
 	Channels[channel].vol = max_volume;
 	Channels[channel].looping = looping;
-	Channels[channel].priority = priority;
+	Channels[channel].priority = enhanced_priority;
 
 	if (channel_next_sig < 0 ) {
 		channel_next_sig = 1;
