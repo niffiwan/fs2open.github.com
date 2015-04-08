@@ -7275,3 +7275,8 @@ void validate_SSM_entries()
 		nprintf(("parse", "Validation complete, SSM-index is %d.\n", wip->SSM_index));
 	}
 }
+
+void weapons_output_json(const char *outfile)
+{
+	mprintf(("Exporting weapon data to json.\n"));
+}

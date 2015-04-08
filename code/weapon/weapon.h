@@ -685,4 +685,7 @@ void validate_SSM_entries();
 
 void shield_impact_explosion(vec3d *hitpos, object *objp, float radius, int idx);
 
+// Dumps parsed weapon data to a json file
+extern void weapons_output_json(const char *outfile);
+
 #endif
