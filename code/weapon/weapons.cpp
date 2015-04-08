@@ -7840,3 +7840,8 @@ const char* weapon_info::get_display_string() {
 bool weapon_info::has_alternate_name() {
 	return alt_name[0] != '\0';
 }
+
+void weapons_output_json(const char *outfile)
+{
+	mprintf(("Exporting weapon data to json.\n"));
+}

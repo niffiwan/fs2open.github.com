@@ -1789,4 +1789,6 @@ extern void toggle_ignore_list_flag(Ship::Ship_Flags flag);
 
 ship_subsys* ship_get_subsys_for_submodel(ship* shipp, int submodel);
 
+extern void ship_output_json(const char *outfile);
+
 #endif

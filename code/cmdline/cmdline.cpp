@@ -239,6 +239,7 @@ Flag exe_params[] =
 	{ "-output_sexps",		"Output SEXPs to sexps.html",				true,	0,									EASY_DEFAULT,					"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-output_sexps", },
 	{ "-output_scripting",	"Output scripting to scripting.html",		true,	0,									EASY_DEFAULT,					"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-output_scripting", },
 	{ "-output_script_json",	"Output scripting doc to scripting.json",	true,	0,								EASY_DEFAULT,					"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-output_script_json", },
+	{ "-output_json_data",	"Output table objects to [table].json",		true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-output_json_data", },
 	{ "-save_render_target",	"Save render targets to file",			true,	0,									EASY_DEFAULT,					"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-save_render_target", },
 	{ "-verify_vps",		"Spew VP CRCs to vp_crcs.txt",				true,	0,									EASY_DEFAULT,					"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-verify_vps", },
 	{ "-reparse_mainhall",	"Reparse mainhall.tbl when loading halls",	false,	0,									EASY_DEFAULT,					"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-reparse_mainhall", },
@@ -513,6 +514,9 @@ cmdline_parm get_flags_arg(GET_FLAGS_STRING, "Output the launcher flags file", A
 cmdline_parm output_sexp_arg("-output_sexps", NULL, AT_NONE); //WMC - outputs all SEXPs to sexps.html
 cmdline_parm output_scripting_arg("-output_scripting", NULL, AT_NONE);	//WMC
 cmdline_parm output_script_json_arg("-output_script_json", nullptr, AT_NONE);	// m!m
+cmdline_parm output_json_data_arg("-output_json_data", "Output table objects to [table].json", AT_NONE);	//chief1983, Cmdline_output_json_data
+
+bool Cmdline_output_json_data = false;
 
 // Deprecated flags - CommanderDJ
 cmdline_parm deprecated_spec_arg("-spec", "Deprecated", AT_NONE);
@@ -1927,6 +1931,11 @@ bool SetCmdlineParams()
 
 	if (output_sexp_arg.found() ) {
 		Cmdline_output_sexp_info = true;
+	}
+
+	if ( output_json_data_arg.found() )
+	{
+		Cmdline_output_json_data = true;
 	}
 
 	if ( no_pbo_arg.found() )
