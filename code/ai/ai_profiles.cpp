@@ -464,10 +464,10 @@ void parse_ai_profiles_tbl(const char *filename)
 
 				profile->bay_arrive_speed_mult = 1.0f;
 				profile->bay_depart_speed_mult = 1.0f;
-				if (optional_string("$bay arrive start speed multiplier:")) {
+				if (optional_string("$bay arrive speed multiplier:")) {
 					stuff_float(&profile->bay_arrive_speed_mult);
 				}
-				if (optional_string("$bay depart end speed multiplier:")) {
+				if (optional_string("$bay depart speed multiplier:")) {
 					stuff_float(&profile->bay_depart_speed_mult);
 				}
 
