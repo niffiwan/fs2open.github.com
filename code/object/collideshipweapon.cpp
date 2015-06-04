@@ -409,7 +409,6 @@ int ship_weapon_check_collision(object *ship_objp, object *weapon_objp, float ti
 		if(!ship_override && !weapon_override) {
 			if (shield_collision && quadrant_num >= 0) {
 				if ((sip->shield_impact_explosion_anim > -1) && (wip->shield_impact_explosion_radius > 0)) {
-					// do in weapons.cpp for most parts just because that is how rest of the functions are handled
 					shield_impact_explosion(&mc.hit_point, ship_objp, wip->shield_impact_explosion_radius, sip->shield_impact_explosion_anim);
 				}
 			}
