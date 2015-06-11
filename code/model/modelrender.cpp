@@ -1583,7 +1583,7 @@ bool model_render_check_detail_box(vec3d *view_pos, polymodel *pm, int submodel_
 
 	bsp_info *model = &pm->submodel[submodel_num];
 
-	float box_scale = model_render_determine_box_scale();
+	float box_scale = 1.0f;//model_render_determine_box_scale();
 
 	if ( !( flags & MR_FULL_DETAIL ) && model->use_render_box ) {
 		vec3d box_min, box_max;
@@ -1594,8 +1594,6 @@ bool model_render_check_detail_box(vec3d *view_pos, polymodel *pm, int submodel_
 		if ( (-model->use_render_box + in_box(&box_min, &box_max, &model->offset, view_pos)) ) {
 			return false;
 		}
-
-		return true;
 	}
 
 	if ( !(flags & MR_FULL_DETAIL) && model->use_render_sphere ) {
@@ -1609,8 +1607,6 @@ bool model_render_check_detail_box(vec3d *view_pos, polymodel *pm, int submodel_
 		if ( (-model->use_render_sphere + in_sphere(&offset, sphere_radius, view_pos)) ) {
 			return false;
 		}
-
-		return true;
 	}
 
 	return true;

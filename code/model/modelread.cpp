@@ -2074,7 +2074,7 @@ int read_model_file(polymodel * pm, char *filename, int n_subsystems, model_subs
 				break;
 */
 
-			case ID_INFO:		// don't need to do anything with info stuff
+			case ID_INFO: {		// don't need to do anything with info stuff
 
 				#ifndef NDEBUG
 					pm->debug_info_size = len;
@@ -2082,8 +2082,15 @@ int read_model_file(polymodel * pm, char *filename, int n_subsystems, model_subs
 					Assert(pm->debug_info!=NULL);
 					memset(pm->debug_info,0,len+1);
 					cfread( pm->debug_info, 1, len, fp );
+                    
+                    char *buf = pm->debug_info;
+                    while (buf < pm->debug_info + pm->debug_info_size - 1) {
+                        mprintf(("zoowtf %s\n", buf));
+                        buf = strchr(buf, '\0') + 1;
+                    }
 				#endif
 				break;
+            }
 
 			case ID_GRID:
 				break;
