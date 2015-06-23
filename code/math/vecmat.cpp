@@ -203,8 +203,7 @@ void vm_vec_sub2(vec3d *dest, const vec3d *src)
 //dest can equal either source
 vec3d *vm_vec_avg_n(vec3d *dest, int n, const vec3d src[])
 {
-	float x = 0.0f, y = 0.0f, z = 0.0f;
-	float inv_n = 1.0f / (float) n;;
+	float x=0,y=0,z=0;
 
 	for(int i = 0; i<n; i++){
 		x += src[i].xyz.x;
@@ -212,9 +211,9 @@ vec3d *vm_vec_avg_n(vec3d *dest, int n, const vec3d src[])
 		z += src[i].xyz.z;
 	}
 
-	dest->xyz.x = x * inv_n;
-	dest->xyz.y = y * inv_n;
-	dest->xyz.z = z * inv_n;
+	dest->xyz.x = x / n;
+	dest->xyz.y = y / n;
+	dest->xyz.z = z / n;
 
 	return dest;
 }
@@ -352,7 +351,7 @@ float vm_vec_mag(const vec3d *v)
 
 	mag1 = (v->xyz.x * v->xyz.x) + (v->xyz.y * v->xyz.y) + (v->xyz.z * v->xyz.z);
 
-	if (mag1 == 0.0f) {
+	if (mag1 <= 0.0f) {
 		return 0.0f;
 	}
 
@@ -454,10 +453,15 @@ float vm_vec_copy_normalize(vec3d *dest, const vec3d *src)
 
 	m = vm_vec_mag(src);
 
-	//	Trap attempts to normalize a zero vector.
-	if (m == 0.0f) {
-		Warning(LOCATION, "Null vec3d in vec3d normalize.\n"
-						  "Trace out of vecmat.cpp and find offending code.\n");
+	//	Mainly here to trap attempts to normalize a null vector.
+	if (m <= 0.0f) {
+//		static int been_warned2 = false;//added this so the warning could be sounded and you can still get on with playing-Bobboau
+//		if(!been_warned2)
+		{
+			Warning(LOCATION, "Null vec3d in vec3d normalize.\n"
+							  "Trace out of vecmat.cpp and find offending code.\n");
+//			been_warned2 = true;
+		}
 
 		dest->xyz.x = 1.0f;
 		dest->xyz.y = 0.0f;
@@ -493,8 +497,8 @@ float vm_vec_normalize_safe(vec3d *v)
 
 	m = vm_vec_mag(v);
 
-	//	Trap attempts to normalize a null vector.
-	if (m == 0.0f) {
+	//	Mainly here to trap attempts to normalize a null vector.
+	if (m <= 0.0f) {
 		v->xyz.x = 1.0f;
 		v->xyz.y = 0.0f;
 		v->xyz.z = 0.0f;
@@ -789,14 +793,9 @@ matrix *vm_angle_2_matrix(matrix *m, float a, int angle_index)
 	matrix * t;
 	float sinp,cosp,sinb,cosb,sinh,cosh;
 
-	/*
-	 * Initialize sin and cos variables using an initial angle of
-	 * zero degrees.  Recall that sin(0) = 0 and cos(0) = 1.
-	 */
-
-	sinp = 0.0f;	cosp = 1.0f;
-	sinb = 0.0f;	cosb = 1.0f;
-	sinh = 0.0f;	cosh = 1.0f;
+	sinp = sinf(0.0f);	cosp = cosf(0.0f);
+	sinb = sinf(0.0f);	cosb = cosf(0.0f);
+	sinh = sinf(0.0f);	cosh = cosf(0.0f);
 
 	switch (angle_index) {
 	case 0:
@@ -875,31 +874,38 @@ matrix *vm_vector_2_matrix(matrix *m, const vec3d *fvec, const vec3d *uvec, cons
 	Assert(fvec != NULL);
 
 	//  This had been commented out, but that's bogus.  Code below relies on a valid zvec.
-	vm_vec_copy_normalize(zvec,fvec);
+	if (vm_vec_copy_normalize(zvec,fvec) == 0.0f) {
+		Assert(0);
+		return m;
+	}
 
 	if (uvec == NULL) {
 		if (rvec == NULL) {     //just forward vec
 			vm_vector_2_matrix_gen_vectors(m);
 		}
 		else {                      //use right vec
-			vm_vec_copy_normalize(xvec,rvec);
+			if (vm_vec_copy_normalize(xvec,rvec) == 0.0f)
+				vm_vector_2_matrix_gen_vectors(m);
 
 			vm_vec_crossprod(yvec,zvec,xvec);
 
 			//normalize new perpendicular vector
-			vm_vec_normalize(yvec);
+			if (vm_vec_normalize(yvec) == 0.0f)
+				vm_vector_2_matrix_gen_vectors(m);
 
 			//now recompute right vector, in case it wasn't entirely perpendiclar
 			vm_vec_crossprod(xvec,yvec,zvec);
 		}
 	}
 	else {      //use up vec
-		vm_vec_copy_normalize(yvec,uvec);
+		if (vm_vec_copy_normalize(yvec,uvec) == 0.0f)
+			vm_vector_2_matrix_gen_vectors(m);
 
 		vm_vec_crossprod(xvec,yvec,zvec);
 
 		//normalize new perpendicular vector
-		vm_vec_normalize(xvec);
+		if (vm_vec_normalize(xvec) == 0.0f)
+			vm_vector_2_matrix_gen_vectors(m);
 
 		//now recompute up vector, in case it wasn't entirely perpendiclar
 		vm_vec_crossprod(yvec,zvec,xvec);
@@ -926,7 +932,8 @@ matrix *vm_vector_2_matrix_norm(matrix *m, const vec3d *fvec, const vec3d *uvec,
 			vm_vec_crossprod(yvec,zvec,xvec);
 
 			//normalize new perpendicular vector
-			vm_vec_normalize(yvec);
+			if (vm_vec_normalize(yvec) == 0.0f)
+				vm_vector_2_matrix_gen_vectors(m);
 
 			//now recompute right vector, in case it wasn't entirely perpendiclar
 			vm_vec_crossprod(xvec,yvec,zvec);
@@ -936,7 +943,8 @@ matrix *vm_vector_2_matrix_norm(matrix *m, const vec3d *fvec, const vec3d *uvec,
 		vm_vec_crossprod(xvec,yvec,zvec);
 
 		//normalize new perpendicular vector
-		vm_vec_normalize(xvec);
+		if (vm_vec_normalize(xvec) == 0.0f)
+			vm_vector_2_matrix_gen_vectors(m);
 
 		//now recompute up vector, in case it wasn't entirely perpendiclar
 		vm_vec_crossprod(yvec,zvec,xvec);
@@ -1048,7 +1056,11 @@ angles *vm_extract_angles_matrix(angles *a, const matrix *m)
 {
 	float sinh,cosh,cosp;
 
-	a->h = atan2_safe(m->vec.fvec.xyz.x,m->vec.fvec.xyz.z);
+	if (m->vec.fvec.xyz.x==0.0f && m->vec.fvec.xyz.z==0.0f)		//zero head
+		a->h = 0.0f;
+	else
+		// a->h = (float)atan2(m->vec.fvec.xyz.z,m->vec.fvec.xyz.x);
+		a->h = atan2_safe(m->vec.fvec.xyz.x,m->vec.fvec.xyz.z);
 
 	sinh = sinf(a->h); cosh = cosf(a->h);
 
@@ -1057,7 +1069,12 @@ angles *vm_extract_angles_matrix(angles *a, const matrix *m)
 	else											//cosine is larger, so use it
 		cosp = m->vec.fvec.xyz.z*cosh;
 
-	a->p = atan2_safe(-m->vec.fvec.xyz.y, cosp);
+	if (cosp==0.0f && m->vec.fvec.xyz.y==0.0f)
+		a->p = 0.0f;
+	else
+		// a->p = (float)atan2(cosp,-m->vec.fvec.xyz.y);
+		a->p = atan2_safe(-m->vec.fvec.xyz.y, cosp);
+
 
 	if (cosp == 0.0f)	//the cosine of pitch is zero.  we're pitched straight up. say no bank
 
@@ -1069,7 +1086,11 @@ angles *vm_extract_angles_matrix(angles *a, const matrix *m)
 		sinb = m->vec.rvec.xyz.y/cosp;
 		cosb = m->vec.uvec.xyz.y/cosp;
 
-		a->b = atan2_safe(sinb,cosb);
+		if (sinb==0.0f && cosb==0.0f)
+			a->b = 0.0f;
+		else
+			// a->b = (float)atan2(cosb,sinb);
+			a->b = atan2_safe(sinb,cosb);
 	}
 
 
@@ -1125,7 +1146,10 @@ static angles *vm_extract_angles_vector_normalized(angles *a, const vec3d *v)
 
 	a->p = asinf(-v->xyz.y);
 
-	a->h = atan2_safe(v->xyz.z,v->xyz.x);
+	if (v->xyz.x==0.0f && v->xyz.z==0.0f)
+		a->h = 0.0f;
+	else
+		a->h = atan2_safe(v->xyz.z,v->xyz.x);
 
 	return a;
 }
@@ -1135,8 +1159,8 @@ angles *vm_extract_angles_vector(angles *a, const vec3d *v)
 {
 	vec3d t;
 
-	vm_vec_copy_normalize(&t,v);
-	vm_extract_angles_vector_normalized(a,&t);
+	if (vm_vec_copy_normalize(&t,v) != 0.0f)
+		vm_extract_angles_vector_normalized(a,&t);
 
 	return a;
 }
@@ -1270,12 +1294,14 @@ void vm_orthogonalize_matrix(matrix *m_src)
 	matrix tempm;
 	matrix * m = &tempm;
 
-	vm_vec_copy_normalize(&m->vec.fvec,&m_src->vec.fvec);
+	if (vm_vec_copy_normalize(&m->vec.fvec,&m_src->vec.fvec) == 0.0f) {
+		Error( LOCATION, "forward vec should not be zero-length" );
+	}
 
 	umag = vm_vec_mag(&m_src->vec.uvec);
 	rmag = vm_vec_mag(&m_src->vec.rvec);
-	if (umag == 0.0f) {  // no up vector to use..
-		if (rmag == 0.0f) {  // no right vector either, so make something up
+	if (umag <= 0.0f) {  // no up vector to use..
+		if (rmag <= 0.0f) {  // no right vector either, so make something up
 			if (!m->vec.fvec.xyz.x && !m->vec.fvec.xyz.z && m->vec.fvec.xyz.y)  // vertical vector
 				vm_vec_make(&m->vec.uvec, 0.0f, 0.0f, 1.0f);
 			else
@@ -1283,7 +1309,8 @@ void vm_orthogonalize_matrix(matrix *m_src)
 
 		} else {  // use the right vector to figure up vector
 			vm_vec_crossprod(&m->vec.uvec, &m->vec.fvec, &m_src->vec.rvec);
-			vm_vec_normalize(&m->vec.uvec);
+			if (vm_vec_normalize(&m->vec.uvec) == 0.0f)
+				Error( LOCATION, "Bad vector!" );
 		}
 
 	} else {  // use source up vector
@@ -1294,7 +1321,8 @@ void vm_orthogonalize_matrix(matrix *m_src)
 	vm_vec_crossprod(&m->vec.rvec, &m->vec.uvec, &m->vec.fvec);
 		
 	//normalize new perpendicular vector
-	vm_vec_normalize(&m->vec.rvec);
+	if (vm_vec_normalize(&m->vec.rvec) == 0.0f)
+		Error( LOCATION, "Bad vector!" );
 
 	//now recompute up vector, in case it wasn't entirely perpendicular
 	vm_vec_crossprod(&m->vec.uvec, &m->vec.fvec, &m->vec.rvec);
@@ -1310,7 +1338,7 @@ void vm_fix_matrix(matrix *m)
 	fmag = vm_vec_mag(&m->vec.fvec);
 	umag = vm_vec_mag(&m->vec.uvec);
 	rmag = vm_vec_mag(&m->vec.rvec);
-	if (fmag == 0.0f) {
+	if (fmag <= 0.0f) {
 		if ((umag > 0.0f) && (rmag > 0.0f) && !vm_test_parallel(&m->vec.uvec, &m->vec.rvec)) {
 			vm_vec_crossprod(&m->vec.fvec, &m->vec.uvec, &m->vec.rvec);
 			vm_vec_normalize(&m->vec.fvec);
@@ -1327,8 +1355,8 @@ void vm_fix_matrix(matrix *m)
 
 	// we now have a valid and normalized forward vector
 
-	if ((umag == 0.0f) || vm_test_parallel(&m->vec.fvec, &m->vec.uvec)) {  // no up vector to use..
-		if ((rmag == 0.0f) || vm_test_parallel(&m->vec.fvec, &m->vec.rvec)) {  // no right vector either, so make something up
+	if ((umag <= 0.0f) || vm_test_parallel(&m->vec.fvec, &m->vec.uvec)) {  // no up vector to use..
+		if ((rmag <= 0.0f) || vm_test_parallel(&m->vec.fvec, &m->vec.rvec)) {  // no right vector either, so make something up
 			if (!m->vec.fvec.xyz.x && m->vec.fvec.xyz.y && !m->vec.fvec.xyz.z)  // vertical vector
 				vm_vec_make(&m->vec.uvec, 0.0f, 0.0f, -1.0f);
 			else
@@ -1576,13 +1604,13 @@ void vm_quaternion_rotate(matrix *M, float theta, const vec3d *u)
 //  this is adapted from Computer Graphics (Hearn and Bker 2nd ed.) p. 420
 //
 {
-	float a,b,c, s;
-	float sin_theta = sinf(theta * 0.5f);
 
-	a = (u->xyz.x * sin_theta);
-	b = (u->xyz.y * sin_theta);
-	c = (u->xyz.z * sin_theta);
-	s = cosf(theta * 0.5f);
+	float a,b,c, s;
+
+	a = (u->xyz.x * sinf(theta * 0.5f));
+	b = (u->xyz.y * sinf(theta * 0.5f));
+	c = (u->xyz.z * sinf(theta * 0.5f));
+	s = cosf(theta/2.0f);
 
 // 1st ROW vector
 	M->vec.rvec.xyz.x = 1.0f - 2.0f*b*b - 2.0f*c*c;
@@ -2063,242 +2091,6 @@ void get_camera_limits(const matrix *start_camera, const matrix *end_camera, flo
 		w_max->xyz.z = acc_max->xyz.z * time / 2.0f;
 	}
 }
-
-// ---------------------------------------------------------------------------------------------
-//
-//		inputs:		goal_orient	=>		goal orientation matrix
-//						orient		=>		current orientation matrix (with current forward vector)
-//						w_in			=>		current input angular velocity
-//						delta_t		=>		time to move toward goal
-//						next_orient	=>		the orientation matrix at time delta_t (with current forward vector)
-//												NOTE: this does not include any rotation about z (bank)
-//						w_out			=>		the angular velocity of the ship at delta_t
-//						vel_limit	=>		maximum rotational speed
-//						acc_limit	=>		maximum rotational speed
-//
-//		function moves the forward vector toward the goal forward vector taking account of anglular
-//		momentum (velocity)  Attempt to try to move bank by goal delta_bank.  Rotational velocity
-//		on x/y is rotated with bank, giving smoother motion.
-static void vm_fvec_matrix_interpolate(const matrix *goal_orient, matrix *orient, const vec3d *w_in, float delta_t, matrix *next_orient,
-		vec3d *w_out, const vec3d *vel_limit, const vec3d *acc_limit, int no_overshoot)
-{
-	matrix	Mtemp1;				// temporary matrix
-	matrix	M_intermed;			// intermediate matrix after xy rotation
-	vec3d	local_rot_axis;	// vector indicating direction of rotation axis (local coords)
-	vec3d	rot_axis;			// vector indicating direction of rotation axis (world coords)
-	vec3d	theta_goal;			// desired angular position at the end of the time interval
-	vec3d	theta_end;			// actual angular position at the end of the time interval
-	float		theta;				// magnitude of rotation about the rotation axis
-	float		bank;					// magnitude of rotation about the forward axis
-	int		no_bank;				// flag set if there is no bank for the object
-	vec3d	vtemp;				// temp angular velocity before rotation about z
-	float		z_dotprod;			// dotprod of orient->vec.fvec and goal_orient->vec.fvec
-	float		r_dotprod;			// dotprod of orient->vec.rvec and goal_orient->vec.rvec
-	float		delta_bank;
-
-	//	FIND XY ROTATION NEEDED FOR GOAL
-	// rotation vector is (current fvec)  orient->vec.fvec x goal_f
-	// magnitude = asin ( magnitude of crossprod )
-	vm_vec_crossprod ( &rot_axis, &orient->vec.fvec, &goal_orient->vec.fvec );
-
-	float t = vm_vec_mag(&rot_axis);
-	if (t > 1.0f)
-		t = 1.0f;
-
-	z_dotprod = vm_vec_dotprod ( &orient->vec.fvec, &goal_orient->vec.fvec );
-
-	if ( t < SMALLER_NUM )  {
-		if ( z_dotprod > 0.0f )
-			theta = 0.0f;
-		else  {  // the forward vector is pointing exactly opposite of goal
-					// arbitrarily choose the x axis to rotate around until t becomes large enough
-			theta = PI;
-			rot_axis = orient->vec.rvec;
-		}
-	} else {
-		theta = asinf ( t );
-		vm_vec_scale ( &rot_axis, 1/t );
-		if ( z_dotprod < 0.0f )
-			theta = PI - theta;
-	}
-
-	// rotate rot_axis into ship reference frame
-	vm_vec_rotate ( &local_rot_axis, &rot_axis, orient );
-
-	// find theta to goal
-	vm_vec_copy_scale(&theta_goal, &local_rot_axis, theta);
-	Assert ( fl_abs (theta_goal.xyz.z) < 0.001f );		// check for proper rotation
-
-	theta_end = vmd_zero_vector;
-	float delta_theta;
-
-	// find rotation about x
-	if (theta_goal.xyz.x > 0) {
-		if (w_in->xyz.x >= 0) {
-			delta_theta = approach(w_in->xyz.x, vel_limit->xyz.x, theta_goal.xyz.x, acc_limit->xyz.x, delta_t, &w_out->xyz.x, no_overshoot);
-			theta_end.xyz.x = delta_theta;
-		} else { // w_in->xyz.x < 0
-			delta_theta = away(w_in->xyz.x, vel_limit->xyz.x, theta_goal.xyz.x, acc_limit->xyz.x, delta_t, &w_out->xyz.x, no_overshoot);
-			theta_end.xyz.x = delta_theta;
-		}
-	} else if (theta_goal.xyz.x < 0) {
-		if (w_in->xyz.x <= 0) {
-			delta_theta = approach(-w_in->xyz.x, vel_limit->xyz.x, -theta_goal.xyz.x, acc_limit->xyz.x, delta_t, &w_out->xyz.x, no_overshoot);
-			theta_end.xyz.x = -delta_theta;
-			w_out->xyz.x = -w_out->xyz.x;
-		} else { // w_in->xyz.x > 0
-			delta_theta = away(-w_in->xyz.x, vel_limit->xyz.x, -theta_goal.xyz.x, acc_limit->xyz.x, delta_t, &w_out->xyz.x, no_overshoot);
-			theta_end.xyz.x = -delta_theta;
-			w_out->xyz.x = -w_out->xyz.x;
-		}
-	} else { // theta_goal == 0
-		if (w_in->xyz.x < 0) {
-			delta_theta = away(w_in->xyz.x, vel_limit->xyz.x, theta_goal.xyz.x, acc_limit->xyz.x, delta_t, &w_out->xyz.x, no_overshoot);
-			theta_end.xyz.x = delta_theta;
-		} else {
-			delta_theta = away(-w_in->xyz.x, vel_limit->xyz.x, theta_goal.xyz.x, acc_limit->xyz.x, delta_t, &w_out->xyz.x, no_overshoot);
-			theta_end.xyz.x = -delta_theta;
-			w_out->xyz.x = -w_out->xyz.x;
-		}
-	}
-
-	// find rotation about y
-	if (theta_goal.xyz.y > 0) {
-		if (w_in->xyz.y >= 0) {
-			delta_theta = approach(w_in->xyz.y, vel_limit->xyz.y, theta_goal.xyz.y, acc_limit->xyz.y, delta_t, &w_out->xyz.y, no_overshoot);
-			theta_end.xyz.y = delta_theta;
-		} else { // w_in->xyz.y < 0
-			delta_theta = away(w_in->xyz.y, vel_limit->xyz.y, theta_goal.xyz.y, acc_limit->xyz.y, delta_t, &w_out->xyz.y, no_overshoot);
-			theta_end.xyz.y = delta_theta;
-		}
-	} else if (theta_goal.xyz.y < 0) {
-		if (w_in->xyz.y <= 0) {
-			delta_theta = approach(-w_in->xyz.y, vel_limit->xyz.y, -theta_goal.xyz.y, acc_limit->xyz.y, delta_t, &w_out->xyz.y, no_overshoot);
-			theta_end.xyz.y = -delta_theta;
-			w_out->xyz.y = -w_out->xyz.y;
-		} else { // w_in->xyz.y > 0
-			delta_theta = away(-w_in->xyz.y, vel_limit->xyz.y, -theta_goal.xyz.y, acc_limit->xyz.y, delta_t, &w_out->xyz.y, no_overshoot);
-			theta_end.xyz.y = -delta_theta;
-			w_out->xyz.y = -w_out->xyz.y;
-		}
-	} else { // theta_goal == 0
-		if (w_in->xyz.y < 0) {
-			delta_theta = away(w_in->xyz.y, vel_limit->xyz.y, theta_goal.xyz.y, acc_limit->xyz.y, delta_t, &w_out->xyz.y, no_overshoot);
-			theta_end.xyz.y = delta_theta;
-		} else {
-			delta_theta = away(-w_in->xyz.y, vel_limit->xyz.y, theta_goal.xyz.y, acc_limit->xyz.y, delta_t, &w_out->xyz.y, no_overshoot);
-			theta_end.xyz.y = -delta_theta;
-			w_out->xyz.y = -w_out->xyz.y;
-		}
-	}
-
-	// FIND Z ROTATON MATRIX
-	theta_end.xyz.z = 0.0f;
-	rot_axis = theta_end;
-	Assert(is_valid_vec(&rot_axis));
-
-	//	normalize rotation axis and determine total rotation angle
-	theta = vm_vec_mag(&rot_axis);
-	if (theta < SMALL_NUM)  {
-		theta = 0.0f;
-		M_intermed = *orient;
-	} else {
-		vm_vec_scale ( &rot_axis, 1/theta );		
-		vm_quaternion_rotate ( &Mtemp1, theta, &rot_axis );
-		Assert(is_valid_matrix(&Mtemp1));
-		vm_matrix_x_matrix ( &M_intermed, orient, &Mtemp1 );
-		Assert(is_valid_matrix(&M_intermed));
-	}
-
-
-	// FIND ROTATION ABOUT Z (IF ANY)
-	// no rotation if delta_bank and w_in both 0 or rotational acc in forward is 0
-	no_bank = ( acc_limit->xyz.z == 0.0f && vel_limit->xyz.z == 0.0f );
-
-	if ( no_bank )  {	// no rotation on z, so we're done (no rotation of w)
-		*next_orient = M_intermed;
-		vm_orthogonalize_matrix ( next_orient );
-		return;
-	} else {
-	// calculate delta_bank using orient->vec.rvec, goal_orient->vec.rvec
-	//
-		vm_vec_crossprod ( &rot_axis, &orient->vec.rvec, &goal_orient->vec.rvec );
-
-		t = vm_vec_mag(&rot_axis);
-		if (t > 1.0f)
-			t = 1.0f;
-
-		r_dotprod = vm_vec_dotprod ( &orient->vec.rvec, &goal_orient->vec.rvec );
-
-		if ( t < SMALLER_NUM )  {
-			if ( r_dotprod > 0.0f )
-				theta = 0.0f;
-			else  {  // the right vector is pointing exactly opposite of goal, so rotate 180 on z
-				theta = PI;
-				rot_axis = orient->vec.fvec;
-			}
-		} else {
-			theta = asinf ( t );
-			vm_vec_scale ( &rot_axis, 1/t );
-			if ( z_dotprod < 0.0f )
-				theta = PI - theta;
-		}
-
-		// rotate rot_axis into ship reference frame
-		vm_vec_rotate ( &local_rot_axis, &rot_axis, orient );
-
-		// find theta.xyz.z to goal
-		delta_bank = local_rot_axis.xyz.z * theta;
-		Assert( fl_abs (local_rot_axis.xyz.x) < 0.001f );		// check for proper rotation
-		bank = 0.0f;
-
-	// end calculate delta_bank
-	// find rotation about z
-	if (delta_bank > 0) {
-		if (w_in->xyz.z >= 0) {
-			delta_theta = approach(w_in->xyz.z, vel_limit->xyz.z, delta_bank, acc_limit->xyz.z, delta_t, &w_out->xyz.z, no_overshoot);
-			bank = delta_theta;
-		} else { // w_in->xyz.z < 0
-			delta_theta = away(w_in->xyz.z, vel_limit->xyz.z, delta_bank, acc_limit->xyz.z, delta_t, &w_out->xyz.z, no_overshoot);
-			bank = delta_theta;
-		}
-	} else if (delta_bank < 0) {
-		if (w_in->xyz.z <= 0) {
-			delta_theta = approach(-w_in->xyz.z, vel_limit->xyz.z, -delta_bank, acc_limit->xyz.z, delta_t, &w_out->xyz.z, no_overshoot);
-			bank = -delta_theta;
-			w_out->xyz.z = -w_out->xyz.z;
-		} else { // w_in->xyz.z > 0
-			delta_theta = away(-w_in->xyz.z, vel_limit->xyz.z, -delta_bank, acc_limit->xyz.z, delta_t, &w_out->xyz.z, no_overshoot);
-			bank = -delta_theta;
-			w_out->xyz.z = -w_out->xyz.z;
-		}
-	} else { // theta_goal == 0
-		if (w_in->xyz.z < 0) {
-			delta_theta = away(w_in->xyz.z, vel_limit->xyz.z, delta_bank, acc_limit->xyz.z, delta_t, &w_out->xyz.z, no_overshoot);
-			bank = delta_theta;
-		} else {
-			delta_theta = away(-w_in->xyz.z, vel_limit->xyz.z, delta_bank, acc_limit->xyz.z, delta_t, &w_out->xyz.z, no_overshoot);
-			bank = -delta_theta;
-			w_out->xyz.z = -w_out->xyz.z;
-		}
-	}
-
-		if ( fl_abs (bank) < SMALL_NUM )
-		{
-			*next_orient = M_intermed;
-			vm_orthogonalize_matrix ( next_orient );
-		} else {
-
-		rotate_z ( &Mtemp1, bank );
-		vtemp = *w_out;
-		vm_vec_rotate ( w_out, &vtemp, &Mtemp1 );
-		vm_matrix_x_matrix ( next_orient, &M_intermed, &Mtemp1 );
-		Assert(is_valid_matrix(next_orient));
-		vm_orthogonalize_matrix ( next_orient );
-		}
-	}
-}	// end vm_fvec_matrix_interpolate
-
 
 // ---------------------------------------------------------------------------------------------
 //
