@@ -1,5 +1,4 @@
 
-#include "globalincs/pstypes.h"
 #include "pilotfile/pilotfile.h"
 #include "ship/ship.h"
 #include "stats/medals.h"
@@ -281,7 +280,7 @@ void pilotfile::update_stats_backout(scoring_struct *stats, bool training)
 
 			for (idx = 0; idx < list_size; idx++) {
 				if ( p_stats->ship_kills[idx].name.compare(Ship_info[i].name) == 0 ) {
-					j = i;
+					j = idx;
 					break;
 				}
 			}
@@ -289,7 +288,7 @@ void pilotfile::update_stats_backout(scoring_struct *stats, bool training)
 			if (j >= 0) {
 				p_stats->ship_kills[j].val -= stats->m_okKills[i];
 			} else {
-				Assertion(false, "Ship kills of '%s' not found, should have been added by pilotfile::update_stats.", stats->m_okKills[i]);
+				Assertion(false, "Ship kills of '%s' not found, should have been added by pilotfile::update_stats.", Ship_info[i].name);
 			}
 		}
 	}
