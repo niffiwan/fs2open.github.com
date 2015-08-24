@@ -2049,6 +2049,10 @@ int check_sexp_syntax(int node, int return_type, int recursive, int *bad_node, i
 						}
 						break;
 
+					case OP_BEAM_FLOATING_FIRE:
+						ship_index = CDDDDDR(CDDR(op_node));
+						break;
+
 					case OP_QUERY_ORDERS:
 						ship_index = CDR(CDR(CDR(CDR(op_node))));
 						break;
@@ -2337,17 +2341,19 @@ int check_sexp_syntax(int node, int return_type, int recursive, int *bad_node, i
 				if (!stricmp(CTEXT(node), "<any support ship class>"))
 					break;
 
-				for (i = 0; i < Num_ship_classes; i++ ) {
-					if ( !stricmp(CTEXT(node), Ship_info[i].name) )
+				i = -1;
+				for ( auto it = Ship_info.cbegin(); it != Ship_info.cend(); ++it ) {
+					if ( !stricmp(CTEXT(node), it->name) )
 					{
-						if (Ship_info[i].flags & SIF_SUPPORT)
+						if (it->flags & SIF_SUPPORT)
 						{
+							i = std::distance(Ship_info.cbegin(), it);
 							break;
 						}
 					}
 				}
 
-				if ( i == Num_ship_classes )
+				if ( i == -1 )
 					return SEXP_CHECK_INVALID_SUPPORT_SHIP_CLASS;
 
 				break;
@@ -2369,6 +2375,17 @@ int check_sexp_syntax(int node, int return_type, int recursive, int *bad_node, i
 			case OPF_NULL:
 				if (type2 != OPR_NULL){
 					return SEXP_CHECK_TYPE_MISMATCH;
+				}
+
+				break;
+
+			case OPF_SSM_CLASS:
+				if ( type2 != SEXP_ATOM_STRING ) {
+					return SEXP_CHECK_TYPE_MISMATCH;
+				}
+
+				if (ssm_info_lookup(CTEXT(node)) < 0) {
+					return SEXP_CHECK_INVALID_SSM_CLASS;
 				}
 
 				break;
@@ -7550,7 +7567,7 @@ int sexp_get_damage_caused(int node)
 		damage_caused += get_damage_caused (damaged_sig, attacker_sig);
 	}
 	
-	Assert ((ship_class > -1) && (ship_class < MAX_SHIP_CLASSES));
+	Assertion((ship_class > -1) && (ship_class < static_cast<int>(Ship_info.size())), "Invalid ship class '%d' passed to sexp_get_damage_caused() (should be >= 0 and < %d); get a coder!\n", ship_class, static_cast<int>(Ship_info.size()));
 	return (int) ((damage_caused/Ship_info[ship_class].max_hull_strength) * 100.0f);
 }
 
@@ -15726,7 +15743,7 @@ int sexp_shield_quad_low(int node)
 	if((Ships[sindex].objnum < 0) || (Ships[sindex].objnum >= MAX_OBJECTS)){
 		return SEXP_FALSE;
 	}
-	if((Ships[sindex].ship_info_index < 0) || (Ships[sindex].ship_info_index >= Num_ship_classes)){
+	if((Ships[sindex].ship_info_index < 0) || (Ships[sindex].ship_info_index >= static_cast<int>(Ship_info.size()))){
 		return SEXP_FALSE;
 	}
 	objp = &Objects[Ships[sindex].objnum];
@@ -19883,7 +19900,7 @@ int sexp_num_type_kills(int node)
 
 	// look stuff up	
 	total = 0;
-	for(idx=0; idx<Num_ship_classes; idx++){
+	for(idx = 0; idx < static_cast<int>(Ship_info.size()); idx++) {
 		if((p->stats.m_okKills[idx] > 0) && ship_class_query_general_type(idx)==st_index){
 			total += p->stats.m_okKills[idx];
 		}
@@ -19932,7 +19949,7 @@ int sexp_num_class_kills(int node)
 
 	// get the ship type we're looking for
 	si_index = ship_info_lookup(CTEXT(CDR(node)));
-	if((si_index < 0) || (si_index > Num_ship_classes)){
+	if((si_index < 0) || (si_index >= static_cast<int>(Ship_info.size()))){
 		return 0;
 	}
 
@@ -22569,9 +22586,11 @@ void sexp_call_ssm_strike(int node) {
 		if (ship_num >= 0) {
 			int obj_num = Ships[ship_num].objnum;
 			object *target_ship = &Objects[obj_num];
-			vec3d *start = &target_ship->pos; 
+			vec3d start = target_ship->pos;
 
-			ssm_create(target_ship, start, ssm_index, NULL, calling_team);
+			vm_vec_scale_add(&start, &start, &target_ship->orient.vec.fvec, -1);
+
+			ssm_create(target_ship, &start, ssm_index, NULL, calling_team);
 		}
 	}
 }
@@ -28717,6 +28736,9 @@ char *sexp_error_message(int num)
 
 		case SEXP_CHECK_INVALID_GAME_SND:
 			return "Invalid game sound";
+
+		case SEXP_CHECK_INVALID_SSM_CLASS:
+			return "Invalid SSM class";
 
 		default:
 			Warning(LOCATION, "Unhandled sexp error code %d!", num);
