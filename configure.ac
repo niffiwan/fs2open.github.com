@@ -457,6 +457,13 @@ PKG_CHECK_MODULES(
 D_CFLAGS=$D_CFLAGS" $PNG_CFLAGS"
 FS2_LIBS=$FS2_LIBS" $PNG_LIBS"
 
+dnl zlib (1.2.3 is the latest security release)
+PKG_CHECK_MODULES(
+	[ZLIB],
+	[zlib >= 1.2.3])
+D_CFLAGS=$D_CFLAGS" $ZLIB_CFLAGS"
+FS2_LIBS=$FS2_LIBS" $ZLIB_LIBS"
+
 dnl LUA
 ## Checking for lua.pc and if that fails lua5.1.pc
 PKG_CHECK_MODULES(

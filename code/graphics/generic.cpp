@@ -162,9 +162,9 @@ int generic_anim_stream(generic_anim *ga)
 	int anim_fps = 0;
 	char full_path[MAX_PATH];
 	int size = 0, offset = 0;
-	const int NUM_TYPES = 2;
-	const ubyte type_list[NUM_TYPES] = {BM_TYPE_EFF, BM_TYPE_ANI};
-	const char *ext_list[NUM_TYPES] = {".eff", ".ani"};
+	const int NUM_TYPES = 3;
+	const ubyte type_list[NUM_TYPES] = {BM_TYPE_EFF, BM_TYPE_ANI, BM_TYPE_PNG};
+	const char *ext_list[NUM_TYPES] = {".eff", ".ani", ".png"};
 	int rval = -1;
 	int bpp;
 
@@ -219,6 +219,35 @@ int generic_anim_stream(generic_anim *ga)
 
 		ga->previous_frame = -1;
 	}
+	else if (ga->type == BM_TYPE_PNG) {
+		//bpp = 32;
+		if(ga->use_hud_color) {
+			;
+			// TODO do something useful, like set options for libpng to convert to an appropriate format
+			//bpp = 8;
+		}
+		// TODO this leaks memory due to the way the anis aren't reused correctly... fix one way or the other
+		if (ga->png.anim == nullptr) {
+			try {
+				ga->png.anim = new apng::apng_ani(ga->filename);
+			}
+			catch (const apng::ApngException& e) {
+				Warning(LOCATION, "Failed to load apng (%s) Message: %s", ga->filename, e.what());
+				return -1;
+			}
+			Warning(LOCATION, "png read: %i %i %i %f\n", ga->png.anim->w, ga->png.anim->h,
+					ga->png.anim->bpp, ga->png.anim->anim_time);
+		}
+		ga->num_frames = ga->png.anim->nframes;
+		ga->height = ga->png.anim->h;
+		ga->width = ga->png.anim->w;
+		ga->previous_frame = -1;
+		ga->buffer = ga->png.anim->frame.data.data();
+		bpp = ga->png.anim->bpp;
+		ga->bitmap_id = bm_create(bpp, ga->width, ga->height, ga->buffer, (bpp==8)?BMP_AABITMAP:0);
+		Warning(LOCATION, "PNG streaming not implemented yet\n");
+		//return -1;
+	}
 	else {
 		bpp = 32;
 		if(ga->use_hud_color)
@@ -267,8 +296,13 @@ int generic_anim_stream(generic_anim *ga)
 
 	ga->streaming = 1;
 
-	Assert(anim_fps != 0);
-	ga->total_time = ga->num_frames / (float) anim_fps;
+	if (ga->type == BM_TYPE_PNG) {
+		ga->total_time = ga->png.anim->anim_time;
+	}
+	else {
+		Assert(anim_fps != 0);
+		ga->total_time = ga->num_frames / (float) anim_fps;
+	}
 	ga->done_playing = 0;
 	ga->anim_time = 0.0f;
 
@@ -301,6 +335,12 @@ void generic_anim_unload(generic_anim *ga)
 					bm_release(ga->eff.next_frame);
 				if(ga->bitmap_id >= 0)
 					bm_release(ga->bitmap_id);
+			}
+			if(ga->type == BM_TYPE_PNG) {
+				if(ga->bitmap_id >= 0)
+					bm_release(ga->bitmap_id);
+				if (ga->png.anim)
+					delete ga->png.anim;
 			}
 		}
 		else {
@@ -434,9 +474,34 @@ void generic_render_ani_stream(generic_anim *ga)
 	#endif
 }
 
+void generic_render_png_stream(generic_anim* ga)
+{
+	if(ga->current_frame == ga->previous_frame)
+		return;
+	try {
+		ga->png.anim->next_frame();
+	}
+	catch (const apng::ApngException& e) {
+		mprintf(("Unable to get next apng frame (%s) Message: %s\n", ga->filename, e.what()));
+	}
+
+	//ubyte bpp = 32;
+	//if(ga->use_hud_color)
+	//	bpp = 8;
+	gr_update_texture(ga->bitmap_id, ga->png.anim->bpp, ga->buffer, ga->width, ga->height);
+}
+
 void generic_anim_render(generic_anim *ga, float frametime, int x, int y, bool menu)
 {
 	float keytime = 0.0;
+
+	// TODO remove once ready to actually play the animation!
+#if 0
+	if (ga->type == BM_TYPE_PNG) {
+		ga->done_playing = 1;
+		return;
+	}
+#endif
 
 	if(ga->keyframe)
 		keytime = (ga->total_time * ((float)ga->keyframe / (float)ga->num_frames));
@@ -492,6 +557,8 @@ void generic_anim_render(generic_anim *ga, float frametime, int x, int y, bool m
 			//handle streaming - render one frame
 			if(ga->type == BM_TYPE_ANI) {
 				generic_render_ani_stream(ga);
+			} else if (ga->type == BM_TYPE_PNG) {
+				generic_render_png_stream(ga);
 			} else {
 				generic_render_eff_stream(ga);
 			}
