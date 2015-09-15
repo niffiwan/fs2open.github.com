@@ -667,7 +667,6 @@ void messages_init()
 		}
 	}
 
-	mprintf(("after parse_msgtbl\n"));
 	Current_mission_mood = 0;
 
 	// reset the number of messages that we have for this mission
