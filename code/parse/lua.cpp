@@ -20,6 +20,7 @@
 #include "hud/hudgauges.h"
 #include "hud/hudshield.h"
 #include "iff_defs/iff_defs.h"
+#include "io/joy.h"
 #include "io/key.h"
 #include "io/mouse.h"
 #include "io/timer.h"
@@ -12713,6 +12714,21 @@ ADE_VIRTVAR(MouseControlStatus, l_Mouse, "boolean", "Gets and sets the retail mo
 		return ADE_RETURN_FALSE;
 }
 
+ADE_FUNC(getMouseSensitivity, l_Mouse, NULL, "Gets mouse sensitivity setting", "number", "Mouse sensitivity in range of 0-9")
+{
+	return ade_set_args(L, "i", Mouse_sensitivity);
+}
+
+ADE_FUNC(getJoySensitivity, l_Mouse, NULL, "Gets joystick sensitivity setting", "number", "Joystick sensitivity in range of 0-9")
+{
+	return ade_set_args(L, "i", Joy_sensitivity);
+}
+
+ADE_FUNC(getJoyDeadzone, l_Mouse, NULL, "Gets joystick deadzone setting", "number", "Joystick deadzone in range of 0-9")
+{
+	return ade_set_args(L, "i", Dead_zone_size / 5);
+}
+
 //trackir funcs
 ADE_FUNC(updateTrackIR, l_Mouse, NULL, "Updates Tracking Data. Call before using get functions", "boolean", "Checks if trackir is available and updates variables, returns true if successful, otherwise false")
 {
@@ -13246,9 +13262,7 @@ ADE_FUNC(setTarget, l_Graphics, "[texture Texture]",
 	int idx = -1;
 	ade_get_args(L, "|o", l_Texture.Get(&idx));
 
-	int i = bm_set_render_target(idx, 0);
-
-	return ade_set_args(L, "b", i ? true : false);
+	return ade_set_args(L, "b", bm_set_render_target(idx, 0));
 }
 
 ADE_FUNC(setCamera, l_Graphics, "[camera handle Camera]", "Sets current camera, or resets camera if none specified", "boolean", "true if successful, false or nil otherwise")
