@@ -312,12 +312,12 @@ int add_avi( char *avi_name )
 	}
 
 	// would have returned if a slot existed.
-	// NOTE: we don't actually want to load the anim data since
-	// head ani's are streamed. If we load, we waste bmpman slots
 	generic_anim_init( &extra.anim_data );
 	strcpy_s( extra.name, avi_name );
 	strcpy_s( extra.anim_data.filename, avi_name);
 	extra.num = -1;
+	generic_anim_load(&extra.anim_data);   // load only to validate the anim
+	generic_anim_unload(&extra.anim_data); // unload to not waste bmpman slots
 	Message_avis.push_back(extra); 
 	Num_message_avis++;
 	return ((int)Message_avis.size() - 1);
