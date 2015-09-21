@@ -928,6 +928,8 @@ void ship_info::clone(const ship_info& other)
 	newtonian_damp_override = other.newtonian_damp_override;
 
 	autoaim_fov = other.autoaim_fov;
+	autoaim_lock_snd = other.autoaim_lock_snd;
+	autoaim_lost_snd = other.autoaim_lost_snd;
 
 	topdown_offset_def = other.topdown_offset_def;
 	topdown_offset = other.topdown_offset;
@@ -1207,6 +1209,8 @@ void ship_info::move(ship_info&& other)
 	newtonian_damp_override = other.newtonian_damp_override;
 
 	autoaim_fov = other.autoaim_fov;
+	autoaim_lock_snd = other.autoaim_lock_snd;
+	autoaim_lost_snd = other.autoaim_lost_snd;
 
 	topdown_offset_def = other.topdown_offset_def;
 	std::swap(topdown_offset, other.topdown_offset);
