@@ -8,11 +8,6 @@
 #include "palman/palman.h"
 #include "pngutils/pngutils.h"
 
-// extras for apng
-#include <stdlib.h>
-#include <vector>
-#include "zlib.h"
-
 CFILE *png_file = NULL;
 
 /*
@@ -33,76 +28,6 @@ void png_scp_read_data(png_structp png_ptr, png_bytep data, png_size_t length)
 }
 
 /*
- * @brief common setup to read PNGs
- *
- * @param[in]  real_filename  png to process, used if img_cfp is NULL
- * @param[in]  img_cfp        alternative to specify target png
- * @param[out] png_ptr
- * @param[out] info_ptr
- */
-int png_read_common(const char *real_filename, CFILE *img_cfp, png_structp &png_ptr, png_infop &info_ptr, CFILE* &png_cfp)
-{
-	char filename[MAX_FILENAME_LEN];
-
-	if (img_cfp == NULL) {
-		strcpy_s( filename, real_filename );
-		char *p = strchr( filename, '.' );
-		if ( p ) *p = 0;
-		strcat_s( filename, ".png" );
-
-		png_cfp = cfopen( filename , "rb" );
-
-		if ( !png_cfp ) {
-			return PNG_ERROR_READING;
-		}
-	} else {
-		png_cfp = img_cfp;
-	}
-
-	if (png_cfp == NULL)
-		return PNG_ERROR_READING;
-
-	/* Create and initialize the png_struct with the desired error handler
-	* functions.  If you want to use the default stderr and longjump method,
-	* you can supply NULL for the last three parameters.  We also supply the
-	* the compiler header file version, so that we know if the application
-	* was compiled with a compatible version of the library.  REQUIRED
-	*/
-	png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-
-	if (png_ptr == NULL)
-	{
-		mprintf(("png_read_common: error creating read struct\n"));
-		cfclose(png_cfp);
-		return PNG_ERROR_READING;
-	}
-
-	/* Allocate/initialize the memory for image information.  REQUIRED. */
-	info_ptr = png_create_info_struct(png_ptr);
-	if (info_ptr == NULL)
-	{
-		mprintf(("png_read_common: error creating info struct\n"));
-		cfclose(png_cfp);
-		png_destroy_read_struct(&png_ptr, NULL, NULL);
-		return PNG_ERROR_READING;
-	}
-
-	// TODO remove setjmp (& png_set_read_fn); setjmp needs to be in functions calling png_*
-
-	if (setjmp(png_jmpbuf(png_ptr)))
-	{
-		mprintf(("png_read_common: something went wrong\n"));
-		png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-		cfclose(png_cfp);
-		return PNG_ERROR_READING;
-	}
-
-	png_set_read_fn(png_ptr, &png_cfp, png_scp_read_data);
-
-	return PNG_ERROR_NONE;
-}
-
-/*
  * @brief Reads header information from the PNG file into the bitmap pointer
  *
  * @param [in]  filename  name of the PNG bitmap file
@@ -115,13 +40,71 @@ int png_read_common(const char *real_filename, CFILE *img_cfp, png_structp &png_
  */
 int png_read_header(const char *real_filename, CFILE *img_cfp, int *w, int *h, int *bpp, ubyte *palette)
 {
+	char filename[MAX_FILENAME_LEN];
 	png_infop info_ptr;
 	png_structp png_ptr;
 
 	png_file = NULL;
-	if (png_read_common(real_filename, img_cfp, png_ptr, info_ptr, png_file)) {
+
+	if (img_cfp == NULL) {
+		strcpy_s( filename, real_filename );
+
+		char *p = strchr( filename, '.' );
+
+		if ( p )
+			*p = 0;
+		strcat_s( filename, ".png" );
+
+		png_file = cfopen( filename , "rb" );
+
+		if ( !png_file ) {
+			return PNG_ERROR_READING;
+		}
+	} else {
+		png_file = img_cfp;
+	}
+
+	Assert( png_file != NULL );
+
+	if (png_file == NULL)
+		return PNG_ERROR_READING;
+
+	/* Create and initialize the png_struct with the desired error handler
+	* functions.  If you want to use the default stderr and longjump method,
+	* you can supply NULL for the last three parameters.  We also supply the
+	* the compiler header file version, so that we know if the application
+	* was compiled with a compatible version of the library.  REQUIRED
+	*/
+	png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+
+	if (png_ptr == NULL)
+	{
+		mprintf(("png_read_header: error creating read struct\n"));
+		cfclose(png_file);
 		return PNG_ERROR_READING;
 	}
+
+	/* Allocate/initialize the memory for image information.  REQUIRED. */
+	info_ptr = png_create_info_struct(png_ptr);
+	if (info_ptr == NULL)
+	{
+		mprintf(("png_read_header: error creating info struct\n"));
+		cfclose(png_file);
+		png_destroy_read_struct(&png_ptr, NULL, NULL);
+		return PNG_ERROR_READING;
+	}
+
+	if (setjmp(png_jmpbuf(png_ptr)))
+	{
+		mprintf(("png_read_header: something went wrong\n"));
+		/* Free all of the memory associated with the png_ptr and info_ptr */
+		png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+		cfclose(png_file);
+		/* If we get here, we had a problem reading the file */
+		return PNG_ERROR_READING;
+	}
+
+	png_set_read_fn(png_ptr, &png_file, png_scp_read_data);
 
 	png_read_info(png_ptr, info_ptr);
 
@@ -153,15 +136,60 @@ int png_read_header(const char *real_filename, CFILE *img_cfp, int *w, int *h, i
  */
 int png_read_bitmap(const char *real_filename, ubyte *image_data, ubyte *bpp, int dest_size, int cf_type)
 {
+	char filename[MAX_FILENAME_LEN];
 	png_infop info_ptr;
 	png_structp png_ptr;
 	png_bytepp row_pointers;
 	unsigned int i, len;
 
 	png_file = NULL;
-	if (png_read_common(real_filename, NULL, png_ptr, info_ptr, png_file)) {
+
+	strcpy_s( filename, real_filename );
+	char *p = strchr( filename, '.' );
+	if ( p ) *p = 0;
+	strcat_s( filename, ".png" );
+
+	png_file = cfopen(filename, "rb", CFILE_NORMAL, cf_type);
+
+	if (png_file == NULL)
+		return PNG_ERROR_READING;
+
+	/* Create and initialize the png_struct with the desired error handler
+	* functions.  If you want to use the default stderr and longjump method,
+	* you can supply NULL for the last three parameters.  We also supply the
+	* the compiler header file version, so that we know if the application
+	* was compiled with a compatible version of the library.  REQUIRED
+	*/
+	png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+
+	if (png_ptr == NULL)
+	{
+		mprintf(("png_read_bitmap: png_ptr went wrong\n"));
+		cfclose(png_file);
 		return PNG_ERROR_READING;
 	}
+
+	/* Allocate/initialize the memory for image information.  REQUIRED. */
+	info_ptr = png_create_info_struct(png_ptr);
+	if (info_ptr == NULL)
+	{
+		mprintf(("png_read_bitmap: info_ptr went wrong\n"));
+		cfclose(png_file);
+		png_destroy_read_struct(&png_ptr, NULL, NULL);
+		return PNG_ERROR_READING;
+	}
+
+	if (setjmp(png_jmpbuf(png_ptr)))
+	{
+		mprintf(("png_read_bitmap: something went wrong\n"));
+		/* Free all of the memory associated with the png_ptr and info_ptr */
+		png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+		cfclose(png_file);
+		/* If we get here, we had a problem reading the file */
+		return PNG_ERROR_READING;
+	}
+
+	png_set_read_fn(png_ptr, &png_file, png_scp_read_data);
 
 	png_read_png(png_ptr, info_ptr, PNG_TRANSFORM_BGR | PNG_TRANSFORM_EXPAND | PNG_TRANSFORM_STRIP_16, NULL);
 	len = png_get_rowbytes(png_ptr, info_ptr);
@@ -318,7 +346,6 @@ int apng_ani::_processing_start()
 		return 1;
 	}
 
-	_fdat_frame_started = true;
 	png_set_crc_action(_pngp, PNG_CRC_QUIET_USE, PNG_CRC_QUIET_USE);
 	png_set_progressive_read_fn(_pngp, this, apng::info_callback, apng::row_callback, nullptr);
 
@@ -398,7 +425,7 @@ void apng_ani::_process_chunk()
 {
 	_id = _read_chunk(_chunk);
 
-	if (_id == id_acTL && !_got_IDAT && !_found_actl) {
+	if (_id == id_acTL && !_got_IDAT && !_got_acTL) {
 		// animation control chunk
 		if (!_reading) {
 			return;
@@ -410,11 +437,11 @@ void apng_ani::_process_chunk()
 			_apng_failed("invalid apng acTL data");
 		}
 
-		_found_actl = true;
+		_got_acTL = true;
 		_frames.reserve(nframes);
 		_frame_offsets.reserve(nframes+1); // extra 1 is for EOF offset
 	}
-	else if (_id == id_fcTL && (!_got_IDAT || _found_actl)) {
+	else if (_id == id_fcTL && (!_got_IDAT || _got_acTL)) {
 		// frame control chunk
 		if (_reading) {
 			uint sequence_num = png_get_uint_32(&_chunk.data[8]);
@@ -423,10 +450,7 @@ void apng_ani::_process_chunk()
 			}
 		}
 
-		// handle finish in next_frame
-		if (!_reading) {
-			_got_fcTL = true;
-		}
+		// handle frame finish in next_frame
 
 		_framew = png_get_uint_32(&_chunk.data[12]);
 		_frameh = png_get_uint_32(&_chunk.data[16]);
@@ -465,7 +489,7 @@ void apng_ani::_process_chunk()
 		_got_IDAT = true;
 		_processing_data(&_chunk.data[0], _chunk.size);
 	}
-	else if (_id == id_fdAT && _found_actl) {
+	else if (_id == id_fdAT && _got_acTL) {
 		if (_reading) {
 			uint sequence_num = png_get_uint_32(&_chunk.data[8]);
 			if (sequence_num != _sequence_num++) {
@@ -516,7 +540,7 @@ int apng_ani::next_frame()
 		if (current_frame > 0) {
 			if (_dispose_op == 1) {
 				// clear to fully transparent black
-				frame.data.assign(0, _image_size);
+				frame.data.assign(_image_size, 0);
 			}
 			else if (_dispose_op == 2) {
 				// revert to previous
@@ -529,11 +553,12 @@ int apng_ani::next_frame()
 			_process_chunk();
 		}
 
-		Warning(LOCATION, "next_frame; new (%03lu) (%03i) (%u) (%u) %03u|%03u %03u|%03u (%02lu)",
+		Warning(LOCATION, "next_frame; new (%03lu) (%03i) (%u) (%u) %03u|%03u %03u|%03u (%02lu) (%04f)",
 				_frames.size(), current_frame, _dispose_op, _blend_op,
-				_framew, _x_offset, _frameh, _y_offset, _frame_offsets.size());
+				_framew, _x_offset, _frameh, _y_offset,
+				_frame_offsets.size(), frame_delay);
 
-		if (_got_IDAT && _fdat_frame_started && _processing_finish()) {
+		if (_got_IDAT && _processing_finish()) {
 			_apng_failed("couldn't finish fdat apng frame");
 		}
 
@@ -545,10 +570,13 @@ int apng_ani::next_frame()
 		_frames.push_back(frame);
 	}
 	else {
-		Warning(LOCATION, "next_frame; used old (%lu) (%i)", _frames.size(), current_frame);
+		Warning(LOCATION, "next_frame; used old (%03lu) (%03i)", _frames.size(), current_frame);
 	}
+
 	frame.data = _frames.at(current_frame).data;
-	current_frame++; // TODO deal with reaching the end!
+	if (++current_frame >= nframes) {
+		current_frame = 0;
+	}
 
 	return 1;
 }
@@ -593,7 +621,7 @@ int apng_ani::load_header()
 	w = png_get_uint_32(&_chunk_IHDR.data[8]);
 	h = png_get_uint_32(&_chunk_IHDR.data[12]);
 	_row_len = w * 4;
-	bpp = 32;  // we'll force all our frames to use this; TODO consider greyscales for headanis
+	bpp = 32;  // we'll force all our frames to use this
 
 	// setup frames & keep bm_create happy
 	_image_size = _row_len * h;
@@ -650,24 +678,29 @@ apng_ani::apng_ani(const char* filename)
 	, nframes(0)
 	, current_frame(0)
 	, plays(0)
-	, anim_time(0)
-	, frame_delay(0)
+	, anim_time(0.0)
+	, frame_delay(0.0)
 	, _filename(filename)
 	, _pngp(nullptr)
 	, _infop(nullptr)
 	, _cfp(nullptr)
 	, _offset(0)
-	, _image_size(0)
 	, _sequence_num(0)
+	, _id(0)
 	, _row_len(0)
-	, _found_actl(false)
+	, _image_size(0)
+	, _framew(0)
+	, _frameh(0)
+	, _x_offset(0)
+	, _y_offset(0)
+	, _delay_num(1)
+	, _delay_den(100)
+	, _dispose_op(0)
+	, _blend_op(0)
 	, _reading(true)
-	, _got_fcTL(false)
+	, _got_acTL(false)
 	, _got_IDAT(false)
-	, _fdat_frame_started(false)
 {
-	// TODO remove unused vars from struct
-	// TODO confirm ctor deals with all class vars
 	load_header();
 }
 

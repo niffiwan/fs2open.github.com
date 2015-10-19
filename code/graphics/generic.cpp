@@ -220,13 +220,6 @@ int generic_anim_stream(generic_anim *ga)
 		ga->previous_frame = -1;
 	}
 	else if (ga->type == BM_TYPE_PNG) {
-		//bpp = 32;
-		if(ga->use_hud_color) {
-			;
-			// TODO do something useful, like set options for libpng to convert to an appropriate format
-			//bpp = 8;
-		}
-		// TODO this leaks memory due to the way the anis aren't reused correctly... fix one way or the other
 		if (ga->png.anim == nullptr) {
 			try {
 				ga->png.anim = new apng::apng_ani(ga->filename);
@@ -238,15 +231,13 @@ int generic_anim_stream(generic_anim *ga)
 			Warning(LOCATION, "png read: %i %i %i %f\n", ga->png.anim->w, ga->png.anim->h,
 					ga->png.anim->bpp, ga->png.anim->anim_time);
 		}
+		ga->png.anim->current_frame = 0;
 		ga->num_frames = ga->png.anim->nframes;
 		ga->height = ga->png.anim->h;
 		ga->width = ga->png.anim->w;
 		ga->previous_frame = -1;
 		ga->buffer = ga->png.anim->frame.data.data();
-		bpp = ga->png.anim->bpp;
-		ga->bitmap_id = bm_create(bpp, ga->width, ga->height, ga->buffer, (bpp==8)?BMP_AABITMAP:0);
-		Warning(LOCATION, "PNG streaming not implemented yet\n");
-		//return -1;
+		ga->bitmap_id = bm_create(ga->png.anim->bpp, ga->width, ga->height, ga->buffer, 0);
 	}
 	else {
 		bpp = 32;
@@ -476,8 +467,11 @@ void generic_render_ani_stream(generic_anim *ga)
 
 void generic_render_png_stream(generic_anim* ga)
 {
-	if(ga->current_frame == ga->previous_frame)
+	if(ga->current_frame == ga->previous_frame) {
 		return;
+	}
+
+	bm_lock(ga->bitmap_id, ga->png.anim->bpp, BMP_TEX_NONCOMP, true);  // lock in 32 bpp for png
 	try {
 		ga->png.anim->next_frame();
 	}
@@ -485,23 +479,17 @@ void generic_render_png_stream(generic_anim* ga)
 		mprintf(("Unable to get next apng frame (%s) Message: %s\n", ga->filename, e.what()));
 	}
 
-	//ubyte bpp = 32;
-	//if(ga->use_hud_color)
-	//	bpp = 8;
-	gr_update_texture(ga->bitmap_id, ga->png.anim->bpp, ga->buffer, ga->width, ga->height);
+	ubyte bpp = ga->png.anim->bpp;
+	if (ga->use_hud_color) {
+		bpp = 8;
+	}
+	gr_update_texture(ga->bitmap_id, bpp, ga->buffer, ga->width, ga->height);  // this will convert to 8 bpp if required
+	bm_unlock(ga->bitmap_id);
 }
 
 void generic_anim_render(generic_anim *ga, float frametime, int x, int y, bool menu)
 {
 	float keytime = 0.0;
-
-	// TODO remove once ready to actually play the animation!
-#if 0
-	if (ga->type == BM_TYPE_PNG) {
-		ga->done_playing = 1;
-		return;
-	}
-#endif
 
 	if(ga->keyframe)
 		keytime = (ga->total_time * ((float)ga->keyframe / (float)ga->num_frames));

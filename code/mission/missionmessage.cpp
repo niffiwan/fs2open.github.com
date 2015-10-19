@@ -1238,7 +1238,6 @@ void message_play_anim( message_q *q )
 
 	// check to see if the avi has been loaded.  If not, then load the AVI.  On an error loading
 	// the avi, set the top level index to -1 to avoid multiple tries at loading the flick.
-	// TODO fix the code below so that we can still cache ani's if required, just remove generic_anim_init?
 
 	// if there is something already here that's not this same file then go ahead a let go of it - taylor
 	if ( !strstr(anim_info->anim_data.filename, ani_name) ) {
