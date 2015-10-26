@@ -12102,7 +12102,7 @@ void sexp_add_background_bitmap(int n)
 	// sanity checking
 	if (stars_find_bitmap(sle.filename) < 0)
 	{
-		Error(LOCATION, "sexp-add-background-bitmap: Background bitmap %s not found!", sle.filename);
+		Warning(LOCATION, "sexp-add-background-bitmap: Background bitmap %s not found!", sle.filename);
 		return;
 	}
 
@@ -12180,7 +12180,7 @@ void sexp_remove_background_bitmap(int n)
 		if ( instances > slot ) {
 			stars_mark_bitmap_unused( slot );
 		} else {
-			Error(LOCATION, "remove-background-bitmap: slot %d does not exist. Slot must be less than %d.",
+			Warning(LOCATION, "remove-background-bitmap: slot %d does not exist. Slot must be less than %d.",
 				slot, instances);
 		}
 	}
@@ -12200,7 +12200,7 @@ void sexp_add_sun_bitmap(int n)
 	// sanity checking
 	if (stars_find_sun(sle.filename) < 0)
 	{
-		Error(LOCATION, "sexp-add-sun-bitmap: Sun %s not found!", sle.filename);
+		Warning(LOCATION, "sexp-add-sun-bitmap: Sun %s not found!", sle.filename);
 		return;
 	}
 
@@ -12273,7 +12273,7 @@ void sexp_remove_sun_bitmap(int n)
 		if ( instances > slot ) {
 			stars_mark_sun_unused( slot );
 		} else {
-			Error(LOCATION, "remove-sun-bitmap: slot %d does not exist. Slot must be less than %d.",
+			Warning(LOCATION, "remove-sun-bitmap: slot %d does not exist. Slot must be less than %d.",
 				slot, instances);
 		}
 	}
@@ -17790,6 +17790,7 @@ void sexp_turret_set_target_order(int node)
 		}
 
 		oindex++;
+		node = CDR(node);
 	}
 }
 void sexp_turret_set_direction_preference(int node)
@@ -17807,7 +17808,9 @@ void sexp_turret_set_direction_preference(int node)
 	}
 
 	//store direction preference
-	int dirpref = eval_num(CDR(node));
+	node = CDR(node);
+	int dirpref = eval_num(node);
+	node = CDR(node);
 
 	//Set range
 	while(node != -1){
@@ -17849,7 +17852,9 @@ void sexp_turret_set_rate_of_fire(int node)
 	}
 
 	//store rof
-	float rof = (float)eval_num(CDR(node));
+	node = CDR(node);
+	float rof = (float)eval_num(node);
+	node = CDR(node);
 
 	//Set rof
 	while(node != -1){
@@ -17886,7 +17891,9 @@ void sexp_turret_set_optimum_range(int node)
 	}
 
 	//store range
-	float range = (float)eval_num(CDR(node));
+	node = CDR(node);
+	float range = (float)eval_num(node);
+	node = CDR(node);
 
 	//Set range
 	while(node != -1){
@@ -17995,6 +18002,7 @@ void sexp_ship_turret_target_order(int node)
 		}
 
 		oindex++;
+		node = CDR(node);
 	}
 
 	turret = GET_FIRST(&Ships[sindex].subsys_list);
@@ -18028,6 +18036,8 @@ int sexp_get_turret_primary_ammo(int node)
 		return 0;
 	}
 
+	node = CDR(node);
+
 	turret = ship_get_subsys(&Ships[sindex], CTEXT(node));
 	if (turret == NULL) {
 		return 0;
@@ -18038,7 +18048,9 @@ int sexp_get_turret_primary_ammo(int node)
 
 	swp = &turret->weapons;
 
-	check = eval_num(CDR(node));
+	node = CDR(node);
+
+	check = eval_num(node);
 	if (check < 0) {
 		return 0;
 	}
@@ -18079,14 +18091,19 @@ void sexp_set_turret_primary_ammo(int node)
 		return;
 	}
 
+	node = CDR(node);
+
 	// Get the turret
-	turret = ship_get_subsys(&Ships[sindex], CTEXT(node));
+	char *subsys = CTEXT(node);
+	turret = ship_get_subsys(&Ships[sindex], subsys);
 	if (turret == NULL) {
 		return;
 	}
 
+	node = CDR(node);
+
 	// Get the bank to set the number on
-	requested_bank = eval_num(CDR(node));
+	requested_bank = eval_num(node);
 	if (requested_bank < 0)
 	{
 		return;
@@ -18094,7 +18111,7 @@ void sexp_set_turret_primary_ammo(int node)
 
 	//  Get the number of weapons requested	
 	node = CDR(node);
-	requested_weapons = eval_num(CDR(node));
+	requested_weapons = eval_num(node);
 	if (requested_weapons < 0)
 	{
 		return;
@@ -18103,7 +18120,6 @@ void sexp_set_turret_primary_ammo(int node)
 	set_turret_primary_ammo(turret, requested_bank, requested_weapons);
 
 	// Multiplayer call back
-	char *subsys = CTEXT(node);
 	multi_start_callback();
 	multi_send_int(sindex);
 	multi_send_string(subsys);
@@ -18175,6 +18191,8 @@ int sexp_get_turret_secondary_ammo(int node)
 		return 0;
 	}
 
+	node = CDR(node);
+
 	turret = ship_get_subsys(&Ships[sindex], CTEXT(node));
 	if (turret == NULL) {
 		return 0;
@@ -18185,7 +18203,9 @@ int sexp_get_turret_secondary_ammo(int node)
 
 	swp = &turret->weapons;
 
-	check = eval_num(CDR(node));
+	node = CDR(node);
+
+	check = eval_num(node);
 	if (check < 0) {
 		return 0;
 	}
@@ -18218,22 +18238,29 @@ void sexp_set_turret_secondary_ammo(int node)
 		return;
 	}
 
+	node = CDR(node);
+
 	// Get the turret
-	turret = ship_get_subsys(&Ships[sindex], CTEXT(node));
+	char *subsys = CTEXT(node);
+	turret = ship_get_subsys(&Ships[sindex], subsys);
 	if (turret == NULL) {
 		return;
 	}
 
+	node = CDR(node);
+
 	// Get the bank to set the number on
-	requested_bank = eval_num(CDR(node));
+	requested_bank = eval_num(node);
 	if (requested_bank < 0)
 	{
 		return;
 	}
 
-	//  Get the number of weapons requested	
+	//  Get the number of weapons requested
+
 	node = CDR(node);
-	requested_weapons = eval_num(CDR(node));
+
+	requested_weapons = eval_num(node);
 	if (requested_weapons < 0)
 	{
 		return;
@@ -18242,7 +18269,6 @@ void sexp_set_turret_secondary_ammo(int node)
 	set_turret_secondary_ammo(turret, requested_bank, requested_weapons);
 
 	// Multiplayer call back
-	char *subsys = CTEXT(node);
 	multi_start_callback();
 	multi_send_int(sindex);
 	multi_send_string(subsys);
