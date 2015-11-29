@@ -473,7 +473,8 @@ void apng_ani::_process_chunk()
 
 		if (_delay_den == 0) _delay_den = 100; // APNG spec
 		if (_delay_num == 0) _delay_num = 1;   // arbitrary lower bound
-		frame_delay = static_cast<float>(_delay_num)/static_cast<float>(_delay_den);
+		float frame_delay = static_cast<float>(_delay_num)/static_cast<float>(_delay_den);
+		frame.delay = frame_delay;
 
 		if (_reading) {
 			anim_time+= frame_delay;
@@ -556,7 +557,7 @@ int apng_ani::next_frame()
 		Warning(LOCATION, "next_frame; new (%03lu) (%03i) (%u) (%u) %03u|%03u %03u|%03u (%02lu) (%04f)",
 				_frames.size(), current_frame, _dispose_op, _blend_op,
 				_framew, _x_offset, _frameh, _y_offset,
-				_frame_offsets.size(), frame_delay);
+				_frame_offsets.size(), frame.delay);
 
 		if (_got_IDAT && _processing_finish()) {
 			_apng_failed("couldn't finish fdat apng frame");
@@ -573,7 +574,9 @@ int apng_ani::next_frame()
 		Warning(LOCATION, "next_frame; used old (%03lu) (%03i)", _frames.size(), current_frame);
 	}
 
-	frame.data = _frames.at(current_frame).data;
+	frame = _frames.at(current_frame);
+	// TODO consider if we really want to wrap here; or if should let upper levels deal with it
+	// issue being that apngs can't handle playing frames out of sequence due to pixel-data deltas
 	if (++current_frame >= nframes) {
 		current_frame = 0;
 	}
@@ -662,7 +665,6 @@ void apng_ani::_apng_failed(const char* msg)
 	current_frame = 0;
 	plays = 0;
 	anim_time = 0.0;
-	frame_delay = 0.0;
 
 	SCP_string error_msg = "(file ";
 	error_msg += _filename;
@@ -679,7 +681,6 @@ apng_ani::apng_ani(const char* filename)
 	, current_frame(0)
 	, plays(0)
 	, anim_time(0.0)
-	, frame_delay(0.0)
 	, _filename(filename)
 	, _pngp(nullptr)
 	, _infop(nullptr)

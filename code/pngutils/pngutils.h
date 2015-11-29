@@ -25,6 +25,7 @@ public:
 	struct apng_frame {
 		SCP_vector<ubyte>  data;
 		SCP_vector<ubyte*> rows;
+		float              delay;
 	};
 
 	apng_frame frame;
@@ -35,7 +36,6 @@ public:
 	uint       current_frame;
 	uint       plays;
 	float      anim_time;
-	float      frame_delay;
 
 	apng_ani(const char* filename);
 	~apng_ani();

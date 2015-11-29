@@ -40,6 +40,7 @@ typedef struct generic_anim {
 		} eff;
 		struct {
 			apng::apng_ani* anim;
+			float previous_frame_time;
 		} png;
 	};
 	ubyte type;
