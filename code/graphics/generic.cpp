@@ -473,11 +473,19 @@ void generic_render_png_stream(generic_anim* ga)
 	}
 
 	try {
-		if(ga->direction & GENERIC_ANIM_DIRECTION_BACKWARDS) {
-			//ga->png.anim->prev_frame();
-			Warning(LOCATION, "apngs can't play backwards yet");
+		if ((ga->direction & GENERIC_ANIM_DIRECTION_BACKWARDS) && (ga->previous_frame != -1)) {
+			nprintf(("apng", "apng stream prev\n"));
+			// TODO figure out why the ruddy door animations start BACKWARDS!
+			// special case the damn thing so get the 1st frame anyway?
+			// OK, they start backwards to ensure all doors start shut, i.e. don't open by default
+			// Or maybe they'd just jitter? Who knows! (who cares right now!)
+			// Maybe I need to convert apng_ani:: to have "get_frame_x" instead of "next/prev"
+			// and then deal with going forward or reverse as appropriate
+			// potentially running through multiple frames in order to do so...
+			ga->png.anim->prev_frame();
 		}
 		else {
+			nprintf(("apng", "apng stream next\n"));
 			ga->png.anim->next_frame();
 		}
 	}
@@ -583,18 +591,18 @@ void generic_anim_render_variable_frame_delay(generic_anim* ga, float frametime)
 	if((ga->direction & GENERIC_ANIM_DIRECTION_PAUSED) == 0) {
 		if(ga->direction & GENERIC_ANIM_DIRECTION_BACKWARDS) {
 			// playing backwards
-			// TODO handle playing backwards!
 			ga->anim_time -= frametime;
 			if((ga->direction & GENERIC_ANIM_DIRECTION_NOLOOP) && ga->anim_time <= 0.0) {
-				// TODO deal with apng stopping on first frame
-				ga->anim_time = 0;		//stop on first frame when playing in reverse
-				ga->png.previous_frame_time = 0.0f;
+				ga->anim_time = 0;  //stop on first frame when playing in reverse
 			}
 			else {
-				while(ga->anim_time <= 0.0) {
-					ga->anim_time += ga->total_time;	//make sure we're always positive, so we can go back to the end
+				if (ga->anim_time <= 0.0) {
+					// loop back to end
+					ga->anim_time = ga->total_time - 0.001f;
+					ga->png.previous_frame_time = ga->total_time;
+					ga->png.anim->current_frame = ga->num_frames-1;
+					ga->current_frame = ga->num_frames-1;
 				}
-				ga->png.previous_frame_time = ga->total_time;
 			}
 		}
 		else {
@@ -602,34 +610,38 @@ void generic_anim_render_variable_frame_delay(generic_anim* ga, float frametime)
 			ga->anim_time += frametime;
 			if(ga->anim_time >= ga->total_time) {
 				if(ga->direction & GENERIC_ANIM_DIRECTION_NOLOOP) {
-					// TODO deal with apng stopping on last frame
-					ga->anim_time = ga->total_time - 0.001f;		//stop on last frame when playing - if it's equal we jump to the first frame
+					ga->anim_time = ga->total_time - 0.001f;  // stop on last frame when playing - if it's equal fmod sets back to 0.0f
 				}
-				if(!ga->done_playing){
-					//we've played this at least once
-					ga->done_playing = 1;
+				else {
+					// loop back to start
+					ga->png.previous_frame_time = 0.0f;
+					ga->png.anim->current_frame = 0;
+					ga->current_frame = 0;
 				}
-				ga->png.previous_frame_time = 0.0f;
-				ga->current_frame = 0;
+				ga->done_playing = 1;
 			}
 		}
+		ga->anim_time = fmod(ga->anim_time, ga->total_time);
 	}
 
 	if (ga->num_frames > 0) {
-		ga->anim_time = fmod(ga->anim_time, ga->total_time);
 
-		// if frame delay has elapsed, get next frame & store next frame switchover time
-		// TODO handle playing backwards!
-		// TODO handle frame skipping... add a bunch of frame delays?
-		// or is that really necessary... if the engine can't keep up may as well play slowly rather than skip frames?
-		if (ga->anim_time >= ga->png.previous_frame_time + ga->png.anim->frame.delay) {
-			ga->current_frame++;
-			ga->png.previous_frame_time += ga->png.anim->frame.delay;
+		if (ga->direction & GENERIC_ANIM_DIRECTION_BACKWARDS) {
+			if (ga->anim_time <= ga->png.previous_frame_time - ga->png.anim->frame.delay) {
+				ga->png.previous_frame_time -= ga->png.anim->frame.delay;
+				ga->current_frame--;
+			}
+		}
+		else {
+			if (ga->anim_time >= ga->png.previous_frame_time + ga->png.anim->frame.delay) {
+				ga->png.previous_frame_time += ga->png.anim->frame.delay;
+				ga->current_frame++;
+			}
 		}
 
-		Warning(LOCATION, "generic times: %04f %04f %04f %04f %i",
+		nprintf(("apng", "apng generic times: %04f %04f %04f %04f %03i %03i %03i\n",
 				frametime, ga->anim_time, ga->png.anim->frame.delay, ga->png.previous_frame_time,
-				ga->current_frame);
+				ga->previous_frame, ga->current_frame, ga->png.anim->current_frame));
 
 		if(ga->streaming) {
 			generic_render_png_stream(ga);

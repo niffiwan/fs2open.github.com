@@ -40,8 +40,8 @@ public:
 	apng_ani(const char* filename);
 	~apng_ani();
 	int  load_header();
-	int  next_frame();
-	int  prev_frame(); // TODO create this
+	void next_frame();
+	void prev_frame(); // TODO create this
 	void info_callback();
 	void row_callback(png_bytep new_row, png_uint_32 row_num);
 

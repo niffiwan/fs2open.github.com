@@ -533,7 +533,17 @@ unsigned int apng_ani::_read_chunk(_chunk_s& chunk)
 	return 0;
 }
 
-int apng_ani::next_frame()
+void apng_ani::prev_frame()
+{
+	_reading = false;
+	if (current_frame > 0) {
+		frame = _frames.at(--current_frame);
+		nprintf(("apng", "apng prev_frame; (%03lu) (%03i)\n", _frames.size(), current_frame));
+	}
+}
+
+
+void apng_ani::next_frame()
 {
 	_reading = false;
 	// setup new frame (if frame doesn't already exist)
@@ -554,10 +564,10 @@ int apng_ani::next_frame()
 			_process_chunk();
 		}
 
-		Warning(LOCATION, "next_frame; new (%03lu) (%03i) (%u) (%u) %03u|%03u %03u|%03u (%02lu) (%04f)",
+		nprintf(("apng", "apng next_frame; new (%03lu) (%03i) (%u) (%u) %03u|%03u %03u|%03u (%02lu) (%04f)\n",
 				_frames.size(), current_frame, _dispose_op, _blend_op,
 				_framew, _x_offset, _frameh, _y_offset,
-				_frame_offsets.size(), frame.delay);
+				_frame_offsets.size(), frame.delay));
 
 		if (_got_IDAT && _processing_finish()) {
 			_apng_failed("couldn't finish fdat apng frame");
@@ -571,17 +581,19 @@ int apng_ani::next_frame()
 		_frames.push_back(frame);
 	}
 	else {
-		Warning(LOCATION, "next_frame; used old (%03lu) (%03i)", _frames.size(), current_frame);
+		nprintf(("apng", "apng next_frame; used old (%03lu) (%03i)\n", _frames.size(), current_frame));
 	}
 
-	frame = _frames.at(current_frame);
+	if (current_frame < nframes-1) {
+		frame = _frames.at(current_frame++);
+	}
+#if 0
 	// TODO consider if we really want to wrap here; or if should let upper levels deal with it
 	// issue being that apngs can't handle playing frames out of sequence due to pixel-data deltas
 	if (++current_frame >= nframes) {
 		current_frame = 0;
 	}
-
-	return 1;
+#endif
 }
 
 /*
