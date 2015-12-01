@@ -1707,6 +1707,7 @@ void load_gauge_escort_view(int base_w, int base_h, int hud_font, bool scale_gau
 	int ship_name_max_w = 100;
 	int ship_integrity_offsets[2];
 	int ship_status_offsets[2];
+	bool right_align_names = false;
 	char header_text[MAX_FILENAME_LEN] = "";
 	char fname_top[MAX_FILENAME_LEN] = "escort1";
 	char fname_middle[MAX_FILENAME_LEN] = "escort2";
@@ -1789,6 +1790,10 @@ void load_gauge_escort_view(int base_w, int base_h, int hud_font, bool scale_gau
 		stuff_int(&ship_name_max_w);
 	}
 
+	if ( optional_string("Right-Align Ship Names:") ) {
+		stuff_boolean(&right_align_names);
+	}
+
 	if (header_text[0] == '\0') {
 		strcpy_s(header_text, XSTR("monitoring", 285));
 	}
@@ -1804,6 +1809,7 @@ void load_gauge_escort_view(int base_w, int base_h, int hud_font, bool scale_gau
 	hud_gauge->initShipNameOffsets(ship_name_offsets[0], ship_name_offsets[1]);
 	hud_gauge->initShipStatusOffsets(ship_status_offsets[0], ship_status_offsets[1]);
 	hud_gauge->initShipNameMaxWidth(ship_name_max_w);
+	hud_gauge->initRightAlignNames(right_align_names);
 
 	if(ship_idx->at(0) >= 0) {
 		for (SCP_vector<int>::iterator ship_index = ship_idx->begin(); ship_index != ship_idx->end(); ++ship_index) {
@@ -2621,9 +2627,11 @@ void load_gauge_extra_target_data(int base_w, int base_h, int hud_font, bool sca
 	float origin[2] = {0.0, 1.0};
 	int offset[2];
 	int dock_offsets[2];
+	int dock_max_w;
 	int time_offsets[2];
 	int bracket_offsets[2];
 	int order_offsets[2];
+	int order_max_w;
 	char fname[MAX_FILENAME_LEN] = "targetview3";
 
 	if(gr_screen.res == GR_640) {
@@ -2652,6 +2660,9 @@ void load_gauge_extra_target_data(int base_w, int base_h, int hud_font, bool sca
 	order_offsets[0] = 8;
 	order_offsets[1] = 0;
 
+	dock_max_w = 173;
+	order_max_w = 162;
+
 	HudGaugeExtraTargetData* hud_gauge = gauge_load_common<HudGaugeExtraTargetData>(base_w, base_h, hud_font, scale_gauge, ship_idx, use_clr, origin[0], origin[1], offset[0], offset[1]);
 
 	if(optional_string("Filename:")) {
@@ -2663,8 +2674,14 @@ void load_gauge_extra_target_data(int base_w, int base_h, int hud_font, bool sca
 	if(optional_string("Dock Offsets:")) {
 		stuff_int_list(dock_offsets, 2);
 	}
+	if(optional_string("Dock Max Width:")) {
+		stuff_int(&dock_max_w);
+	}
 	if(optional_string("Order Offsets:")) {
 		stuff_int_list(order_offsets, 2);
+	}
+	if(optional_string("Order Max Width:")) {
+		stuff_int(&order_max_w);
 	}
 	if(optional_string("Time Offsets:")) {
 		stuff_int_list(time_offsets, 2);
@@ -2673,7 +2690,9 @@ void load_gauge_extra_target_data(int base_w, int base_h, int hud_font, bool sca
 	hud_gauge->initBitmaps(fname);
 	hud_gauge->initBracketOffsets(bracket_offsets[0], bracket_offsets[1]);
 	hud_gauge->initDockOffsets(dock_offsets[0], dock_offsets[1]);
+	hud_gauge->initDockMaxWidth(dock_max_w);
 	hud_gauge->initOrderOffsets(order_offsets[0], order_offsets[1]);
+	hud_gauge->initOrderMaxWidth(order_max_w);
 	hud_gauge->initTimeOffsets(time_offsets[0], time_offsets[1]);
 
 	if(ship_idx->at(0) >= 0) {
@@ -2751,6 +2770,12 @@ void load_gauge_radar_std(int base_w, int base_h, int hud_font, bool scale_gauge
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
+	}
+	if(optional_string("Radar Center Offsets:")) {
+		stuff_float_list(Radar_center_offsets, 2);
+	}
+	if(optional_string("Radar Size:")) {
+		stuff_int_list(Radar_radius, 2);
 	}
 	if(optional_string("Infinity Distance Offsets:")) {
 		stuff_int_list(Radar_dist_offsets[2], 2);
@@ -2854,6 +2879,12 @@ void load_gauge_radar_orb(int base_w, int base_h, int hud_font, bool scale_gauge
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
+	}
+	if(optional_string("Radar Center Offsets:")) {
+		stuff_float_list(Radar_center_offsets, 2);
+	}
+	if(optional_string("Radar Size:")) {
+		stuff_int_list(Radar_radius, 2);
 	}
 	if(optional_string("Infinity Distance Offsets:")) {
 		stuff_int_list(Radar_dist_offsets[2], 2);
@@ -3996,6 +4027,7 @@ void load_gauge_wingman_status(int base_w, int base_h, int hud_font, bool scale_
 	float origin[2] = {1.0, 0.0};
 	int offset[2];
 	int header_offsets[2];
+	bool fixed_header_position;
 	int left_frame_end_x;
 	
 	int single_wing_offsets[2];
@@ -4021,6 +4053,7 @@ void load_gauge_wingman_status(int base_w, int base_h, int hud_font, bool scale_
 
 	header_offsets[0] = 2;
 	header_offsets[1] = 2;
+	fixed_header_position = false;
 	left_frame_end_x = 71;
 	
 	single_wing_offsets[0] = 28;
@@ -4063,6 +4096,9 @@ void load_gauge_wingman_status(int base_w, int base_h, int hud_font, bool scale_
 	}
 	if(optional_string("Header Offsets:")) {
 		stuff_int_list(header_offsets, 2);
+	}
+	if(optional_string("Fixed Header Position:")) {
+		stuff_boolean(&fixed_header_position);
 	}
 	if(optional_string("Left Background Width:")) {
 		stuff_int(&left_frame_end_x);
@@ -4108,6 +4144,7 @@ void load_gauge_wingman_status(int base_w, int base_h, int hud_font, bool scale_
 
 	hud_gauge->initBitmaps(fname_left, fname_middle, fname_right, fname_dots);
 	hud_gauge->initHeaderOffsets(header_offsets[0], header_offsets[1]);
+	hud_gauge->initFixedHeaderPosition(fixed_header_position);
 	hud_gauge->initLeftFrameEndX(left_frame_end_x);
 	hud_gauge->initMultipleWingOffsets(multiple_wing_offsets[0], multiple_wing_offsets[1]);
 	hud_gauge->initSingleWingOffsets(single_wing_offsets[0], single_wing_offsets[1]);

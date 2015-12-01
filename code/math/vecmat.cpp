@@ -154,48 +154,40 @@ void vm_set_identity(matrix *m)
 
 //adds two vectors, fills in dest, returns ptr to dest
 //ok for dest to equal either source, but should use vm_vec_add2() if so
-#ifndef _INLINE_VECMAT
 void vm_vec_add(vec3d *dest, const vec3d *src0, const vec3d *src1)
 {
 	dest->xyz.x = src0->xyz.x + src1->xyz.x;
 	dest->xyz.y = src0->xyz.y + src1->xyz.y;
 	dest->xyz.z = src0->xyz.z + src1->xyz.z;
 }
-#endif
 
 //subs two vectors, fills in dest, returns ptr to dest
 //ok for dest to equal either source, but should use vm_vec_sub2() if so
-#ifndef _INLINE_VECMAT
 void vm_vec_sub(vec3d *dest, const vec3d *src0, const vec3d *src1)
 {
 	dest->xyz.x = src0->xyz.x - src1->xyz.x;
 	dest->xyz.y = src0->xyz.y - src1->xyz.y;
 	dest->xyz.z = src0->xyz.z - src1->xyz.z;
 }
-#endif
 
 
 //adds one vector to another. returns ptr to dest
 //dest can equal source
-#ifndef _INLINE_VECMAT
 void vm_vec_add2(vec3d *dest, const vec3d *src)
 {
 	dest->xyz.x += src->xyz.x;
 	dest->xyz.y += src->xyz.y;
 	dest->xyz.z += src->xyz.z;
 }
-#endif
 
 //subs one vector from another, returns ptr to dest
 //dest can equal source
-#ifndef _INLINE_VECMAT
 void vm_vec_sub2(vec3d *dest, const vec3d *src)
 {
 	dest->xyz.x -= src->xyz.x;
 	dest->xyz.y -= src->xyz.y;
 	dest->xyz.z -= src->xyz.z;
 }
-#endif
 
 //averages n vectors. returns ptr to dest
 //dest can equal either source
@@ -251,36 +243,30 @@ vec3d *vm_vec_avg4(vec3d *dest, const vec3d *src0, const vec3d *src1, const vec3
 
 
 //scales a vector in place.
-#ifndef _INLINE_VECMAT
 void vm_vec_scale(vec3d *dest, float s)
 {
 	dest->xyz.x = dest->xyz.x * s;
 	dest->xyz.y = dest->xyz.y * s;
 	dest->xyz.z = dest->xyz.z * s;
 }
-#endif
 
 
 //scales and copies a vector.
-#ifndef _INLINE_VECMAT
 void vm_vec_copy_scale(vec3d *dest, const vec3d *src, float s)
 {
 	dest->xyz.x = src->xyz.x*s;
 	dest->xyz.y = src->xyz.y*s;
 	dest->xyz.z = src->xyz.z*s;
 }
-#endif
 
 //scales a vector, adds it to another, and stores in a 3rd vector
 //dest = src1 + k * src2
-#ifndef _INLINE_VECMAT
 void vm_vec_scale_add(vec3d *dest, const vec3d *src1, const vec3d *src2, float k)
 {
 	dest->xyz.x = src1->xyz.x + src2->xyz.x*k;
 	dest->xyz.y = src1->xyz.y + src2->xyz.y*k;
 	dest->xyz.z = src1->xyz.z + src2->xyz.z*k;
 }
-#endif
 
 //scales a vector, subtracts it to another, and stores in a 3rd vector
 //dest = src1 - k * src2
@@ -293,29 +279,24 @@ void vm_vec_scale_sub(vec3d *dest, const vec3d *src1, const vec3d *src2, float k
 
 //scales a vector and adds it to another
 //dest += k * src
-#ifndef _INLINE_VECMAT
 void vm_vec_scale_add2(vec3d *dest, const vec3d *src, float k)
 {
 	dest->xyz.x += src->xyz.x*k;
 	dest->xyz.y += src->xyz.y*k;
 	dest->xyz.z += src->xyz.z*k;
 }
-#endif
 
 //scales a vector and adds it to another
 //dest += k * src
-#ifndef _INLINE_VECMAT
 void vm_vec_scale_sub2(vec3d *dest, const vec3d *src, float k)
 {
 	dest->xyz.x -= src->xyz.x*k;
 	dest->xyz.y -= src->xyz.y*k;
 	dest->xyz.z -= src->xyz.z*k;
 }
-#endif
 
 //scales a vector in place, taking n/d for scale.
 //dest *= n/d
-#ifndef _INLINE_VECMAT
 void vm_vec_scale2(vec3d *dest, float n, float d)
 {	
 	d = 1.0f/d;
@@ -324,24 +305,19 @@ void vm_vec_scale2(vec3d *dest, float n, float d)
 	dest->xyz.y = dest->xyz.y* n * d;
 	dest->xyz.z = dest->xyz.z* n * d;
 }
-#endif
 
 //returns dot product of 2 vectors
-#ifndef _INLINE_VECMAT
 float vm_vec_dotprod(const vec3d *v0, const vec3d *v1)
 {
 	return (v1->xyz.x*v0->xyz.x)+(v1->xyz.y*v0->xyz.y)+(v1->xyz.z*v0->xyz.z);
 }
-#endif
 
 
 //returns dot product of <x,y,z> and vector
-#ifndef _INLINE_VECMAT
 float vm_vec_dot3(float x, float y, float z, const vec3d *v)
 {
 	return (x*v->xyz.x)+(y*v->xyz.y)+(z*v->xyz.z);
 }
-#endif
 
 //returns magnitude of a vector
 float vm_vec_mag(const vec3d *v)
@@ -2596,4 +2572,148 @@ void vm_vec_boxscale(vec2d *vec, float scale)
 	float ratio = 1.0f / MAX(fl_abs(vec->x), fl_abs(vec->y));
 	vec->x *= ratio;
 	vec->y *= ratio;
+}
+
+/**(DahBlount)
+ * @brief							Attempts to invert a 4x4 matrix
+ * @param[in]			m			Pointer to the matrix we want to invert
+ * @param[inout]		invOut		The return matrix
+ *
+ * @returns							The inverse of matrix4 m
+ */
+bool vm_inverse_matrix4(const matrix4 *m, matrix4 *invOut)
+{
+	matrix4 inv;	// create a temp matrix so we can avoid getting a determinant that is 0
+	float det;
+	int i,j;
+
+	// Use a2d so it's easier for people to read
+	inv.a2d[0][0] = m->a2d[1][1] * m->a2d[2][2] * m->a2d[3][3] -
+		m->a2d[1][1] * m->a2d[2][3] * m->a2d[3][2] -
+		m->a2d[2][1] * m->a2d[1][2] * m->a2d[3][3] +
+		m->a2d[2][1] * m->a2d[1][3] * m->a2d[3][2] +
+		m->a2d[3][1] * m->a2d[1][2] * m->a2d[2][3] -
+		m->a2d[3][1] * m->a2d[1][3] * m->a2d[2][2];
+
+	inv.a2d[1][0] = -m->a2d[1][0] * m->a2d[2][2] * m->a2d[3][3] +
+		m->a2d[1][0] * m->a2d[2][3] * m->a2d[3][2] +
+		m->a2d[2][0] * m->a2d[1][2] * m->a2d[3][3] -
+		m->a2d[2][0] * m->a2d[1][3] * m->a2d[3][2] -
+		m->a2d[3][0] * m->a2d[1][2] * m->a2d[2][3] +
+		m->a2d[3][0] * m->a2d[1][3] * m->a2d[2][2];
+
+	inv.a2d[2][0] = m->a2d[1][0] * m->a2d[2][1] * m->a2d[3][3] -
+		m->a2d[1][0] * m->a2d[2][3] * m->a2d[3][1] -
+		m->a2d[2][0] * m->a2d[1][1] * m->a2d[3][3] +
+		m->a2d[2][0] * m->a2d[1][3] * m->a2d[3][1] +
+		m->a2d[3][0] * m->a2d[1][1] * m->a2d[2][3] -
+		m->a2d[3][0] * m->a2d[1][3] * m->a2d[2][1];
+
+	inv.a2d[3][0] = -m->a2d[1][0] * m->a2d[2][1] * m->a2d[3][2] +
+		m->a2d[1][0] * m->a2d[2][2] * m->a2d[3][1] +
+		m->a2d[2][0] * m->a2d[1][1] * m->a2d[3][2] -
+		m->a2d[2][0] * m->a2d[1][2] * m->a2d[3][1] -
+		m->a2d[3][0] * m->a2d[1][1] * m->a2d[2][2] +
+		m->a2d[3][0] * m->a2d[1][2] * m->a2d[2][1];
+
+	inv.a2d[0][1] = -m->a2d[0][1] * m->a2d[2][2] * m->a2d[3][3] +
+		m->a2d[0][1] * m->a2d[2][3] * m->a2d[3][2] +
+		m->a2d[2][1] * m->a2d[0][2] * m->a2d[3][3] -
+		m->a2d[2][1] * m->a2d[0][3] * m->a2d[3][2] -
+		m->a2d[3][1] * m->a2d[0][2] * m->a2d[2][3] +
+		m->a2d[3][1] * m->a2d[0][3] * m->a2d[2][2];
+
+	inv.a2d[1][1] = m->a2d[0][0] * m->a2d[2][2] * m->a2d[3][3] -
+		m->a2d[0][0] * m->a2d[2][3] * m->a2d[3][2] -
+		m->a2d[2][0] * m->a2d[0][2] * m->a2d[3][3] +
+		m->a2d[2][0] * m->a2d[0][3] * m->a2d[3][2] +
+		m->a2d[3][0] * m->a2d[0][2] * m->a2d[2][3] -
+		m->a2d[3][0] * m->a2d[0][3] * m->a2d[2][2];
+
+	inv.a2d[2][1] = -m->a2d[0][0] * m->a2d[2][1] * m->a2d[3][3] +
+		m->a2d[0][0] * m->a2d[2][3] * m->a2d[3][1] +
+		m->a2d[2][0] * m->a2d[0][1] * m->a2d[3][3] -
+		m->a2d[2][0] * m->a2d[0][3] * m->a2d[3][1] -
+		m->a2d[3][0] * m->a2d[0][1] * m->a2d[2][3] +
+		m->a2d[3][0] * m->a2d[0][3] * m->a2d[2][1];
+
+	inv.a2d[3][1] = m->a2d[0][0] * m->a2d[2][1] * m->a2d[3][2] -
+		m->a2d[0][0] * m->a2d[2][2] * m->a2d[3][1] -
+		m->a2d[2][0] * m->a2d[0][1] * m->a2d[3][2] +
+		m->a2d[2][0] * m->a2d[0][2] * m->a2d[3][1] +
+		m->a2d[3][0] * m->a2d[0][1] * m->a2d[2][2] -
+		m->a2d[3][0] * m->a2d[0][2] * m->a2d[2][1];
+
+	inv.a2d[0][2] = m->a2d[0][1] * m->a2d[1][2] * m->a2d[3][3] -
+		m->a2d[0][1] * m->a2d[1][3] * m->a2d[3][2] -
+		m->a2d[1][1] * m->a2d[0][2] * m->a2d[3][3] +
+		m->a2d[1][1] * m->a2d[0][3] * m->a2d[3][2] +
+		m->a2d[3][1] * m->a2d[0][2] * m->a2d[1][3] -
+		m->a2d[3][1] * m->a2d[0][3] * m->a2d[1][2];
+
+	inv.a2d[1][2] = -m->a2d[0][0] * m->a2d[1][2] * m->a2d[3][3] +
+		m->a2d[0][0] * m->a2d[1][3] * m->a2d[3][2] +
+		m->a2d[1][0] * m->a2d[0][2] * m->a2d[3][3] -
+		m->a2d[1][0] * m->a2d[0][3] * m->a2d[3][2] -
+		m->a2d[3][0] * m->a2d[0][2] * m->a2d[1][3] +
+		m->a2d[3][0] * m->a2d[0][3] * m->a2d[1][2];
+
+	inv.a2d[2][2] = m->a2d[0][0] * m->a2d[1][1] * m->a2d[3][3] -
+		m->a2d[0][0] * m->a2d[1][3] * m->a2d[3][1] -
+		m->a2d[1][0] * m->a2d[0][1] * m->a2d[3][3] +
+		m->a2d[1][0] * m->a2d[0][3] * m->a2d[3][1] +
+		m->a2d[3][0] * m->a2d[0][1] * m->a2d[1][3] -
+		m->a2d[3][0] * m->a2d[0][3] * m->a2d[1][1];
+
+	inv.a2d[3][2] = -m->a2d[0][0] * m->a2d[1][1] * m->a2d[3][2] +
+		m->a2d[0][0] * m->a2d[1][2] * m->a2d[3][1] +
+		m->a2d[1][0] * m->a2d[0][1] * m->a2d[3][2] -
+		m->a2d[1][0] * m->a2d[0][2] * m->a2d[3][1] -
+		m->a2d[3][0] * m->a2d[0][1] * m->a2d[1][2] +
+		m->a2d[3][0] * m->a2d[0][2] * m->a2d[1][1];
+
+	inv.a2d[0][3] = -m->a2d[0][1] * m->a2d[1][2] * m->a2d[2][3] +
+		m->a2d[0][1] * m->a2d[1][3] * m->a2d[2][2] +
+		m->a2d[1][1] * m->a2d[0][2] * m->a2d[2][3] -
+		m->a2d[1][1] * m->a2d[0][3] * m->a2d[2][2] -
+		m->a2d[2][1] * m->a2d[0][2] * m->a2d[1][3] +
+		m->a2d[2][1] * m->a2d[0][3] * m->a2d[1][2];
+
+	inv.a2d[1][3] = m->a2d[0][0] * m->a2d[1][2] * m->a2d[2][3] -
+		m->a2d[0][0] * m->a2d[1][3] * m->a2d[2][2] -
+		m->a2d[1][0] * m->a2d[0][2] * m->a2d[2][3] +
+		m->a2d[1][0] * m->a2d[0][3] * m->a2d[2][2] +
+		m->a2d[2][0] * m->a2d[0][2] * m->a2d[1][3] -
+		m->a2d[2][0] * m->a2d[0][3] * m->a2d[1][2];
+
+	inv.a2d[2][3] = -m->a2d[0][0] * m->a2d[1][1] * m->a2d[2][3] +
+		m->a2d[0][0] * m->a2d[1][3] * m->a2d[2][1] +
+		m->a2d[1][0] * m->a2d[0][1] * m->a2d[2][3] -
+		m->a2d[1][0] * m->a2d[0][3] * m->a2d[2][1] -
+		m->a2d[2][0] * m->a2d[0][1] * m->a2d[1][3] +
+		m->a2d[2][0] * m->a2d[0][3] * m->a2d[1][1];
+
+	inv.a2d[3][3] = m->a2d[0][0] * m->a2d[1][1] * m->a2d[2][2] -
+		m->a2d[0][0] * m->a2d[1][2] * m->a2d[2][1] -
+		m->a2d[1][0] * m->a2d[0][1] * m->a2d[2][2] +
+		m->a2d[1][0] * m->a2d[0][2] * m->a2d[2][1] +
+		m->a2d[2][0] * m->a2d[0][1] * m->a2d[1][2] -
+		m->a2d[2][0] * m->a2d[0][2] * m->a2d[1][1];
+
+	det = m->a2d[0][0] * inv.a2d[0][0] + m->a2d[0][1] * inv.a2d[1][0] + m->a2d[0][2] * inv.a2d[2][0] + m->a2d[0][3] * inv.a2d[3][0];
+
+	if (det == 0) {
+		invOut = nullptr;
+		return false;
+	}
+
+	det = 1.0f / det;
+
+	for (i = 0; i < 4; i++) {
+		for (j = 0; j < 4; j++) {
+			invOut->a2d[i][j] = inv.a2d[i][j] * det;
+		}
+	}
+
+	return true;
 }

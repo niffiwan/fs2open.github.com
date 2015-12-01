@@ -403,8 +403,6 @@ static int Ship_cargo_check_timer;
 
 static int Thrust_anim_inited = 0;
 
-bool warning_too_many_ship_classes = false;
-
 int ship_get_subobj_model_num(ship_info* sip, char* subobj_name);
 
 SCP_vector<ship_effect> Ship_effects;
@@ -1750,15 +1748,7 @@ int parse_ship(const char *filename, bool replace)
 		
 		//Check if there are too many ship classes
 		if(Ship_info.size() >= MAX_SHIP_CLASSES) {
-			if (!warning_too_many_ship_classes) {
-				Warning(LOCATION, "Too many ship classes before '%s'; maximum is %d, so only the first " SIZE_T_ARG " will be used\nPlease check also the debug log as it may contain other ship classes which are over the limit", buf, MAX_SHIP_CLASSES, Ship_info.size());
-				warning_too_many_ship_classes = true;
-			} else {
-				mprintf(("Warning: Too many ship classes before '%s'\n", buf));
-			}
-			
-			skip_to_start_of_string_either("$Name:", "#End");
-			return -1;
+			Error(LOCATION, "Too many ship classes before '%s'; maximum is %d.\n", buf, MAX_SHIP_CLASSES);
 		}
 
 		//Init vars
@@ -7567,7 +7557,7 @@ void ship_subsystems_delete(ship *shipp)
 void ship_delete( object * obj )
 {
 	ship	*shipp;
-	int	num, objnum __attribute__((__unused__));
+	int	num, objnum __UNUSED;
 
 	num = obj->instance;
 	Assert( num >= 0);
@@ -13770,14 +13760,12 @@ int ship_do_rearm_frame( object *objp, float frametime )
 	}
 
 	// figure out repairs for subsystems
-	if(repair_allocated > 0) {
-		if(sip->sup_subsys_repair_rate == 0.0f)
-			repair_allocated = 0.0f;
-		else if(sip->sup_hull_repair_rate == 0.0f)
-			repair_allocated = shipp->ship_max_hull_strength * frametime * sip->sup_subsys_repair_rate;
-		else if(!(sip->sup_hull_repair_rate == sip->sup_subsys_repair_rate))
-			repair_allocated = repair_allocated * sip->sup_subsys_repair_rate / sip->sup_hull_repair_rate;
-	}
+	if(sip->sup_subsys_repair_rate == 0.0f)
+		repair_allocated = 0.0f;
+	else if(sip->sup_hull_repair_rate == 0.0f)
+		repair_allocated = shipp->ship_max_hull_strength * frametime * sip->sup_subsys_repair_rate;
+	else if(!(sip->sup_hull_repair_rate == sip->sup_subsys_repair_rate))
+		repair_allocated = repair_allocated * sip->sup_subsys_repair_rate / sip->sup_hull_repair_rate;
 
 	// check the subsystems of the ship.
 	subsys_all_ok = 1;
@@ -16463,7 +16451,7 @@ void ship_page_in()
 
 	// Page in all the ship classes that are used on this level
 	int num_ship_types_used = 0;
-	int test_id __attribute__((__unused__)) = -1;
+	int test_id __UNUSED = -1;
 
 	memset( fireball_used, 0, sizeof(int) * MAX_FIREBALL_TYPES );
 
