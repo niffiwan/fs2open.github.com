@@ -228,8 +228,8 @@ int generic_anim_stream(generic_anim *ga)
 				Warning(LOCATION, "Failed to load apng (%s) Message: %s", ga->filename, e.what());
 				return -1;
 			}
-			Warning(LOCATION, "png read: %i %i %i %f\n", ga->png.anim->w, ga->png.anim->h,
-					ga->png.anim->bpp, ga->png.anim->anim_time);
+			nprintf(("apng", "png read: %i %i %i %f\n", ga->png.anim->w, ga->png.anim->h,
+					ga->png.anim->bpp, ga->png.anim->anim_time));
 		}
 		ga->png.anim->current_frame = 0;
 		ga->png.previous_frame_time = 0.0f;
