@@ -87,9 +87,11 @@ protected:
 	int Mini_3digit_offsets[2];
 	int Mini_1digit_offsets[2];
 	int Mini_2digit_offsets[2];
+	bool Simultaneous_flash;
 public:
 	HudGaugeShieldMini();
 	void initBitmaps(char *fname);
+	void initSimultaneousFlash(bool b);
 	void init3DigitOffsets(int x, int y);
 	void init1DigitOffsets(int x, int y);
 	void init2DigitOffsets(int x, int y);

@@ -963,6 +963,11 @@ void HudGaugeShieldMini::init2DigitOffsets(int x, int y)
 	Mini_2digit_offsets[1] = y;
 }
 
+void HudGaugeShieldMini::initSimultaneousFlash(bool b)
+{
+	Simultaneous_flash = b;
+}
+
 void HudGaugeShieldMini::initBitmaps(char *fname)
 {
 	Shield_mini_gauge.first_frame = bm_load_animation(fname, &Shield_mini_gauge.num_frames);
@@ -1011,30 +1016,66 @@ void HudGaugeShieldMini::showMiniShields(object *objp)
 	maybeFlashShield(SHIELD_HIT_TARGET, Shield_hit_data[SHIELD_HIT_TARGET].hull_hit_index);
 	showIntegrity(get_hull_pct(objp));
 
+	if ( objp->flags & OF_NO_SHIELDS ) {
+		return;
+	}
+
 	// draw the four quadrants
 	// Draw shield quadrants at one of NUM_SHIELD_LEVELS
 	max_shield = get_max_shield_quad(objp);
 
-	for ( i = 0; i < objp->n_quadrants; i++ ) {
 
-		if ( objp->flags & OF_NO_SHIELDS ) {
-			break;
+	if ( !Simultaneous_flash ) {
+		for ( i = 0; i < objp->n_quadrants; i++ ) {
+
+			if ( objp->shield_quadrant[Quadrant_xlate[i]] < 0.1f ) {
+				continue;
+			}
+
+			if ( maybeFlashShield(SHIELD_HIT_TARGET, i) ) {
+				frame_offset = i+objp->n_quadrants;
+			} else {
+				frame_offset = i;
+			}
+
+			range = HUD_color_alpha;
+			hud_color_index = fl2i( (objp->shield_quadrant[Quadrant_xlate[i]] / max_shield) * range + 0.5);
+			Assert(hud_color_index >= 0 && hud_color_index <= range);
+
+			if ( hud_color_index < 0 ) {
+				hud_color_index = 0;
+			}
+			if ( hud_color_index >= HUD_NUM_COLOR_LEVELS ) {
+				hud_color_index = HUD_NUM_COLOR_LEVELS - 1;
+			}
+
+			if ( maybeFlashSexp() == 1) {
+				// hud_set_bright_color();
+				setGaugeColor(HUD_C_BRIGHT);
+			} else {
+				// gr_set_color_fast(&HUD_color_defaults[hud_color_index]);
+				setGaugeColor(hud_color_index);
+			}
+
+			if (frame_offset < Shield_mini_gauge.num_frames) {
+				renderBitmap(Shield_mini_gauge.first_frame + frame_offset, sx, sy);
+			}
+		}
+	} else {
+		// Fade and flash the whole icon as one, not per-quadrant
+		frame_offset = 0;
+
+		for ( i = 0; i < objp->n_quadrants; i++ ) {
+			if ( maybeFlashShield(SHIELD_HIT_TARGET, i) ) {
+				frame_offset = Shield_mini_gauge.num_frames / 2;
+				break;
+			}
 		}
 
-		if ( objp->shield_quadrant[Quadrant_xlate[i]] < 0.1f ) {
-			continue;
-		}
-
-		if ( maybeFlashShield(SHIELD_HIT_TARGET, i) ) {
-			frame_offset = i+objp->n_quadrants;
-		} else {
-			frame_offset = i;
-		}
-				
 		range = HUD_color_alpha;
-		hud_color_index = fl2i( (objp->shield_quadrant[Quadrant_xlate[i]] / max_shield) * range + 0.5);
+		hud_color_index = fl2i( (shield_get_strength(objp) / objp->n_quadrants / max_shield) * range + 0.5);
 		Assert(hud_color_index >= 0 && hud_color_index <= range);
-	
+
 		if ( hud_color_index < 0 ) {
 			hud_color_index = 0;
 		}
@@ -1048,10 +1089,13 @@ void HudGaugeShieldMini::showMiniShields(object *objp)
 		} else {
 			// gr_set_color_fast(&HUD_color_defaults[hud_color_index]);
 			setGaugeColor(hud_color_index);
-		}					 
+		}
 
-		if (frame_offset < Shield_mini_gauge.num_frames)
-			renderBitmap(Shield_mini_gauge.first_frame + frame_offset, sx, sy);		
+		for ( int j = 0; j < Shield_mini_gauge.num_frames / 2; j++) {
+			if (frame_offset + j < Shield_mini_gauge.num_frames) {
+				renderBitmap(Shield_mini_gauge.first_frame + frame_offset + j, sx, sy);
+			}
+		}
 	}
 	
 	// hud_set_default_color();

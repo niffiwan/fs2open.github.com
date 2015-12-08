@@ -1466,6 +1466,7 @@ void load_gauge_mini_shields(int base_w, int base_h, int hud_font, bool scale_ga
 	int Mini_3digit_offsets[2];
 	int Mini_1digit_offsets[2];
 	int Mini_2digit_offsets[2];
+	bool Simultaneous_flash = false;
 	char fname[MAX_FILENAME_LEN] = "targhit1";
 
 	if(gr_screen.res == GR_640) {
@@ -1499,6 +1500,9 @@ void load_gauge_mini_shields(int base_w, int base_h, int hud_font, bool scale_ga
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
 	}
+	if(optional_string("Simultaneous Flash:")) {
+		stuff_boolean(&Simultaneous_flash);
+	}
 	if(optional_string("3 Digit Hull Offsets:")) {
 		stuff_int_list(Mini_3digit_offsets, 2);
 	}
@@ -1509,6 +1513,7 @@ void load_gauge_mini_shields(int base_w, int base_h, int hud_font, bool scale_ga
 		stuff_int_list(Mini_1digit_offsets, 2);
 	}
 
+	hud_gauge->initSimultaneousFlash(Simultaneous_flash);
 	hud_gauge->init1DigitOffsets(Mini_1digit_offsets[0], Mini_1digit_offsets[1]);
 	hud_gauge->init2DigitOffsets(Mini_2digit_offsets[0], Mini_2digit_offsets[1]);
 	hud_gauge->init3DigitOffsets(Mini_3digit_offsets[0], Mini_3digit_offsets[1]);
