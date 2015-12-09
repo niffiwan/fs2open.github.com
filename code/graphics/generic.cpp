@@ -466,6 +466,11 @@ void generic_render_ani_stream(generic_anim *ga)
 	#endif
 }
 
+/*
+ * @brief apng specific animation rendering
+ *
+ * @param [in] ga  pointer to generic_anim struct
+ */
 void generic_render_png_stream(generic_anim* ga)
 {
 	if(ga->current_frame == ga->previous_frame) {
@@ -474,23 +479,17 @@ void generic_render_png_stream(generic_anim* ga)
 
 	try {
 		if ((ga->direction & GENERIC_ANIM_DIRECTION_BACKWARDS) && (ga->previous_frame != -1)) {
-			nprintf(("apng", "apng stream prev\n"));
-			// TODO figure out why the ruddy door animations start BACKWARDS!
-			// special case the damn thing so get the 1st frame anyway?
-			// OK, they start backwards to ensure all doors start shut, i.e. don't open by default
-			// Or maybe they'd just jitter? Who knows! (who cares right now!)
-			// Maybe I need to convert apng_ani:: to have "get_frame_x" instead of "next/prev"
-			// and then deal with going forward or reverse as appropriate
-			// potentially running through multiple frames in order to do so...
+			// mainhall door anims start backwards to ensure they stay shut
+			// in that case (i.e. previous_frame is -1) we actually want to call
+			// next_frame, in order to retrieve the 1st frame of the animation
 			ga->png.anim->prev_frame();
 		}
 		else {
-			nprintf(("apng", "apng stream next\n"));
 			ga->png.anim->next_frame();
 		}
 	}
 	catch (const apng::ApngException& e) {
-		mprintf(("Unable to get next/prev apng frame (%s) Message: %s\n", ga->filename, e.what()));
+		nprintf(("apng", "Unable to get next/prev apng frame (%s) Message: %s\n", ga->filename, e.what()));
 	}
 
 	bm_lock(ga->bitmap_id, ga->png.anim->bpp, BMP_TEX_NONCOMP, true);  // lock in 32 bpp for png
@@ -503,8 +502,10 @@ void generic_render_png_stream(generic_anim* ga)
 }
 
 /*
- * @brief calculate current frame for fixed frame delay (ani & eff)
+ * @brief calculate current frame for fixed frame delay animation formats (ani & eff)
  *
+ * @param [in] *ga  animation data
+ * @param [in] frametime  how long this frame took
  */
 void generic_anim_render_fixed_frame_delay(generic_anim* ga, float frametime)
 {
@@ -576,8 +577,10 @@ void generic_anim_render_fixed_frame_delay(generic_anim* ga, float frametime)
 }
 
 /*
- * @brief calculate current frame for variable frame delay formats (e.g. apng)
+ * @brief calculate current frame for variable frame delay animation formats (e.g. apng)
  *
+ * @param [in] *ga  animation data
+ * @param [in] frametime  how long this frame took
  */
 void generic_anim_render_variable_frame_delay(generic_anim* ga, float frametime)
 {
@@ -654,6 +657,15 @@ void generic_anim_render_variable_frame_delay(generic_anim* ga, float frametime)
 }
 
 
+/*
+ * @brief render animations
+ *
+ * @param [in] *ga  animation data
+ * @param [in] frametime  how long this frame took
+ * @param [in] x  2D screen x co-ordinate to render at
+ * @param [in] y  2D screen y co-ordinate to render at
+ * @param [in] menu select if this is rendered in menu screen, or fullscreen
+ */
 void generic_anim_render(generic_anim *ga, float frametime, int x, int y, bool menu)
 {
 	if (ga->type == BM_TYPE_PNG) {

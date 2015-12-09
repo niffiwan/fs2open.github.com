@@ -329,10 +329,10 @@ void apng_ani::_compose_frame()
 
 /*
  * @brief start processing apng frame
+ * @note uses libpng calls, treats apng data as discrete png images
  */
 int apng_ani::_processing_start()
 {
-	//Warning(LOCATION, "processing start");
 	static ubyte png_sig[8] = {137, 80, 78, 71, 13, 10, 26, 10};
 
 	_pngp = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
@@ -363,6 +363,7 @@ int apng_ani::_processing_start()
 
 /*
  * @brief process apng data chunks
+ * @note uses libpng calls, treats apng data as discrete png images
  */
 void apng_ani::_processing_data(ubyte* data, uint size)
 {
@@ -371,10 +372,10 @@ void apng_ani::_processing_data(ubyte* data, uint size)
 
 /*
  * @brief finish processing apng frame
+ * @note uses libpng calls, treats apng data as discrete png images
  */
 int apng_ani::_processing_finish()
 {
-	//Warning(LOCATION, "_processing_finish");
 	static ubyte end_sig[12] = {0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130};
 
 	if (_pngp == nullptr || _infop == nullptr) {
@@ -421,6 +422,9 @@ void apng_ani::row_callback(png_bytep new_row, png_uint_32 row_num)
 }
 
 
+/*
+ * @brief manually process a single chunk of apng data
+ */
 void apng_ani::_process_chunk()
 {
 	_id = _read_chunk(_chunk);
@@ -533,6 +537,10 @@ unsigned int apng_ani::_read_chunk(_chunk_s& chunk)
 	return 0;
 }
 
+/*
+ * @brief get previous apng frame
+ * @note due to apng format, this can only play backwards from the furthest forward frame reached
+ */
 void apng_ani::prev_frame()
 {
 	_reading = false;
@@ -543,6 +551,9 @@ void apng_ani::prev_frame()
 }
 
 
+/*
+ * @brief get next apng frame
+ */
 void apng_ani::next_frame()
 {
 	_reading = false;
@@ -587,13 +598,6 @@ void apng_ani::next_frame()
 	if (current_frame < nframes-1) {
 		frame = _frames.at(current_frame++);
 	}
-#if 0
-	// TODO consider if we really want to wrap here; or if should let upper levels deal with it
-	// issue being that apngs can't handle playing frames out of sequence due to pixel-data deltas
-	if (++current_frame >= nframes) {
-		current_frame = 0;
-	}
-#endif
 }
 
 /*
@@ -671,6 +675,11 @@ int apng_ani::load_header()
 	return PNG_ERROR_NONE;
 }
 
+/*
+ * @brief something went badly wrong, throw an exception
+ *
+ * @param [in] msg  text to display about the error
+ */
 void apng_ani::_apng_failed(const char* msg)
 {
 	nframes = 0;
@@ -685,6 +694,10 @@ void apng_ani::_apng_failed(const char* msg)
 	throw ApngException(error_msg.c_str());
 }
 
+/*
+ * @brief ctor
+ * @note loads apng header data
+ */
 apng_ani::apng_ani(const char* filename)
 	: w(0)
 	, h(0)
