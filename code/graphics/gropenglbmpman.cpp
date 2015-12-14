@@ -499,7 +499,12 @@ int gr_opengl_bm_lock( const char *filename, int handle, int bitmapnum, ubyte bp
 
  			case BM_TYPE_PNG:
  				//libpng handles compression with zlib
- 				bm_lock_png( handle, bitmapnum, be, bmp, true_bpp, flags );
+				if (be->info.ani.apng.is_apng == true) {
+					bm_lock_apng( handle, bitmapnum, be, bmp, true_bpp, flags );
+				}
+				else {
+					bm_lock_png( handle, bitmapnum, be, bmp, true_bpp, flags );
+				}
  				break;
 
 			case BM_TYPE_JPG:
