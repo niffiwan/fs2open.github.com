@@ -36,6 +36,9 @@ union bm_extra_info {
 			BM_TYPE type;                         //!< type for individual images
 			char  filename[MAX_FILENAME_LEN];   //!< filename for individual images
 		} eff;
+		struct {
+			bool is_apng;
+		} apng;
 	} ani;
 
 	struct {
@@ -90,6 +93,7 @@ extern bitmap_entry bm_bitmaps[MAX_BITMAPS];
 void bm_lock_ani( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
 void bm_lock_dds( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
 void bm_lock_png( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
+void bm_lock_apng( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
 void bm_lock_jpg( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
 void bm_lock_pcx( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
 void bm_lock_tga( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
