@@ -68,8 +68,6 @@ const BM_TYPE bm_type_list[] = { BM_TYPE_DDS, BM_TYPE_TGA, BM_TYPE_PNG, BM_TYPE_
 const char *bm_ext_list[] = { ".dds", ".tga", ".png", ".jpg", ".pcx" };
 const int BM_NUM_TYPES = sizeof(bm_type_list) / sizeof(bm_type_list[0]);
 
-//const BM_TYPE bm_ani_type_list[] = { BM_TYPE_EFF, BM_TYPE_ANI };
-//const char *bm_ani_ext_list[] = { ".eff", ".ani" };
 const BM_TYPE bm_ani_type_list[] = { BM_TYPE_EFF, BM_TYPE_ANI, BM_TYPE_PNG };
 const char *bm_ani_ext_list[] = { ".eff", ".ani", ".png" };
 const int BM_ANI_NUM_TYPES = sizeof(bm_ani_type_list) / sizeof(bm_ani_type_list[0]);
@@ -238,12 +236,21 @@ static int bm_load_sub_fast(const char *real_filename, int *handle, int dir_type
  */
 static int find_block_of(int n);
 
+/**
+ * Finds if a slot contains an animation
+ */
 static bool bm_is_anim(int num)
 {
 	return ((bm_bitmaps[num].type == BM_TYPE_ANI) ||
 			(bm_bitmaps[num].type == BM_TYPE_EFF) ||
 			(bm_bitmaps[num].type == BM_TYPE_PNG && bm_bitmaps[num].info.ani.apng.is_apng == true));
 }
+
+int bm_anim_frame(int num_frames, float ratio)
+{
+	return 0;
+}
+
 
 // --------------------------------------------------------------------------------------------------------------------
 // Macro-defined functions
@@ -1203,8 +1210,7 @@ int bm_load_animation(const char *real_filename, int *nframes, int *fps, int *ke
 
 	// If we found an animation then there is an extra 5 char size limit to adhere to. We don't do this check earlier since it's only needed if we found an anim
 	// an ANI needs about 5 extra characters to have the "[###]" frame designator
-	// an EFF needs 5 extra characters for each frame filename too, which just happens to be the same length as the frame designator needed otherwise
-	// to make things simple, we'll make an APNG use 5 extra chars as well, same format as EFF
+	// EFF/APNG need 5 extra characters for each frame filename too, which just happens to be the same length as the frame designator needed otherwise
 	// MAX_FILENAME_LEN-10 == 5 character frame designator plus '.' plus 3 letter ext plus NULL terminator
 	// we only check for -5 here since the filename should already have the extension on it, and it must have passed the previous check
 	if (strlen(filename) > MAX_FILENAME_LEN - 5) {
@@ -1265,11 +1271,16 @@ int bm_load_animation(const char *real_filename, int *nframes, int *fps, int *ke
 			anim_width = the_apng.w;
 			anim_height = the_apng.h;
 			bpp = the_apng.bpp;
-			img_size = (anim_width * anim_height * bpp); // TODO consider presenting this value from the apng_ani class; teeny-tiny perf improvement at cost of 4 bytes RAM
+			img_size = the_apng.imgsize();
 		}
 		catch (const apng::ApngException& e) {
 				Warning(LOCATION, "Failed to load apng (%s) Message: %s", filename, e.what());
 				return -1;
+		}
+		// if this is a non-animated png rather than an apng, don't continue
+		if (anim_frames < 1) {
+			mprintf(("Attempted to load apng animation (%s) but looks like a normal png instead, ignoring\n", filename));
+			return -1;
 		}
 	}
 	else {
@@ -1367,7 +1378,12 @@ int bm_load_animation(const char *real_filename, int *nframes, int *fps, int *ke
 		if (i == 0) {
 			sprintf(bm_bitmaps[n + i].filename, "%s", filename);
 		} else {
-			sprintf(bm_bitmaps[n + i].filename, "%s[%d]", filename, i);
+			if (type == BM_TYPE_PNG) {
+				sprintf(bm_bitmaps[n + i].filename, "%s_%04d", filename, i);
+			}
+			else {
+				sprintf(bm_bitmaps[n + i].filename, "%s[%d]", filename, i);
+			}
 		}
 
 		if (type == BM_TYPE_PNG) {
@@ -1698,14 +1714,11 @@ void bm_lock_ani(int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte
 	anim_free(the_anim);
 }
 
-void bm_lock_apng(int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags) {
-	bitmap			*bm;
-	ubyte				*frame_data;
-	int				size, i;
-	int				first_frame, nframes;
 
-	first_frame = be->info.ani.first_frame;
-	nframes = bm_bitmaps[first_frame].info.ani.num_frames;
+void bm_lock_apng(int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags) {
+
+	int first_frame = be->info.ani.first_frame;
+	int nframes = bm_bitmaps[first_frame].info.ani.num_frames;
 
 	apng::apng_ani* the_apng;
 	try {
@@ -1716,88 +1729,33 @@ void bm_lock_apng(int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyt
 		return;
 	}
 
-	bm = &bm_bitmaps[first_frame].bm;
-	size = bm->w * bm->h * (bpp >> 3);
-	be->mem_taken = (size_t)size;
-
-	Assert(size > 0);
-
-	for (i = 0; i<nframes; i++) {
+	float cumulative_frame_delay = 0.0f;
+	for (int i = 0; i<nframes; i++) {
 		be = &bm_bitmaps[first_frame + i];
-		bm = &bm_bitmaps[first_frame + i].bm;
+		bitmap* bm = &bm_bitmaps[first_frame + i].bm;
 
 		// Unload any existing data
 		bm_free_data(first_frame + i);
 
-		bm->flags = 0;
-
-		// briefing editor in Fred2 uses aabitmaps (ani's) - force to 8 bit
-		bm->bpp = Is_standalone ? (ubyte)8 : bpp;
-
-		bm->data = (ptr_u)bm_malloc(first_frame + i, size);
-
-		the_apng->next_frame();
-		frame_data = the_apng->frame.data.data();
-
-		ubyte *dptr, *sptr;
-
-		sptr = frame_data;
-		dptr = (ubyte *)bm->data;
-
-		if ((static_cast<uint>(bm->w) != the_apng->w) || (static_cast<uint>(bm->h) != the_apng->h)) {
-			// Scale it down
-			// 8 bit
-			if (bpp == 8) {
-				int w, h;
-				fix u, utmp, v, du, dv;
-
-				u = v = 0;
-
-				du = (the_apng->w*F1_0) / bm->w;
-				dv = (the_apng->h*F1_0) / bm->h;
-
-				for (h = 0; h < bm->h; h++) {
-					ubyte *drow = &dptr[bm->w * h];
-					ubyte *srow = &sptr[f2i(v)*the_apng->w];
-
-					utmp = u;
-
-					for (w = 0; w < bm->w; w++) {
-						*drow++ = srow[f2i(utmp)];
-						utmp += du;
-					}
-					v += dv;
-				}
-			}
-			// 16 bpp
-			else {
-				int w, h;
-				fix u, utmp, v, du, dv;
-
-				u = v = 0;
-
-				du = (the_apng->w*F1_0) / bm->w;
-				dv = (the_apng->h*F1_0) / bm->h;
-
-				for (h = 0; h < bm->h; h++) {
-					unsigned short *drow = &((unsigned short*)dptr)[bm->w * h];
-					unsigned short *srow = &((unsigned short*)sptr)[f2i(v)*the_apng->w];
-
-					utmp = u;
-
-					for (w = 0; w < bm->w; w++) {
-						*drow++ = srow[f2i(utmp)];
-						utmp += du;
-					}
-					v += dv;
-				}
-			}
-		} else {
-			// 1-to-1 mapping
-			memcpy(dptr, sptr, size);
+		ubyte* data = static_cast<ubyte*>(bm_malloc(first_frame + i, be->mem_taken));
+		try {
+			the_apng->next_frame();
 		}
+		catch (const apng::ApngException& e) {
+			Warning(LOCATION, "Failed to get next apng frame (%s) Message: %s", bm_bitmaps[first_frame].filename, e.what());
+			bm_release(first_frame);
+			return;
+		}
+		memcpy(data, the_apng->frame.data.data(), be->mem_taken);
 
-		bm_convert_format(bm, flags);
+		bm->data = reinterpret_cast<ptr_u>(data);
+		bm->palette = nullptr;
+		bm->bpp = bpp;
+		bm->flags = 0;
+		cumulative_frame_delay += the_apng->frame.delay;
+		be->info.ani.apng.frame_ratio = cumulative_frame_delay / the_apng->anim_time;
+
+		nprintf(("apng", "lock apng frame: %s (%i|%i|%i|%i) (%f) %lu\n", be->filename, bpp, bmp->bpp, bm->true_bpp, flags, be->info.ani.apng.frame_ratio, be->mem_taken));
 	}
 
 	delete the_apng;

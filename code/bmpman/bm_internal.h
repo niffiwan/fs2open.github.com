@@ -37,7 +37,8 @@ union bm_extra_info {
 			char  filename[MAX_FILENAME_LEN];   //!< filename for individual images
 		} eff;
 		struct {
-			bool is_apng;
+			bool  is_apng;      //!< Is this animation an APNG?
+			float frame_ratio;  //!< ratio of cumulative frame delays to total anim time
 		} apng;
 	} ani;
 

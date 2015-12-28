@@ -603,6 +603,15 @@ void apng_ani::next_frame()
 }
 
 /*
+ * @brief return image size in bytes
+ */
+size_t apng_ani::imgsize()
+{
+	return _image_size;
+}
+
+
+/*
  * @brief Get info about the apng
  * @note Also validates the apng & sets it up to have frames read
  *
