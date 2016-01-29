@@ -246,11 +246,6 @@ static bool bm_is_anim(int num)
 			(bm_bitmaps[num].type == BM_TYPE_PNG && bm_bitmaps[num].info.ani.apng.is_apng == true));
 }
 
-int bm_anim_frame(int num_frames, float ratio)
-{
-	return 0;
-}
-
 
 // --------------------------------------------------------------------------------------------------------------------
 // Macro-defined functions
@@ -583,6 +578,70 @@ void bm_free_data_fast(int n)
 	bmp->data = 0;
 }
 
+int bm_get_anim_frame(const int frame1_handle, float elapsed_time, const bool loop, const float divisor)
+{
+	int n = bm_get_cache_slot(frame1_handle, 1);
+	bitmap_entry *be = &bm_bitmaps[n];
+
+	if (be->info.ani.num_frames <= 1) {
+		// this is a still image
+		return 0;
+	}
+	int last_frame = be->info.ani.num_frames - 1;
+	bitmap_entry *last_framep = &bm_bitmaps[n + last_frame];
+
+	if (elapsed_time < 0.0f) {
+		elapsed_time = 0.0f;
+	}
+
+	int frame = 0;
+	// variable frame delay animations
+	if (be->info.ani.apng.is_apng == true) {
+		if (divisor > 0.0f) {
+			// scale to get the real elapsed time
+			mprintf(("bm_get_anim_frameZ, pre-change elapsed_time (%f)\n", elapsed_time));
+			elapsed_time = elapsed_time / divisor * last_framep->info.ani.apng.frame_delay;
+		}
+
+		if (loop == true) {
+			while (elapsed_time >= last_framep->info.ani.apng.frame_delay) {
+				elapsed_time -= last_framep->info.ani.apng.frame_delay;
+			}
+		}
+
+		int i = n;
+		mprintf(("bm_get_anim_frameY, num_frames (%i)\n", be->info.ani.num_frames));
+		for ( ; i < (n + be->info.ani.num_frames); ++i) {
+			mprintf(("bm_get_anim_frameX, elapsed_time (%f) frame_delay (%f)\n", elapsed_time, bm_bitmaps[i].info.ani.apng.frame_delay ));
+			// see bm_lock_apng for precalculated incremental delay for each frame
+			if (elapsed_time <= bm_bitmaps[i].info.ani.apng.frame_delay) {
+				break;
+			}
+		}
+		frame = i - n;
+	}
+	// fixed frame delay animations; simpler
+	else {
+		if (divisor > 0.0f) {
+			// scale to get the real elapsed time
+			frame = fl2i(elapsed_time / divisor * be->info.ani.num_frames);
+		}
+		else {
+			frame = fl2i(elapsed_time * i2fl(be->info.ani.fps * be->info.ani.num_frames));
+		}
+
+		if (loop == true) {
+			frame %= be->info.ani.num_frames;
+		}
+	}
+	// note; this also makes non-looping anims hold on their last frame
+	mprintf(("bm_get_anim_frame, before CLAMP (%i)", frame));
+	CLAMP(frame, 0, last_frame);
+	mprintf((", frame returned (%i) elapsed_time (%f)\n", frame, elapsed_time));
+
+	return frame;
+}
+
 int bm_get_cache_slot(int bitmap_id, int separate_ani_frames) {
 	int n = bitmap_id % MAX_BITMAPS;
 
@@ -596,7 +655,6 @@ int bm_get_cache_slot(int bitmap_id, int separate_ani_frames) {
 	}
 
 	return n;
-
 }
 
 void bm_get_components(ubyte *pixel, ubyte *r, ubyte *g, ubyte *b, ubyte *a) {
@@ -1753,9 +1811,9 @@ void bm_lock_apng(int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyt
 		bm->bpp = bpp;
 		bm->flags = 0;
 		cumulative_frame_delay += the_apng->frame.delay;
-		be->info.ani.apng.frame_ratio = cumulative_frame_delay / the_apng->anim_time;
+		be->info.ani.apng.frame_delay = cumulative_frame_delay;
 
-		nprintf(("apng", "lock apng frame: %s (%i|%i|%i|%i) (%f) %lu\n", be->filename, bpp, bmp->bpp, bm->true_bpp, flags, be->info.ani.apng.frame_ratio, be->mem_taken));
+		nprintf(("apng", "lock apng frame: %s (%i|%i|%i|%i) (%f) %lu\n", be->filename, bpp, bmp->bpp, bm->true_bpp, flags, be->info.ani.apng.frame_delay, be->mem_taken));
 	}
 
 	delete the_apng;

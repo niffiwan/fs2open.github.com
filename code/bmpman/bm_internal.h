@@ -38,7 +38,7 @@ union bm_extra_info {
 		} eff;
 		struct {
 			bool  is_apng;      //!< Is this animation an APNG?
-			float frame_ratio;  //!< ratio of cumulative frame delays to total anim time
+			float frame_delay;  //!< cumulative frame delay
 		} apng;
 	} ani;
 
