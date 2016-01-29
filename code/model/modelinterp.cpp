@@ -2011,8 +2011,6 @@ void model_render_DEPRECATED(int model_num, matrix *orient, vec3d * pos, uint fl
 
 	polymodel *pm = model_get(model_num);
 
-	model_do_dumb_rotation(model_num);
-
 	if (flags & MR_FORCE_CLAMP)
 		gr_set_texture_addressing(TMAP_ADDRESS_CLAMP);
 
@@ -4360,7 +4358,7 @@ void interp_configure_vertex_buffers(polymodel *pm, int mn)
 		polygon_list[i].n_verts = vert_count;
 
 		// set submodel ID
-		if ( Use_GLSL >= 3 ) {
+		if ( GLSL_version >= 130 ) {
 			for ( j = 0; j < polygon_list[i].n_verts; ++j ) {
 				polygon_list[i].submodels[j] = mn;
 			}
@@ -4416,7 +4414,7 @@ void interp_configure_vertex_buffers(polymodel *pm, int mn)
 			memcpy( (model_list->tsb) + model_list->n_verts, polygon_list[i].tsb, sizeof(tsb_t) * polygon_list[i].n_verts );
 		}
 
-		if ( Use_GLSL >= 3 ) {
+		if ( GLSL_version >= 130 ) {
 			memcpy( (model_list->submodels) + model_list->n_verts, polygon_list[i].submodels, sizeof(int) * polygon_list[i].n_verts );
 		}
 
@@ -4436,7 +4434,7 @@ void interp_configure_vertex_buffers(polymodel *pm, int mn)
 	}
 
 	if ( model_list->submodels != NULL ) {
-		Assert( Use_GLSL >= 3 );
+		Assert( GLSL_version >= 130 );
 		vertex_flags |= VB_FLAG_MODEL_ID;
 	}
 

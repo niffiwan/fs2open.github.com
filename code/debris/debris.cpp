@@ -563,6 +563,7 @@ object *debris_create(object *source_obj, int model_num, int submodel_num, vec3d
 	db->is_hull = hull_flag;
 	db->source_objnum = parent_objnum;
 	db->source_sig = source_obj->signature;
+	db->damage_type_idx = shipp->debris_damage_type_idx;
 	db->ship_info_index = shipp->ship_info_index;
 	db->team = shipp->team;
 	db->fire_timeout = 0;	// if not changed, timestamp_elapsed() will return false
@@ -899,8 +900,6 @@ int debris_check_collision(object *pdebris, object *other_obj, vec3d *hitpos, co
 		SCP_vector<int> submodel_vector;
 		polymodel *pm;
 		polymodel_instance *pmi;
-
-		ship_model_start(pship_obj);
 
 		if (model_collide(&mc)) {
 

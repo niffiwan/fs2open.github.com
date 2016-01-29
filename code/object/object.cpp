@@ -94,8 +94,6 @@ char *Object_type_names[MAX_OBJECT_TYPES] = {
 //XSTR:ON
 };
 
-extern int Use_GLSL;
-
 obj_flag_name Object_flag_names[] = {
 	{OF_INVULNERABLE,			"invulnerable",				1,	},
 	{OF_PROTECTED,				"protect-ship",				1,	},
@@ -1205,7 +1203,7 @@ void obj_move_all_post(object *objp, float frametime)
 						b = i2fl(c.blue)/255.0f;
 
 						//light_add_point( &objp->pos, 10.0f, 20.0f, 1.0f, r, g, b, objp->parent );
-						light_add_point( &objp->pos, 10.0f, Use_GLSL>1?100.0f:20.0f, 1.0f, r, g, b, objp->parent );
+						light_add_point( &objp->pos, 10.0f, is_minimum_GLSL_version()?100.0f:20.0f, 1.0f, r, g, b, objp->parent );
 					} else {
 						light_add_point( &objp->pos, 10.0f, 20.0f, 1.0f, 1.0f, 1.0f, 1.0f, objp->parent );
 					} 
@@ -1455,6 +1453,11 @@ void obj_move_all(float frametime)
 		}
 		Script_system.RemHookVars(2, "User", "Target");
 	}
+
+	// Now that we've moved all the objects, move all the models that use dumb-rotate.  We do that here because we already handled the
+	// ship models in obj_move_all_post, and this is more or less conceptually close enough to move the rest.  (Originally all models
+	// were dumb-rotated here, but there are collision-related reasons for ship rotations to happen where they do, even dumb ones.)
+	model_do_dumb_rotations();
 
 	//	After all objects have been moved, move all docked objects.
 	objp = GET_FIRST(&obj_used_list);

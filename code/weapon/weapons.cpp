@@ -3856,8 +3856,14 @@ void weapon_delete(object *obj)
 	}
 
 	if (wp->hud_in_flight_snd_sig >= 0 && snd_is_playing(wp->hud_in_flight_snd_sig))
-	{
 		snd_stop(wp->hud_in_flight_snd_sig);
+
+	if (wp->model_instance_num >= 0)
+		model_delete_instance(wp->model_instance_num);
+
+	if (wp->cmeasure_ignore_list != nullptr) {
+		delete wp->cmeasure_ignore_list;
+		wp->cmeasure_ignore_list = nullptr;
 	}
 
 	wp->objnum = -1;
@@ -4101,7 +4107,26 @@ void find_homing_object_cmeasures_1(object *weapon_objp)
 
 				if (dist < cm_wip->cm_effective_rad)
 				{
-					float	chance;
+					float chance;
+
+					if (wp->cmeasure_ignore_list == nullptr) {
+						wp->cmeasure_ignore_list = new SCP_vector<int>;
+					}
+					else {
+						bool found = false;
+						for (auto ii = wp->cmeasure_ignore_list->cbegin(); ii != wp->cmeasure_ignore_list->cend(); ++ii) {
+							if (objp->signature == *ii) {
+								nprintf(("CounterMeasures", "Weapon (%s-%04i) already seen CounterMeasure (%s-%04i) Frame: %i\n",
+											wip->name, weapon_objp->instance, cm_wip->name, objp->signature, Framecount));
+								found = true;
+								break;
+							}
+						}
+						if (found) {
+							continue;
+						}
+					}
+
 					if (wip->wi_flags & WIF_HOMING_ASPECT) {
 						// aspect seeker this likely to chase a countermeasure
 						chance = cm_wip->cm_aspect_effectiveness/wip->seeker_strength;
@@ -4109,17 +4134,17 @@ void find_homing_object_cmeasures_1(object *weapon_objp)
 						// heat seeker and javelin HS this likely to chase a countermeasure
 						chance = cm_wip->cm_heat_effectiveness/wip->seeker_strength;
 					}
-					if ((objp->signature != wp->cmeasure_ignore_objnum) && (objp->signature != wp->cmeasure_chase_objnum))
-					{
-						if (frand() >= chance) {
-							wp->cmeasure_ignore_objnum = objp->signature;	//	Don't process this countermeasure again.
-						} else  {
-							wp->cmeasure_chase_objnum = objp->signature;	//	Don't process this countermeasure again.
-						}
+
+					// remember this cmeasure so it can be ignored in future
+					wp->cmeasure_ignore_list->push_back(objp->signature);
+
+					if (frand() >= chance) {
+						// failed to decoy
+						nprintf(("CounterMeasures", "Weapon (%s-%04i) ignoring CounterMeasure (%s-%04i) Frame: %i\n",
+									wip->name, weapon_objp->instance, cm_wip->name, objp->signature, Framecount));
 					}
-				
-					if (objp->signature != wp->cmeasure_ignore_objnum)
-					{
+					else {
+						// successful decoy, maybe chase the new cm
 						dot = vm_vec_dot(&vec_to_object, &weapon_objp->orient.vec.fvec);
 
 						if (dot > best_dot)
@@ -4127,6 +4152,8 @@ void find_homing_object_cmeasures_1(object *weapon_objp)
 							best_dot = dot;
 							wp->homing_object = objp;
 							cmeasure_maybe_alert_success(objp);
+							nprintf(("CounterMeasures", "Weapon (%s-%04i) chasing CounterMeasure (%s-%04i) Frame: %i\n",
+										wip->name, weapon_objp->instance, cm_wip->name, objp->signature, Framecount));
 						}
 					}
 				}
@@ -5351,6 +5378,7 @@ int weapon_create( vec3d * pos, matrix * porient, int weapon_type, int parent_ob
 
 	wp->start_pos = *pos;
 	wp->objnum = objnum;
+	wp->model_instance_num = -1;
 	wp->homing_object = &obj_used_list;		//	Assume not homing on anything.
 	wp->homing_subsys = NULL;
 	wp->creation_time = Missiontime;
@@ -5371,8 +5399,7 @@ int weapon_create( vec3d * pos, matrix * porient, int weapon_type, int parent_ob
 	vm_vec_zero(&wp->homing_pos);
 	wp->weapon_flags = 0;
 	wp->target_sig = -1;
-	wp->cmeasure_ignore_objnum = -1;
-	wp->cmeasure_chase_objnum = -1;
+	wp->cmeasure_ignore_list = nullptr;
 	wp->det_range = wip->det_range;
 
 	// Init the thruster info
@@ -5465,7 +5492,15 @@ int weapon_create( vec3d * pos, matrix * porient, int weapon_type, int parent_ob
 	}
 
 	if ( wip->render_type == WRT_POF ) {
+		// this should have been checked above, but let's be extra sure
+		Assert(wip->model_num >= 0);
+
 		objp->radius = model_get_radius(wip->model_num);
+
+		// if we dumb-rotate, make sure we have a model instance
+		if (model_get(wip->model_num)->flags & PM_FLAG_HAS_DUMB_ROTATE) {
+			wp->model_instance_num = model_create_instance(false, wip->model_num);
+		}
 	} else if ( wip->render_type == WRT_LASER ) {
 		objp->radius = wip->laser_head_radius;
 	}

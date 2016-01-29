@@ -9,6 +9,7 @@
 
 #include <algorithm>
 
+#include "asteroid/asteroid.h"
 #include "cmdline/cmdline.h"
 #include "gamesequence/gamesequence.h"
 #include "graphics/gropengldraw.h"
@@ -23,6 +24,7 @@
 #include "render/3dinternal.h"
 #include "ship/ship.h"
 #include "ship/shipfx.h"
+#include "weapon/weapon.h"
 
 extern int Model_texturing;
 extern int Model_polys;
@@ -1194,7 +1196,7 @@ void model_render_buffers(draw_list* scene, model_render_params* interp, vertex_
 		scale.xyz.x = 1.0f;
 		scale.xyz.y = 1.0f;
 
-		if ( Use_GLSL > 1 ) {
+		if ( is_minimum_GLSL_version() ) {
 			scale.xyz.z = 1.0f;
 			scene->set_thrust_scale(interp->get_thruster_info().length.xyz.z);
 		} else {
@@ -2686,8 +2688,6 @@ void model_render_queue(model_render_params *interp, draw_list *scene, int model
 	polymodel *pm = model_get(model_num);
 	polymodel_instance *pmi = NULL;
 		
-	model_do_dumb_rotation(model_num);
-
 	float light_factor = model_render_determine_light_factor(interp, pos, model_flags);
 
 	if ( light_factor < (1.0f/32.0f) ) {
@@ -2731,7 +2731,20 @@ void model_render_queue(model_render_params *interp, draw_list *scene, int model
 			shipp = &Ships[objp->instance];
 			pmi = model_get_instance(shipp->model_instance_num);
 		}
+		else if (pm->flags & PM_FLAG_HAS_DUMB_ROTATE) {
+			if (objp->type == OBJ_ASTEROID)
+				pmi = model_get_instance(Asteroids[objp->instance].model_instance_num);
+			else if (objp->type == OBJ_WEAPON)
+				pmi = model_get_instance(Weapons[objp->instance].model_instance_num);
+			else
+				Warning(LOCATION, "Unsupported object type %d for rendering dumb-rotate submodels!", objp->type);
+		}
 	}
+
+	// is this a skybox with a rotating submodel?
+	extern int Nmodel_num, Nmodel_instance_num;
+	if (model_num == Nmodel_num && Nmodel_instance_num >= 0)
+		pmi = model_get_instance(Nmodel_instance_num);
 	
 	// Set the flags we will pass to the tmapper
 	uint tmap_flags = TMAP_FLAG_GOURAUD | TMAP_FLAG_RGB;
