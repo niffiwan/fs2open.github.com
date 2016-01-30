@@ -1488,6 +1488,8 @@ void beam_render_muzzle_glow(beam *b)
 		if (bwi->beam_glow.num_frames > 1) {
 			b->beam_glow_frame += flFrametime;
 
+			framenum = bm_get_anim_frame(bwi->beam_glow.first_frame, b->beam_glow_frame, bwi->beam_glow.total_time, true);
+#if 0
 			// Sanity checks
 			if (b->beam_glow_frame < 0.0f)
 				b->beam_glow_frame = 0.0f;
@@ -1500,6 +1502,7 @@ void beam_render_muzzle_glow(beam *b)
 			framenum = fl2i((b->beam_glow_frame * bwi->beam_glow.num_frames) / bwi->beam_glow.total_time);
 
 			CLAMP(framenum, 0, bwi->beam_glow.num_frames - 1);
+#endif
 		}
 
 		gr_set_bitmap(bwi->beam_glow.first_frame + framenum, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, alpha * pct);
@@ -1523,6 +1526,8 @@ void beam_render_muzzle_glow(beam *b)
 		if (bwi->beam_glow.num_frames > 1) {
 			b->beam_glow_frame += flFrametime;
 
+			framenum = bm_get_anim_frame(bwi->beam_glow.first_frame, b->beam_glow_frame, bwi->beam_glow.total_time, true);
+#if 0
 			// Sanity checks
 			if (b->beam_glow_frame < 0.0f)
 				b->beam_glow_frame = 0.0f;
@@ -1535,6 +1540,7 @@ void beam_render_muzzle_glow(beam *b)
 			framenum = fl2i((b->beam_glow_frame * bwi->beam_glow.num_frames) / bwi->beam_glow.total_time);
 
 			CLAMP(framenum, 0, bwi->beam_glow.num_frames - 1);
+#endif
 		}
 
 		gr_set_bitmap(bwi->beam_glow.first_frame + framenum, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, alpha * pct);

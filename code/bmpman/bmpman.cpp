@@ -578,7 +578,7 @@ void bm_free_data_fast(int n)
 	bmp->data = 0;
 }
 
-int bm_get_anim_frame(const int frame1_handle, float elapsed_time, const bool loop, const float divisor)
+int bm_get_anim_frame(const int frame1_handle, float elapsed_time, const float divisor, const bool loop)
 {
 	int n = bm_get_cache_slot(frame1_handle, 1);
 	bitmap_entry *be = &bm_bitmaps[n];
@@ -627,7 +627,7 @@ int bm_get_anim_frame(const int frame1_handle, float elapsed_time, const bool lo
 			frame = fl2i(elapsed_time / divisor * be->info.ani.num_frames);
 		}
 		else {
-			frame = fl2i(elapsed_time * i2fl(be->info.ani.fps * be->info.ani.num_frames));
+			frame = fl2i(elapsed_time * i2fl(be->info.ani.fps));
 		}
 
 		if (loop == true) {
