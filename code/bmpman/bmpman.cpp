@@ -1327,7 +1327,7 @@ int bm_load_animation(const char *real_filename, int *nframes, int *fps, int *ke
 		try {
 			apng::apng_ani the_apng = apng::apng_ani(filename);
 			anim_frames = the_apng.nframes;
-			anim_fps = anim_frames / the_apng.anim_time; // approximation; shouldn't be used
+			anim_fps = anim_frames / fl2i(the_apng.anim_time); // approximation; shouldn't be used
 			anim_width = the_apng.w;
 			anim_height = the_apng.h;
 			bpp = the_apng.bpp;
