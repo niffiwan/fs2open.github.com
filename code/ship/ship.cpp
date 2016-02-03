@@ -15,6 +15,7 @@
 #include "ai/aigoals.h"
 #include "asteroid/asteroid.h"
 #include "autopilot/autopilot.h"
+#include "cfile/cfilesystem.h"
 #include "cmdline/cmdline.h"
 #include "cmeasure/cmeasure.h"
 #include "debugconsole/console.h"
@@ -18917,7 +18918,7 @@ void ship_output_json(const char *outfile)
 
 	int i;
 	json_t *ships_obj = json_object();
-	json_t *Ships = json_array();
+	json_t *Ships_array = json_array();
 	ship_info *sip;
 	species_info *species;
 	char full_name[MAX_PATH_LEN];
@@ -18925,7 +18926,7 @@ void ship_output_json(const char *outfile)
 	json_object_set_new(ships_obj, "default_player_ship", json_string(default_player_ship));
 
 	// Loop over the Ship_info array and add a new entry to ship_info_arr each time
-	for (i = 0; i < Num_ship_classes; i++)
+	for (i = 0; i < static_cast<int>(Ship_info.size()); i++)
 	{
 		int j;
 		sip = &Ship_info[i];
@@ -19030,7 +19031,7 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(ship_data, "$Enable Team Colors", json_boolean(sip->uses_team_colors));
 		json_object_set_new(ship_data, "$Default Team", json_string(sip->default_team_name.c_str()));
 		json_object_set_new(ship_data, "$Damage Lightning Type", json_string(Lightning_types[sip->damage_lightning_type]));
-		if(sip->collision_damage_type_idx > -1 && sip->collision_damage_type_idx < Damage_types.size())
+		if(sip->collision_damage_type_idx > -1 && sip->collision_damage_type_idx < static_cast<int>(Damage_types.size()))
 		{
 			json_object_set_new(Impact, "+Damage Type", json_string(Damage_types.at(sip->collision_damage_type_idx).name));
 		}
@@ -19060,7 +19061,7 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(Collision_Physics, "+Reorient Max Rotate Angle", json_real(sip->collision_physics.reorient_max_rot_angle));
 		json_object_set_new(Collision_Physics, "+Reorient Speed Mult", json_real(sip->collision_physics.reorient_mult));
 		json_object_set_new(Collision_Physics, "+Landing Rest Angle", json_real(sip->collision_physics.landing_rest_angle));
-		if(sip->collision_damage_type_idx > -1 && sip->collision_damage_type_idx < Snds.size())
+		if(sip->collision_damage_type_idx > -1 && sip->collision_damage_type_idx < static_cast<int>(Snds.size()))
 		{
 			json_object_set_new(Collision_Physics, "+Landing Sound", json_string(Snds.at(sip->collision_physics.landing_sound_idx).name.c_str()));
 		}
@@ -19075,7 +19076,7 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(Debris, "+Max Speed", json_real(sip->debris_max_speed));
 		json_object_set_new(Debris, "+Min Rotation speed", json_real(sip->debris_min_rotspeed));
 		json_object_set_new(Debris, "+Max Rotation speed", json_real(sip->debris_max_rotspeed));
-		if(sip->collision_damage_type_idx > -1 && sip->collision_damage_type_idx < Damage_types.size())
+		if(sip->collision_damage_type_idx > -1 && sip->collision_damage_type_idx < static_cast<int>(Damage_types.size()))
 		{
 			json_object_set_new(Debris, "+Damage Type", json_string(Damage_types.at(sip->debris_damage_type_idx).name));
 		}
@@ -19110,10 +19111,10 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(ship_data, "+Max Glide Speed", json_real(sip->glide_cap));
 		json_object_set_new(ship_data, "+Glide Accel Mult", json_real(sip->glide_accel_mult));
 		json_object_set_new(ship_data, "$Use Newtonian Dampening", json_boolean(sip->use_newtonian_damp));
-		json_object_set_new(ship_data, "$Autoaim FOV", json_integer(sip->autoaim_fov));
+		json_object_set_new(ship_data, "$Autoaim FOV", json_real(sip->autoaim_fov));
 		// Skipping convergence, ugh...
 		json_object_set_new(ship_data, "$Warpin type", json_string(Warp_types[sip->warpin_type]));
-		if(sip->warpin_snd_start > -1 && sip->warpin_snd_start < Snds.size())
+		if(sip->warpin_snd_start > -1 && sip->warpin_snd_start < static_cast<int>(Snds.size()))
 		{
 			json_object_set_new(ship_data, "$Warpin Start Sound", json_string(Snds.at(sip->warpin_snd_start).name.c_str()));
 		}
@@ -19121,7 +19122,7 @@ void ship_output_json(const char *outfile)
 		{
 			json_object_set_new(ship_data, "$Warpin Start Sound", json_null());
 		}
-		if(sip->warpin_snd_end > -1 && sip->warpin_snd_end < Snds.size())
+		if(sip->warpin_snd_end > -1 && sip->warpin_snd_end < static_cast<int>(Snds.size()))
 		{
 			json_object_set_new(ship_data, "$Warpin End Sound", json_string(Snds.at(sip->warpin_snd_end).name.c_str()));
 		}
@@ -19135,7 +19136,7 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(ship_data, "$Warpin radius", json_real(sip->warpin_radius));
 		json_object_set_new(ship_data, "$Warpin animation", json_string(sip->warpin_anim));
 		json_object_set_new(ship_data, "$Warpout type", json_string(Warp_types[sip->warpout_type]));
-		if(sip->warpout_snd_start > -1 && sip->warpout_snd_start < Snds.size())
+		if(sip->warpout_snd_start > -1 && sip->warpout_snd_start < static_cast<int>(Snds.size()))
 		{
 			json_object_set_new(ship_data, "$Warpout Start Sound", json_string(Snds.at(sip->warpout_snd_start).name.c_str()));
 		}
@@ -19143,7 +19144,7 @@ void ship_output_json(const char *outfile)
 		{
 			json_object_set_new(ship_data, "$Warpout Start Sound", json_null());
 		}
-		if(sip->warpout_snd_end > -1 && sip->warpout_snd_end < Snds.size())
+		if(sip->warpout_snd_end > -1 && sip->warpout_snd_end < static_cast<int>(Snds.size()))
 		{
 			json_object_set_new(ship_data, "$Warpout End Sound", json_string(Snds.at(sip->warpout_snd_end).name.c_str()));
 		}
@@ -19172,7 +19173,7 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(ship_data, "$Death FX Explosion Count", json_integer(sip->death_fx_count));
 		// Skipping more particle stuff for now
 		json_object_set_new(ship_data, "$Vaporize Percent Chance", json_real(sip->vaporize_chance));
-		if(sip->shockwave.damage_type_idx > -1 && sip->shockwave.damage_type_idx < Damage_types.size())
+		if(sip->shockwave.damage_type_idx > -1 && sip->shockwave.damage_type_idx < static_cast<int>(Damage_types.size()))
 		{
 			json_object_set_new(ship_data, "$Shockwave Damage Type", json_string(Damage_types.at(sip->shockwave.damage_type_idx).name));
 		}
@@ -19204,7 +19205,7 @@ void ship_output_json(const char *outfile)
 				json_array_foreach(Model_point_shield_controls, shield_point, quadrant)
 				{
 					insert_index = shield_point;
-					if(sip->shield_point_augment_ctrls[j] < shield_point)
+					if(sip->shield_point_augment_ctrls[j] < static_cast<int>(shield_point))
 					{
 						break;
 					}
@@ -19246,10 +19247,10 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(ship_data, "$Shield Armor Type", ( (sip->shield_armor_type_idx > -1) ? json_string(Armor_types[sip->shield_armor_type_idx].GetNamePtr()) : json_null() ));
 		// Skipping flags
 
-		json_array_append_new(Ships, ship_data);
+		json_array_append_new(Ships_array, ship_data);
 	}
 
-	json_object_set_new(ships_obj, "Ships", Ships);
+	json_object_set_new(ships_obj, "Ships", Ships_array);
 
 	cf_create_default_path_string(full_name, sizeof(full_name) - 1, CF_TYPE_ROOT, outfile);
 	json_dump_file(ships_obj, full_name, JSON_ESCAPE_SLASH | JSON_INDENT(4) | JSON_PRESERVE_ORDER | JSON_REAL_PRECISION(4));
