@@ -304,6 +304,99 @@ DCF(bm_frag, "Shows BmpMan fragmentation") {
 	key_getch();
 }
 
+DCF(bm_used, "Shows BmpMan Slot Usage") {
+	if (dc_optional_string_either("help", "--help")) {
+		dc_printf("Displays used bmpman slots usage with a breakdown per filetype\n\n");
+		return;
+	}
+
+	int none = 0, pcx = 0, user = 0, tga = 0, png = 0; int jpg = 0, dds = 0, ani = 0;
+	int eff = 0, eff_dds = 0, eff_tga = 0, eff_png = 0, eff_jpg = 0, eff_pcx = 0;
+	int render_target_dynamic = 0, render_target_static = 0;
+
+	for (int i = 0; i<MAX_BITMAPS; i++) {
+		switch (bm_bitmaps[i].type) {
+		case BM_TYPE_NONE:
+			none++;
+			break;
+		case BM_TYPE_PCX:
+			pcx++;
+			break;
+		case BM_TYPE_USER:
+			user++;
+			break;
+		case BM_TYPE_TGA:
+			tga++;
+			break;
+		case BM_TYPE_PNG:
+			// TODO distinguish png(static) from apng
+			png++;
+			break;
+		case BM_TYPE_JPG:
+			jpg++;
+			break;
+		case BM_TYPE_DDS:
+			dds++;
+			break;
+		case BM_TYPE_ANI:
+			ani++;
+			break;
+		case BM_TYPE_EFF:
+			eff++;
+			switch (bm_bitmaps[i].info.ani.eff.type) {
+			case BM_TYPE_DDS:
+				eff_dds++;
+				break;
+			case BM_TYPE_TGA:
+				eff_tga++;
+				break;
+			case BM_TYPE_PNG:
+				eff_png++;
+				break;
+			case BM_TYPE_JPG:
+				eff_jpg++;
+				break;
+			case BM_TYPE_PCX:
+				eff_pcx++;
+				break;
+			default:
+				Warning(LOCATION, "Unhandled EFF image type (%i), get a coder!", bm_bitmaps[i].info.ani.eff.type);
+				break;
+			}
+			break;
+		case BM_TYPE_RENDER_TARGET_STATIC:
+			render_target_static++;
+			break;
+		case BM_TYPE_RENDER_TARGET_DYNAMIC:
+			render_target_dynamic++;
+			break;
+		default:
+			Warning(LOCATION, "Unhandled image type (%i), get a coder!", bm_bitmaps[i].type);
+			break;
+		}
+	}
+
+	dc_printf("BmpMan Used Slots\n");
+	dc_printf("%04i PCX\n", pcx);
+	dc_printf("%04i User\n", user);
+	dc_printf("%04i TGA\n", tga);
+	dc_printf("%04i PNG\n", png);
+	dc_printf("%04i JPG\n", jpg);
+	dc_printf("%04i DDS\n", dds);
+	dc_printf("%04i ANI\n", ani);
+	dc_printf("%04i EFF\n", eff);
+	dc_printf("%04i EFF/DDS\n", eff_dds);
+	dc_printf("%04i EFF/TGA\n", eff_tga);
+	dc_printf("%04i EFF/PNG\n", eff_png);
+	dc_printf("%04i EFF/JPG\n", eff_jpg);
+	dc_printf("%04i EFF/PCX\n", eff_pcx);
+	dc_printf("%04i Render/Static\n", render_target_static);
+	dc_printf("%04i Render/Dynamic\n", render_target_dynamic);
+	dc_printf("%04i/%04i Total\n", MAX_BITMAPS - none, MAX_BITMAPS);
+	dc_printf("\n");
+}
+
+
 DCF(bmpman, "Shows/changes bitmap caching parameters and usage") {
 	if (dc_optional_string_either("help", "--help")) {
 		dc_printf("Usage: BmpMan [arg]\nWhere arg can be any of the following:\n");
