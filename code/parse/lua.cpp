@@ -3509,6 +3509,20 @@ ADE_FUNC(isValid, l_streaminganim, NULL, "Detects whether handle is valid", "boo
 	return sah->IsValid();
 }
 
+ADE_FUNC(preload, l_streaminganim, NULL, "Load all apng animations into memory", "boolean", "true if preload was successful, nil if a syntax/type error occurs")
+{
+	streaminganim_h* sah;
+	if(!ade_get_args(L, "o", l_streaminganim.GetPtr(&sah)))
+		return ADE_RETURN_NIL;
+
+	if (sah->ga.type != BM_TYPE_PNG)
+		return ADE_RETURN_NIL;
+
+	sah->ga.png.anim->preload();
+
+	return ADE_RETURN_TRUE;
+}
+
 ADE_FUNC(process, l_streaminganim, "[int x1, int y1, int x2, int y2, float u0, float v0, float u1, float v1, float alpha, boolean menu]",
 		"Processes a streaming animation, including selecting the correct frame & drawing it.",
 		"boolean", "True if processing was successful, otherwise nil")
