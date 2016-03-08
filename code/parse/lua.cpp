@@ -3546,9 +3546,23 @@ ADE_FUNC(process, l_streaminganim, "[int x1, int y1, int x2, int y2, float u0, f
 	if (x2 != INT_MAX) ge.width = x2-x1;
 	if (y2 != INT_MAX) ge.height = y2-y1;
 
-	// TODO alpha is currently unused
 	// note; generic_anim_render will default to GR_RESIZE_NONE when ge is provided
 	generic_anim_render(&sah->ga, flFrametime, x1, y1, false, &ge);
+
+	return ADE_RETURN_TRUE;
+}
+
+ADE_FUNC(reset, l_streaminganim, "[none]", "Reset a streaming animation back to its 1st frame", "boolean", "True if successful, otherwise nil")
+{
+	streaminganim_h* sah;
+
+	if(!ade_get_args(L, "o", l_streaminganim.GetPtr(&sah)))
+		return ADE_RETURN_NIL;
+
+	sah->ga.png.anim->goto_start();
+	sah->ga.current_frame = 0;
+	sah->ga.anim_time = 0.0f;
+	sah->ga.png.previous_frame_time = 0.0f;
 
 	return ADE_RETURN_TRUE;
 }

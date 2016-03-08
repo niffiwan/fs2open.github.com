@@ -638,6 +638,15 @@ size_t apng_ani::imgsize()
 
 
 /*
+ * @brief send animation to its 1st frame
+ */
+void apng_ani::goto_start()
+{
+	current_frame = 0;
+}
+
+
+/*
  * @brief Get info about the apng
  * @note Also validates the apng & sets it up to have frames read
  *

@@ -46,6 +46,7 @@ public:
 	~apng_ani();
 
 	int    load_header();
+	void   goto_start();
 	void   next_frame();
 	void   prev_frame();
 	void   preload();
