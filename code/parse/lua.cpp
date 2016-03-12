@@ -3523,7 +3523,7 @@ ADE_FUNC(preload, l_streaminganim, NULL, "Load all apng animations into memory",
 	return ADE_RETURN_TRUE;
 }
 
-ADE_FUNC(process, l_streaminganim, "[int x1, int y1, int x2, int y2, float u0, float v0, float u1, float v1, float alpha, boolean menu]",
+ADE_FUNC(process, l_streaminganim, "[int x1, int y1, int x2, int y2, float u0, float v0, float u1, float v1, float alpha, boolean draw]",
 		"Processes a streaming animation, including selecting the correct frame & drawing it.",
 		"boolean", "True if processing was successful, otherwise nil")
 {
