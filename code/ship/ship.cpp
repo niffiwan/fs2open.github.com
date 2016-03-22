@@ -259,6 +259,7 @@ flag_def_list Subsystem_flags[] = {
 	{ "turret use ammo",		MSS_FLAG2_TURRET_USE_AMMO, 1},
 	{ "autorepair if disabled",	MSS_FLAG2_AUTOREPAIR_IF_DISABLED, 1},
 	{ "don't autorepair if disabled", MSS_FLAG2_NO_AUTOREPAIR_IF_DISABLED, 1},
+	{ "share fire direction", MSS_FLAG2_SHARE_FIRE_DIRECTION, 1 }
 };
 
 const int Num_subsystem_flags = sizeof(Subsystem_flags)/sizeof(flag_def_list);
@@ -388,6 +389,7 @@ ship_flag_name Ship_flag_names[] = {
 	{SF2_NO_ETS,					"no-ets",						2,	},
 	{SF2_TOGGLE_SUBSYSTEM_SCANNING,	"toggle-subsystem-scanning",	2,	},
 	{SF2_NO_SECONDARY_LOCKON,		"no-secondary-lock-on",			2,	},
+	{SF2_NO_DISABLED_SELF_DESTRUCT,	"no-disabled-self-destruct",	2,	},
 };
 
 const int num_ai_tgt_weapon_flags = sizeof(ai_tgt_weapon_flags) / sizeof(flag_def_list);
@@ -1989,7 +1991,7 @@ void parse_ship_particle_effect(ship_info* sip, particle_effect* pe, char *id_st
 	}
 }
 
-void parse_allowed_weapons(ship_info *sip, bool is_primary, bool is_dogfight)
+void parse_allowed_weapons(ship_info *sip, const bool is_primary, const bool is_dogfight, const bool first_time)
 {
 	int i, num_allowed;
 	int allowed_weapons[MAX_WEAPON_TYPES];
@@ -2006,6 +2008,17 @@ void parse_allowed_weapons(ship_info *sip, bool is_primary, bool is_dogfight)
 	// Set the weapons filter used in weapons loadout (for primary weapons)
 	if (optional_string(allowed_banks_str))
 	{
+		// MageKing17 - We need to make modular tables replace bank restrictions by default, instead of adding to them.
+		if (!first_time && !(optional_string("+noreplace"))) {	// Only makes sense for modular tables.
+			// clear allowed weapons so the modular table can define new ones
+			for (bank = 0; bank < max_banks; bank++) {
+				for (i = 0; i < Num_weapon_types; i++) {
+					sip->allowed_bank_restricted_weapons[offset+bank][i] &= ~weapon_type;
+				}
+				sip->restricted_loadout_flag[offset+bank] &= ~weapon_type;
+			}
+		}
+
 		bank = -1;
 
 		while (check_for_string("("))
@@ -3028,8 +3041,8 @@ int parse_ship_values(ship_info* sip, const bool is_template, const bool first_t
 	}
 
 	// Set the weapons filter used in weapons loadout (for primary weapons)
-	parse_allowed_weapons(sip, true, false);
-	parse_allowed_weapons(sip, true, true);
+	parse_allowed_weapons(sip, true, false, first_time);
+	parse_allowed_weapons(sip, true, true, first_time);
 
 	// Get primary bank weapons
 	parse_weapon_bank(sip, true, &sip->num_primary_banks, sip->primary_bank_weapons, sip->primary_bank_ammo_capacity);
@@ -3041,8 +3054,8 @@ int parse_ship_values(ship_info* sip, const bool is_template, const bool first_t
 	}
 
 	// Set the weapons filter used in weapons loadout (for secondary weapons)
-	parse_allowed_weapons(sip, false, false);
-	parse_allowed_weapons(sip, false, true);
+	parse_allowed_weapons(sip, false, false, first_time);
+	parse_allowed_weapons(sip, false, true, first_time);
 
 	// Get secondary bank weapons
 	parse_weapon_bank(sip, false, &sip->num_secondary_banks, sip->secondary_bank_weapons, sip->secondary_bank_ammo_capacity);
@@ -3304,10 +3317,12 @@ int parse_ship_values(ship_info* sip, const bool is_template, const bool first_t
 		Error(LOCATION, "%s '%s' has too many primary banks (%d).  Maximum for ships is currently %d.\n", info_type_name, sip->name, sip->num_primary_banks, MAX_SHIP_PRIMARY_BANKS);
 	}
 
+	memset(sip->allowed_weapons, 0, sizeof(int) * MAX_WEAPON_TYPES);
+
 	// copy to regular allowed_weapons array
-	for (i=0; i<MAX_SHIP_WEAPONS; i++)
+	for (i = 0; i < MAX_SHIP_WEAPONS; i++)
 	{
-		for (j=0; j<MAX_WEAPON_TYPES; j++)
+		for (j = 0; j < Num_weapon_types; j++)
 		{
 			if (sip->allowed_bank_restricted_weapons[i][j] & REGULAR_WEAPON)
 				sip->allowed_weapons[j] |= REGULAR_WEAPON;
@@ -3317,10 +3332,12 @@ int parse_ship_values(ship_info* sip, const bool is_template, const bool first_t
 		}
 	}
 
+	sip->flags &= ~SIF_BALLISTIC_PRIMARIES;
+
 	//Set ship ballistic flag if necessary
-	for (i=0; i<MAX_SHIP_PRIMARY_BANKS; i++)
+	for (i = 0; i < MAX_SHIP_PRIMARY_BANKS; i++)
 	{
-		for (j=0; j<MAX_WEAPON_TYPES; j++)
+		for (j = 0; j < Num_weapon_types; j++)
 		{
 			if(sip->allowed_bank_restricted_weapons[i][j] && (Weapon_info[j].wi_flags2 & WIF2_BALLISTIC))
 			{
@@ -7072,7 +7089,7 @@ void ship_render_DEPRECATED(object * obj)
 				}
 
 				// Valathil - maybe do a scripting hook here to do some scriptable effects?
-				if(shipp->shader_effect_active && Use_GLSL > 1)
+				if(shipp->shader_effect_active && is_minimum_GLSL_version())
 				{
 					float timer;
 					render_flags |= (MR_DEPRECATED_ANIMATED_SHADER);
@@ -9860,7 +9877,7 @@ int ship_create(matrix *orient, vec3d *pos, int ship_type, char *ship_name)
 
 	model_anim_set_initial_states(shipp);
 
-	shipp->model_instance_num = model_create_instance(sip->model_num);
+	shipp->model_instance_num = model_create_instance(true, sip->model_num);
 
 	shipp->time_created = Missiontime;
 
@@ -10290,7 +10307,7 @@ void change_ship_type(int n, int ship_type, int by_sexp)
 	ship_assign_sound(sp);
 	
 	// create new model instance data
-	sp->model_instance_num = model_create_instance(sip->model_num);
+	sp->model_instance_num = model_create_instance(true, sip->model_num);
 
 	// Valathil - Reinitialize collision checks
 	if ( Cmdline_old_collision_sys ) {
@@ -13030,6 +13047,7 @@ int get_subsystem_pos(vec3d *pos, object *objp, ship_subsys *subsysp)
 		*pos = objp->pos;
 		return 0;
 	}
+	Assertion(objp->type == OBJ_SHIP, "Only ships can have subsystems!");
 
 	model_subsystem *mss = subsysp->system_info;
 
@@ -13041,7 +13059,7 @@ int get_subsystem_pos(vec3d *pos, object *objp, ship_subsys *subsysp)
 	} else {
 		// Submodel subsystems may require a more complicated calculation
 
-		find_submodel_instance_world_point(pos, objp, mss->subobj_num);
+		find_submodel_instance_world_point(pos, Ships[objp->instance].model_instance_num, mss->subobj_num, &objp->orient, &objp->pos);
 	}
 
 	return 1;
@@ -13102,7 +13120,6 @@ void ship_model_start(object *objp)
 			model_set_instance(model_num, psub->turret_gun_sobj, &pss->submodel_info_2, pss->flags );
 		}
 	}
-	model_do_dumb_rotation(model_num);
 }
 
 /**
@@ -13138,6 +13155,7 @@ void ship_model_update_instance(object *objp)
 	// Then, clear all the angles in the model to zero
 	model_clear_submodel_instances(model_instance_num);
 
+	// Handle subsystem rotations for this ship
 	for ( pss = GET_FIRST(&shipp->subsys_list); pss != END_OF_LIST(&shipp->subsys_list); pss = GET_NEXT(pss) ) {
 		psub = pss->system_info;
 		switch (psub->type) {
@@ -13166,8 +13184,8 @@ void ship_model_update_instance(object *objp)
 		}
 	}
 
-	model_instance_dumb_rotation(model_instance_num);
-
+	// Handle intrinsic rotations for this ship
+	model_do_intrinsic_rotations(model_instance_num);
 
 	// preprocess subobject orientations for collision detection
 	model_collide_preprocess(&objp->orient, model_instance_num);
@@ -13277,6 +13295,8 @@ void ship_set_eye( object *obj, int eye_index)
 // eyes have no defined up vector)
 void ship_get_eye( vec3d *eye_pos, matrix *eye_orient, object *obj, bool do_slew , bool from_origin)
 {
+	Assertion(obj->type == OBJ_SHIP, "Only ships can have eye positions!");
+
 	ship *shipp = &Ships[obj->instance];
 	polymodel *pm = model_get(Ship_info[shipp->ship_info_index].model_num);
 
@@ -13292,7 +13312,7 @@ void ship_get_eye( vec3d *eye_pos, matrix *eye_orient, object *obj, bool do_slew
 	eye *ep = &(pm->view_positions[Ships[obj->instance].current_viewpoint]);
 
 	if (ep->parent >= 0 && pm->submodel[ep->parent].can_move) {
-		find_submodel_instance_point_orient(eye_pos, eye_orient, obj, ep->parent, &ep->pnt, &vmd_identity_matrix);
+		find_submodel_instance_point_orient(eye_pos, eye_orient, shipp->model_instance_num, ep->parent, &ep->pnt, &vmd_identity_matrix);
 		vec3d tvec = *eye_pos;
 		vm_vec_unrotate(eye_pos, &tvec, &obj->orient);
 		vm_vec_add2(eye_pos, &obj->pos);
@@ -19021,7 +19041,7 @@ int ship_render_get_insignia(object* obj, ship* shipp)
 
 void ship_render_set_animated_effect(model_render_params *render_info, ship *shipp, uint *render_flags)
 {
-	if ( !shipp->shader_effect_active || Use_GLSL <= 1 || Rendering_to_shadow_map ) {
+	if ( !shipp->shader_effect_active || !is_minimum_GLSL_version() || Rendering_to_shadow_map ) {
 		return;
 	}
 
@@ -19099,6 +19119,8 @@ void ship_render(object* obj, draw_list* scene)
 			return;
 		}
 	}
+
+	model_clear_instance(sip->model_num);
 
 	// Only render electrical arcs if within 500m of the eye (for a 10m piece)
 	if ( vm_vec_dist_quick( &obj->pos, &Eye_position ) < obj->radius*50.0f && !Rendering_to_shadow_map ) {

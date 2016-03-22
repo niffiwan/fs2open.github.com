@@ -2036,17 +2036,6 @@ void gr_opengl_flash_alpha(int r, int g, int b, int a)
 	opengl_draw_coloured_quad((GLint)x1, (GLint)y1, (GLint)x2, (GLint)y2);
 }
 
-
-void gr_opengl_fade_in(int instantaneous)
-{
-	// Empty - DDOI
-}
-
-void gr_opengl_fade_out(int instantaneous)
-{
-	// Empty - DDOI
-}
-
 void opengl_bitmap_ex_internal(int x, int y, int w, int h, int sx, int sy, int resize_mode)
 {
 	if ( (w < 1) || (h < 1) ) {
@@ -2546,7 +2535,7 @@ void opengl_setup_scene_textures()
 {
 	Scene_texture_initialized = 0;
 
-	if ( !Use_GLSL || Cmdline_no_fbo || !Is_Extension_Enabled(OGL_EXT_FRAMEBUFFER_OBJECT) ) {
+	if ( !is_minimum_GLSL_version() || Cmdline_no_fbo || !Is_Extension_Enabled(OGL_EXT_FRAMEBUFFER_OBJECT) ) {
 		Cmdline_postprocess = 0;
 		Cmdline_softparticles = 0;
 		Cmdline_fb_explosions = 0;
@@ -3067,7 +3056,7 @@ void opengl_clear_deferred_buffers()
 
 void gr_opengl_deferred_lighting_begin()
 {
-	if (Use_GLSL < 2 || Cmdline_no_deferred_lighting)
+	if (GLSL_version < 120 || Cmdline_no_deferred_lighting)
 		return;
 
 	Deferred_lighting = true;
@@ -3093,7 +3082,7 @@ extern float static_tube_factor;
 
 void gr_opengl_deferred_lighting_finish()
 {
-	if ( Use_GLSL < 2 || Cmdline_no_deferred_lighting ) {
+	if ( GLSL_version < 120 || Cmdline_no_deferred_lighting ) {
 		return;
 	}
 
