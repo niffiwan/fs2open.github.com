@@ -620,7 +620,7 @@ void control_config_common_close()
 {
 	// only need to worry control presets for now
 	for (auto ii = Control_config_presets.cbegin(); ii != Control_config_presets.cend(); ++ii) {
-		delete * ii;
+		delete[] * ii;
 	}
 }
 
