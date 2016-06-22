@@ -572,6 +572,8 @@ void apng_ani::prev_frame()
 
 /*
  * @brief get next apng frame
+ *
+ * @todo consider making caching frames optional, i.e. reduce memory consumption for (e.g.) headz.  Will require a heap of changes though...
  */
 void apng_ani::next_frame()
 {

@@ -1280,6 +1280,11 @@ void HudGaugeTalkingHead::render(float frametime)
 			for (int j = 0; j < Num_messages_playing; ++j) {
 				if (Playing_messages[j].id == msg_id) {
 					Playing_messages[j].play_anim = false;
+					// try deleting all the data here...
+					if ((head_anim->type == BM_TYPE_PNG) && (head_anim->png.anim != nullptr)) {
+						delete head_anim->png.anim;
+						head_anim->png.anim = nullptr;
+					}
 					break;  // only one head ani plays at a time
 				}
 			}
