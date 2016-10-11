@@ -12,7 +12,7 @@
 #include "asteroid/asteroid.h"
 #include "bmpman/bmpman.h"
 #include "cmdline/cmdline.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamesnd/eventmusic.h"
 #include "gamesnd/gamesnd.h"
 #include "globalincs/alphacolors.h"
@@ -244,7 +244,7 @@ static int Damage_flash_bright;
 static int Damage_flash_timer;
 
 HudGauge::HudGauge():
-base_w(0), base_h(0), gauge_config(-1), font_num(FONT1), lock_color(false), sexp_lock_color(false), reticle_follow(false), 
+base_w(0), base_h(0), gauge_config(-1), font_num(font::FONT1), lock_color(false), sexp_lock_color(false), reticle_follow(false),
 active(false), off_by_default(false), sexp_override(false), pop_up(false), disabled_views(0), custom_gauge(false),
 texture_target(-1), canvas_w(-1), canvas_h(-1), target_w(-1), target_h(-1)
 {
@@ -268,7 +268,7 @@ texture_target(-1), canvas_w(-1), canvas_h(-1), target_w(-1), target_h(-1)
 }
 
 HudGauge::HudGauge(int _gauge_object, int _gauge_config, bool _slew, bool _message, int _disabled_views, int r, int g, int b):
-base_w(0), base_h(0), gauge_config(_gauge_config), gauge_object(_gauge_object), font_num(FONT1), lock_color(false), sexp_lock_color(false),
+base_w(0), base_h(0), gauge_config(_gauge_config), gauge_object(_gauge_object), font_num(font::FONT1), lock_color(false), sexp_lock_color(false),
 reticle_follow(_slew), active(false), off_by_default(false), sexp_override(false), pop_up(false), message_gauge(_message),
 disabled_views(_disabled_views), custom_gauge(false), textoffset_x(0), textoffset_y(0), texture_target(-1),
 canvas_w(-1), canvas_h(-1), target_w(-1), target_h(-1)
@@ -304,7 +304,7 @@ canvas_w(-1), canvas_h(-1), target_w(-1), target_h(-1)
 
 // constructor for custom gauges
 HudGauge::HudGauge(int _gauge_config, bool _slew, int r, int g, int b, char* _custom_name, char* _custom_text, char* frame_fname, int txtoffset_x, int txtoffset_y):
-base_w(0), base_h(0), gauge_config(_gauge_config), gauge_object(HUD_OBJECT_CUSTOM), font_num(FONT1), lock_color(false), sexp_lock_color(false), 
+base_w(0), base_h(0), gauge_config(_gauge_config), gauge_object(HUD_OBJECT_CUSTOM), font_num(font::FONT1), lock_color(false), sexp_lock_color(false),
 reticle_follow(_slew), active(false), off_by_default(false), sexp_override(false), pop_up(false), message_gauge(false),
 disabled_views(VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY), custom_gauge(true), textoffset_x(txtoffset_x),
  textoffset_y(txtoffset_y), texture_target(-1), canvas_w(-1), canvas_h(-1), target_w(-1), target_h(-1)
@@ -381,7 +381,7 @@ void HudGauge::initSlew(bool slew)
 
 void HudGauge::initFont(int input_font_num)
 {
-	if ( input_font_num >= 0 && input_font_num < Num_fonts) {
+	if (input_font_num >= 0 && input_font_num < font::FontManager::numberOfFonts()) {
 		font_num = input_font_num;
 	}
 }
@@ -439,7 +439,7 @@ void HudGauge::updateCustomGaugeText(const SCP_string& txt)
 
 void HudGauge::setFont()
 {
-	gr_set_font(font_num);
+	font::set_font(font_num);
 }
 
 void HudGauge::setGaugeColor(int bright_index)
@@ -1088,7 +1088,7 @@ bool HudGauge::canRender()
 	}
 
 	if (gauge_config == HUD_ETS_GAUGE) {
-		if (Ships[Player_obj->instance].flags2 & SF2_NO_ETS && !Show_disabled_ets_gauges) {
+		if (Ships[Player_obj->instance].flags[Ship::Ship_Flags::No_ets] && !Show_disabled_ets_gauges) {
 			return false;
 		}
 	}
@@ -1192,7 +1192,7 @@ void HUD_init()
 	HUD_draw     = 1;
 	HUD_disable_except_messages = 0;
 
-	if(The_mission.flags & MISSION_FLAG_FULLNEB){
+	if(The_mission.flags[Mission::Mission_Flags::Fullneb]){
 		HUD_contrast = 1;
 	}
 
@@ -1384,7 +1384,7 @@ void hud_update_frame(float frametime)
 	if (Player_ai->target_objnum == -1){
 		retarget = 1;
 	} else if (Objects[Player_ai->target_objnum].type == OBJ_SHIP) {
-		if (Ships[Objects[Player_ai->target_objnum].instance].flags & SF_DYING){
+		if (Ships[Objects[Player_ai->target_objnum].instance].flags[Ship::Ship_Flags::Dying]){
 			if (timestamp_elapsed(Ships[Objects[Player_ai->target_objnum].instance].final_death_time)) {
 				retarget = 1;
 			}
@@ -1395,8 +1395,8 @@ void hud_update_frame(float frametime)
 	// only do this is not retargeting
 	if ((!retarget) && (Player_ai->target_objnum != -1)) {
 		if (Objects[Player_ai->target_objnum].type == OBJ_SHIP) {
-			if ( !(Ships[Objects[Player_ai->target_objnum].instance].flags & SF_DYING) ) {
-				if ( Ship_info[Ships[Objects[Player_ai->target_objnum].instance].ship_info_index].flags & (SIF_BIG_SHIP | SIF_HUGE_SHIP) ) {
+			if ( !(Ships[Objects[Player_ai->target_objnum].instance].flags[Ship::Ship_Flags::Dying]) ) {
+				if ( Ship_info[Ships[Objects[Player_ai->target_objnum].instance].ship_info_index].is_big_or_huge() ) {
 					ship_subsys *ss = Player_ai->targeted_subsys;
 					if (ss != NULL) {
 						if ((ss->system_info->type == SUBSYSTEM_TURRET) && (ss->current_hits == 0)) {
@@ -1476,7 +1476,7 @@ void hud_update_frame(float frametime)
 	int stop_targetting_this_thing = 0;
 
 	// check to see if the target is still alive
-	if ( targetp->flags&OF_SHOULD_BE_DEAD ) {
+	if ( targetp->flags[Object::Object_Flags::Should_be_dead] ) {
 		stop_targetting_this_thing = 1;
 	}
 
@@ -1486,10 +1486,10 @@ void hud_update_frame(float frametime)
 	if ( targetp->type == OBJ_SHIP ) {
 		Assert ( targetp->instance >=0 && targetp->instance < MAX_SHIPS );
 		target_shipp = &Ships[targetp->instance];
-		Player->target_is_dying = target_shipp->flags & SF_DYING;
+		Player->target_is_dying = target_shipp->flags[Ship::Ship_Flags::Dying];
 
 		// If it is warping out (or exploded), turn off targeting
-		if ( target_shipp->flags & (SF_DEPART_WARP|SF_EXPLODED) ) {
+		if ( target_shipp->flags[Ship::Ship_Flags::Depart_warp] || target_shipp->flags[Ship::Ship_Flags::Exploded] ) {
 			stop_targetting_this_thing = 1;
 		}
 	}
@@ -1715,19 +1715,19 @@ void hud_maybe_display_supernova()
  */
 void hud_render_all()
 {
-	size_t i;
+	int i;
 
 	hud_render_gauges();
 
 	// start rendering cockpit dependent gauges if possible
-	for ( i = 0; i < Player_displays.size(); ++i ) {
+	for ( i = 0; i < (int)Player_displays.size(); ++i ) {
 		hud_render_gauges(i);
 	}
 
 	hud_clear_msg_buffer();
 
 	// set font back the way it was
-	gr_set_font(FONT1);
+	font::set_font(font::FONT1);
 }
 
 void hud_render_gauges(int cockpit_display_num)
@@ -2134,7 +2134,7 @@ void HudGaugeDamage::render(float frametime)
 			setGaugeColor();
 		}		
 
-		char *n_firstline;
+		const char *n_firstline;
 		n_firstline = strrchr(hud_subsys_list[best_index].name, '|');
 		if (n_firstline) {
 			// Print only the last line
@@ -2214,7 +2214,8 @@ int hud_anim_load(hud_anim *ha)
 }
 
 /**
- * @brief Render out a frame of the targetbox static animation, based on how much time has elapsed 
+ * @brief Render out a frame of a hud or briefing animation, based on how much time has elapsed
+ * @note targetbox static was not implemented by :v:, also used for briefing icons & hud lock icons
  *
  * @param ha			Pointer to ::hud_anim info
  * @param frametime		Seconds elapsed since last frame
@@ -2224,6 +2225,8 @@ int hud_anim_load(hud_anim *ha)
  * @param reverse		Play animation in reverse (default 0)
  * @param resize_mode		Resize for non-standard resolutions
  * @param mirror		Mirror along y-axis so icon points left instead of right
+ *
+ * @returns  1 on success, 0 on failure
  */
 int hud_anim_render(hud_anim *ha, float frametime, int draw_alpha, int loop, int hold_last, int reverse, int resize_mode, bool mirror)
 {
@@ -2235,26 +2238,15 @@ int hud_anim_render(hud_anim *ha, float frametime, int draw_alpha, int loop, int
 	}
 
 	ha->time_elapsed += frametime;
-	if ( ha->time_elapsed > ha->total_time ) {
-		if ( loop ) {
-			ha->time_elapsed = 0.0f;
-		} else {
-			if ( !hold_last ) {
-				return 0;
-			}
-		}
+	if ( ha->time_elapsed > ha->total_time && loop == 0 && hold_last == 0) {
+		return 0;
 	}
 
-	// Draw the correct frame of animation
-	framenum = fl2i( (ha->time_elapsed * ha->num_frames) / ha->total_time );
+	// Note; total_time for hud_anim is derived only from the fps, no need to pass it in
+	framenum = bm_get_anim_frame(ha->first_frame, ha->time_elapsed, 0.0f, loop != 0);
 	if (reverse) {
 		framenum = (ha->num_frames-1) - framenum;
 	}
-
-	if ( framenum < 0 )
-		framenum = 0;
-	if ( framenum >= ha->num_frames )
-		framenum = ha->num_frames-1;
 
 	// Blit the bitmap for this frame
 	if(emp_should_blit_gauge()){
@@ -2274,7 +2266,14 @@ int hud_anim_render(hud_anim *ha, float frametime, int draw_alpha, int loop, int
  */
 void hud_num_make_mono(char *num_str, int font_num)
 {
-	int len, i;
+	font::FSFont* fsFont = font::get_font(font_num);
+
+	if (fsFont->getType() != font::VFNT_FONT)
+	{
+		// Only old volition fonts need this
+		return;
+	}
+
 	ubyte sc;
 
 	sc = lcl_get_font_index(font_num);
@@ -2283,8 +2282,8 @@ void hud_num_make_mono(char *num_str, int font_num)
 		return;
 	}
 
-	len = strlen(num_str);
-	for ( i = 0; i < len; i++ ) {
+	size_t len = strlen(num_str);
+	for (size_t i = 0; i < len; i++ ) {
 		if ( num_str[i] == '1' ) {
 			num_str[i] = (char)(sc + 1);
 		}
@@ -2663,11 +2662,13 @@ int hud_support_find_closest( int objnum )
 
 	sop = GET_FIRST(&Ship_obj_list);
 	while(sop != END_OF_LIST(&Ship_obj_list)){
-		if ( Ship_info[Ships[Objects[sop->objnum].instance].ship_info_index].flags & SIF_SUPPORT ) {
+		if ( Ship_info[Ships[Objects[sop->objnum].instance].ship_info_index].flags[Ship::Info_Flags::Support] ) {
 			int pship_index, sindex;
 
 			// make sure support ship is not dying
-			if ( !(Ships[Objects[sop->objnum].instance].flags & (SF_DYING|SF_EXPLODED)) ) {
+            auto shipp = &Ships[Objects[sop->objnum].instance];
+            
+			if ( !(shipp->flags[Ship::Ship_Flags::Dying] || shipp->flags[Ship::Ship_Flags::Exploded]) ) {
 
 				Assert( objp->type == OBJ_SHIP );
 				aip = &Ai_info[Ships[Objects[sop->objnum].instance].ai_index];
@@ -2810,7 +2811,7 @@ void HudGaugeSupport::render(float frametime)
 	}
 
 	show_time = 0;
-	if (Player_ai->ai_flags & AIF_BEING_REPAIRED) {
+	if (Player_ai->ai_flags[AI::AI_Flags::Being_repaired]) {
 		Assert(Player_ship->ship_max_hull_strength > 0);
 		
 		if (!Cmdline_rearm_timer)
@@ -2853,7 +2854,7 @@ void HudGaugeSupport::render(float frametime)
 		}
 		renderStringAlignCenter(position[0], position[1] + text_val_offset_y, w, outstr);
 	}
-	else if (Player_ai->ai_flags & AIF_REPAIR_OBSTRUCTED) {
+	else if (Player_ai->ai_flags[AI::AI_Flags::Repair_obstructed]) {
 		strcpy_s(outstr, XSTR( "obstructed", 229));
 		renderStringAlignCenter(position[0], position[1] + text_val_offset_y, w, outstr);
 	} else {
@@ -3042,7 +3043,7 @@ void hud_gauge_popup_start(int gauge_index, int time)
 
 	size_t num_gauges, i;
 
-	if(Ship_info[Player_ship->ship_info_index].hud_gauges.size() > 0) {
+	if(!Ship_info[Player_ship->ship_info_index].hud_gauges.empty()) {
 		num_gauges = Ship_info[Player_ship->ship_info_index].hud_gauges.size();
 
 		for(i = 0; i < num_gauges; i++) {
@@ -3072,7 +3073,7 @@ void hud_gauge_start_flash(int gauge_index)
 	HUD_gauge_flash_duration[gauge_index] = timestamp(HUD_GAUGE_FLASH_DURATION);
 	HUD_gauge_flash_next[gauge_index] = 1;
  
-	if(Ship_info[Player_ship->ship_info_index].hud_gauges.size() > 0) {
+	if(!Ship_info[Player_ship->ship_info_index].hud_gauges.empty()) {
 		num_gauges = Ship_info[Player_ship->ship_info_index].hud_gauges.size();
 
 		for(i = 0; i < num_gauges; i++) {
@@ -3701,7 +3702,7 @@ void hud_page_in()
 	size_t j, num_gauges = 0;
 	for (auto it = Ship_info.cbegin(); it != Ship_info.cend(); ++it) {
 		if(it->hud_enabled) {
-			if(it->hud_gauges.size() > 0) {
+			if(!it->hud_gauges.empty()) {
 				num_gauges = it->hud_gauges.size();
 
 				for(j = 0; j < num_gauges; j++) {
@@ -3724,7 +3725,7 @@ HudGauge* hud_get_gauge(const char* name)
 	size_t j;
 
 	// go through all gauges and return the gauge that matches
-	if(Ship_info[Player_ship->ship_info_index].hud_gauges.size() > 0) {
+	if(!Ship_info[Player_ship->ship_info_index].hud_gauges.empty()) {
 		for(j = 0; j < Ship_info[Player_ship->ship_info_index].hud_gauges.size(); j++) {
 
 			gauge_name = Ship_info[Player_ship->ship_info_index].hud_gauges[j]->getCustomGaugeName();

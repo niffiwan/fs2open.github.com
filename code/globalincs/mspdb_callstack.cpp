@@ -10,7 +10,12 @@
 
 /* Windows */
 #include <windows.h>
+
+// Stupid Microsoft is not able to fix a simple compile warning: https://connect.microsoft.com/VisualStudio/feedback/details/888527/warnings-on-dbghelp-h
+#pragma warning(push)
+#pragma warning(disable: 4091) // ignored on left of '' when no variable is declared
 #include <dbghelp.h>
+#pragma warning(pop)
 
 /* SCP */
 #include "globalincs/pstypes.h"
@@ -73,14 +78,14 @@ BOOL SCP_mspdbcs_ResolveSymbol( HANDLE hProcess, UINT_PTR dwAddress, SCP_mspdbcs
 		memset( &sym.sym, 0, sizeof( sym.sym ) );
 		sym.sym.SizeOfStruct = sizeof( IMAGEHLP_SYMBOL64 );
 
-#ifdef _WIN64
+#if IS_64BIT
 		sym.sym.Address = dwAddress;
 #else
 		sym.sym.Address = (DWORD)dwAddress;
 #endif
 		sym.sym.MaxNameLength = SCP_MSPDBCS_MAX_SYMBOL_LENGTH;
 		
-#ifdef _WIN64
+#if IS_64BIT
 		if ( SymGetSymFromAddr64( hProcess, dwAddress, &(siSymbol.dwOffset), &sym.sym ) )
 #else
 		if ( SymGetSymFromAddr64( hProcess, (DWORD)dwAddress, &(siSymbol.dwOffset), &sym.sym ) )
@@ -100,7 +105,7 @@ BOOL SCP_mspdbcs_ResolveSymbol( HANDLE hProcess, UINT_PTR dwAddress, SCP_mspdbcs
 
 			if ( siSymbol.dwOffset != 0 )
 			{
-				sprintf_s( szWithOffset, SCP_MSPDBCS_MAX_SYMBOL_LENGTH, "%s + %d bytes", pszSymbol, siSymbol.dwOffset );
+				sprintf_s( szWithOffset, SCP_MSPDBCS_MAX_SYMBOL_LENGTH, "%s + %lld bytes", pszSymbol, siSymbol.dwOffset );
 				szWithOffset[ SCP_MSPDBCS_MAX_SYMBOL_LENGTH - 1 ] = '\0'; /* Because sprintf doesn't guarantee NULL terminating */
 				pszSymbol = szWithOffset;
 			}
@@ -130,7 +135,7 @@ DWORD64 __stdcall SCP_mspdbcs_GetModuleBase( HANDLE hProcess, DWORD64 returnAddr
 	moduleInfo.SizeOfStruct = sizeof( IMAGEHLP_MODULE );
 	
 	/* The ATL headers do it this way */
-#ifdef _WIN64
+#if IS_64BIT
 	if ( SymGetModuleInfo( hProcess, returnAddress, &moduleInfo ) )
 #else
 	if ( SymGetModuleInfo( hProcess, (ULONG)returnAddress, &moduleInfo ) )
@@ -149,7 +154,7 @@ DWORD64 __stdcall SCP_mspdbcs_GetModuleBase( HANDLE hProcess, DWORD64 returnAddr
 			char szFile[ _MAX_PATH ] = {0}; /* Initialise the file path */
 			cch = GetModuleFileNameA( (HINSTANCE)memoryBasicInfo.AllocationBase, szFile, MAX_PATH );
 			SymLoadModule( hProcess, NULL, ((cch)?szFile:NULL),
-#ifdef _WIN64
+#if IS_64BIT
 						   NULL, (DWORD_PTR)memoryBasicInfo.AllocationBase, 0 );
 #else
 						   NULL, (DWORD)(DWORD_PTR)memoryBasicInfo.AllocationBase, 0 );
@@ -209,7 +214,8 @@ DWORD WINAPI SCP_mspdbcs_DumpStackThread( LPVOID pv )
 #elif defined(_M_AMD64)
 	dwMachType = IMAGE_FILE_MACHINE_AMD64;
 	stackFrame.AddrPC.Offset = context.Rip;
-	stackFrame.AddrStack = context.Rsp;
+	stackFrame.AddrStack.Offset = context.Rsp;
+	stackFrame.AddrFrame.Offset = context.Rbp;
 #else
 #		error UNKNOWN ARCHITECTURE
 #endif

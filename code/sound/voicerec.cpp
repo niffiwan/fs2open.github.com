@@ -19,20 +19,30 @@
 #include "stdafx.h"
 #endif	//LAUNCHER
 
+#pragma warning(push)
+#pragma warning(disable: 4995)
+// Visual Studio complains that some functions are deprecated so this fixes that
+#include <cstring>
+#include <cwchar>
+#include <cstdio>
+#pragma warning(pop)
 
 
 #include <sphelper.h>                           // Contains definitions of SAPI functions
 #include <stdio.h>
 
 #include "voicerec.h"
-#include "grammar.h"
+#include "sound/grammar.h"
 
 // FreeSpace includes
 #include "cfile/cfile.h"
 #include "hud/hudsquadmsg.h"
 #include "io/keycontrol.h"
+#include "osapi/osapi.h"
 #include "playerman/player.h"
 #include "ship/ship.h"
+
+#include <SDL_syswm.h>
 
 CComPtr<ISpRecoGrammar>         p_grammarObject; // Pointer to our grammar object
 CComPtr<ISpRecoContext>         p_recogContext;  // Pointer to our recognition context
@@ -50,6 +60,27 @@ extern int hud_squadmsg_wing_valid(wing *wingp);
 extern int Msg_instance;;
 extern int Msg_shortcut_command;
 extern int Squad_msg_mode;
+
+namespace
+{
+	bool system_event_handler(const SDL_Event& e)
+	{
+		switch (e.syswm.msg->msg.win.msg)
+		{
+		case WM_RECOEVENT:
+			if (Game_mode & GM_IN_MISSION && Cmdline_voice_recognition)
+			{
+				VOICEREC_process_event(e.syswm.msg->msg.win.hwnd);
+				return true;
+			}
+			break;
+		default:
+			break;
+		}
+
+		return false;
+	}
+}
 
 void doVid_Action(int action)
 {
@@ -112,7 +143,6 @@ void doVid_Action(int action)
 	}
 }
 
-
 bool VOICEREC_init(HWND hWnd, int event_id, int grammar_id, int command_resource)
 {
 	HRESULT hr = S_OK;
@@ -123,7 +153,7 @@ bool VOICEREC_init(HWND hWnd, int event_id, int grammar_id, int command_resource
 		hr = p_recogEngine.CoCreateInstance(CLSID_SpInprocRecognizer);
 		if (FAILED(hr))
 		{
-			MessageBox(hWnd,"Failed to create a recognition engine\n","Error",MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR, "Failed to create a recognition engine\n","Error");
 			printf("Failed to create a recognition engine\n");
 			break;
 		}
@@ -132,7 +162,7 @@ bool VOICEREC_init(HWND hWnd, int event_id, int grammar_id, int command_resource
 		hr = p_recogEngine->CreateRecoContext( &p_recogContext );
 		if (FAILED(hr))
 		{
-			MessageBox(hWnd,"Failed to create the command recognition context\n","Error",MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR,"Failed to create the command recognition context\n","Error");
 			printf("Failed to create the command recognition context\n");
 			break;
 		}
@@ -142,7 +172,7 @@ bool VOICEREC_init(HWND hWnd, int event_id, int grammar_id, int command_resource
 		hr = p_recogContext->SetNotifyWindowMessage( hWnd, event_id, 0, 0 );
 		if (FAILED(hr))
 		{
-			MessageBox(hWnd,"Failed to SetNotifyWindowMessage\n","Error",MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR,"Failed to SetNotifyWindowMessage\n","Error");
 			break;
 		}
 
@@ -151,7 +181,7 @@ bool VOICEREC_init(HWND hWnd, int event_id, int grammar_id, int command_resource
 		hr = p_recogContext->SetInterest( SPFEI(SPEI_RECOGNITION), SPFEI(SPEI_RECOGNITION) );
 		if (FAILED(hr))
 		{
-			MessageBox(hWnd,"Failed to set events\n","Error",MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR,"Failed to set events\n","Error");
 			break;
 		}
 
@@ -159,7 +189,7 @@ bool VOICEREC_init(HWND hWnd, int event_id, int grammar_id, int command_resource
 		hr = p_recogContext->CreateGrammar(grammar_id, &p_grammarObject);
 		if (FAILED(hr))
 		{
-			MessageBox(hWnd,"Failed to create grammar\n","Error",MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR,"Failed to create grammar\n","Error");
 			break;
 		}
 
@@ -173,7 +203,7 @@ bool VOICEREC_init(HWND hWnd, int event_id, int grammar_id, int command_resource
 												SPLO_STATIC);
 			if (FAILED(hr))
 			{
-				MessageBox(hWnd,"Failed to load resource SRGRAMMAR\n","Error",MB_OK);
+				os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR,"Failed to load resource SRGRAMMAR\n","Error");
 				break;
 			}
 		}
@@ -181,7 +211,7 @@ bool VOICEREC_init(HWND hWnd, int event_id, int grammar_id, int command_resource
 		hr = SpCreateDefaultObjectFromCategoryId(SPCAT_AUDIOIN, &cpAudio);
 		if (FAILED(hr))
 		{
-			MessageBox(hWnd,"Failed to get default audio input\n", "Error", MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR,"Failed to get default audio input\n", "Error");
 			break;
 		}
 
@@ -189,14 +219,14 @@ bool VOICEREC_init(HWND hWnd, int event_id, int grammar_id, int command_resource
 		hr = p_recogEngine->SetInput(cpAudio, TRUE);
 		if (FAILED(hr))
 		{
-			MessageBox(hWnd,"Failed to set audio input\n", "Error", MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR,"Failed to set audio input\n", "Error");
 		}
 
 		// Set rules to active, we are now listening for commands
 		hr = p_grammarObject->SetRuleState(NULL, NULL, SPRS_ACTIVE );
 		if (FAILED(hr))
 		{
-			MessageBox(hWnd,"Failed to set listening for commands\n","Error",MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR,"Failed to set listening for commands\n","Error");
 			break;
 		}
 
@@ -208,6 +238,8 @@ bool VOICEREC_init(HWND hWnd, int event_id, int grammar_id, int command_resource
 	{
 		VOICEREC_deinit();
 	}
+
+	os::events::addEventListener(SDL_SYSWMEVENT, os::events::DEFAULT_LISTENER_WEIGHT, system_event_handler);
 
 	return ( hr == S_OK);
 }

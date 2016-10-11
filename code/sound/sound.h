@@ -100,8 +100,7 @@ extern float	Default_sound_volume;		// 0 -> 1.0
 extern float	Default_voice_volume;		// 0 -> 1.0
 extern float	Master_sound_volume;		// 0 -> 1.0
 extern float	Master_voice_volume;		// 0 -> 1.0
-extern int		Snd_sram;					// System memory consumed by sound data	
-extern int		Snd_hram;					// Soundcard memory consumed by sound data
+extern size_t		Snd_sram;					// System memory consumed by sound data
 extern float aav_voice_volume;
 extern float aav_music_volume;
 extern float aav_effect_volume;
@@ -192,8 +191,6 @@ void snd_set_pos(int snd_handle, game_snd *sg, float val,int as_pct);		// set th
 
 void snd_get_format(int handle, int *bits_per_sample, int *frequency);
 int snd_time_remaining(int handle);
-
-int snd_get_samples_per_measure(char *filename, float num_measures);
 
 // sound environment
 extern unsigned int SND_ENV_DEFAULT;

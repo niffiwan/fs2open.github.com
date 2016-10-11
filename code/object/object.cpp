@@ -15,7 +15,7 @@
 #include "debris/debris.h"
 #include "debugconsole/console.h"
 #include "fireball/fireballs.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "globalincs/linklist.h"
 #include "iff_defs/iff_defs.h"
 #include "io/timer.h"
@@ -31,13 +31,14 @@
 #include "object/objectshield.h"
 #include "object/objectsnd.h"
 #include "observer/observer.h"
-#include "parse/scripting.h"
+#include "scripting/scripting.h"
 #include "playerman/player.h"
 #include "radar/radar.h"
 #include "radar/radarsetup.h"
 #include "render/3d.h"
 #include "ship/afterburner.h"
 #include "ship/ship.h"
+#include "tracing/tracing.h"
 #include "weapon/beam.h"
 #include "weapon/shockwave.h"
 #include "weapon/swarm.h"
@@ -95,17 +96,25 @@ char *Object_type_names[MAX_OBJECT_TYPES] = {
 };
 
 obj_flag_name Object_flag_names[] = {
-	{OF_INVULNERABLE,			"invulnerable",				1,	},
-	{OF_PROTECTED,				"protect-ship",				1,	},
-	{OF_BEAM_PROTECTED,			"beam-protect-ship",		1,	},
-	{OF_NO_SHIELDS,				"no-shields",				1,	},
-	{OF_TARGETABLE_AS_BOMB,		"targetable-as-bomb",		1,	},
-	{OF_FLAK_PROTECTED,			"flak-protect-ship",		1,	},
-	{OF_LASER_PROTECTED,		"laser-protect-ship",		1,	},
-	{OF_MISSILE_PROTECTED,		"missile-protect-ship",		1,	},
-	{OF_IMMOBILE,				"immobile",					1,	},
-	{OF_COLLIDES,				"collides",					1,  },
+    { Object::Object_Flags::Invulnerable,			"invulnerable",				1,	},
+	{ Object::Object_Flags::Protected,				"protect-ship",				1,	},
+	{ Object::Object_Flags::Beam_protected,			"beam-protect-ship",		1,	},
+	{ Object::Object_Flags::No_shields,				"no-shields",				1,	},
+	{ Object::Object_Flags::Targetable_as_bomb,		"targetable-as-bomb",		1,	},
+	{ Object::Object_Flags::Flak_protected,			"flak-protect-ship",		1,	},
+	{ Object::Object_Flags::Laser_protected,		"laser-protect-ship",		1,	},
+	{ Object::Object_Flags::Missile_protected,		"missile-protect-ship",		1,	},
+	{ Object::Object_Flags::Immobile,				"immobile",					1,	},
+	{ Object::Object_Flags::Collides,				"collides",					1,  },
 };
+
+#ifdef OBJECT_CHECK
+checkobject::checkobject() 
+    : type(0), signature(0), parent_sig(0), parent_type(0) 
+{
+    flags.reset();
+}
+#endif
 
 // all we need to set are the pointers, but type, parent, and instance are useful to set as well
 object::object()
@@ -129,7 +138,7 @@ void object::clear()
 	signature = num_pairs = collision_group_id = 0;
 	parent = parent_sig = instance = -1;
 	type = parent_type = OBJ_NONE;
-	flags = 0;
+    flags.reset();
 	pos = last_pos = vmd_zero_vector;
 	orient = last_orient = vmd_identity_matrix;
 	radius = hull_strength = sim_hull_strength = 0.0f;
@@ -167,7 +176,7 @@ int free_object_slots(int num_used)
 		return 0;
 
 	for ( objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp) ) {
-		if (objp->flags & OF_SHOULD_BE_DEAD) {
+		if (objp->flags[Object::Object_Flags::Should_be_dead]) {
 			num_already_free++;
 			if (MAX_OBJECTS - num_already_free < num_used)
 				return num_already_free;
@@ -216,7 +225,7 @@ int free_object_slots(int num_used)
 		if ( (Objects[obj_list[i]].type == OBJ_DEBRIS) && (Debris[Objects[obj_list[i]].instance].flags & DEBRIS_EXPIRE) ) {
 			num_to_free--;
 			nprintf(("allender", "Freeing   DEBRIS object %3i\n", obj_list[i]));
-			Objects[obj_list[i]].flags |= OF_SHOULD_BE_DEAD;
+			Objects[obj_list[i]].flags.set(Object::Object_Flags::Should_be_dead);
 		}
 
 	if (!num_to_free)
@@ -227,7 +236,7 @@ int free_object_slots(int num_used)
 		if ( (tmp_obj->type == OBJ_FIREBALL) && (fireball_is_perishable(tmp_obj)) ) {
 			num_to_free--;
 			nprintf(("allender", "Freeing FIREBALL object %3i\n", obj_list[i]));
-			tmp_obj->flags |= OF_SHOULD_BE_DEAD;
+			tmp_obj->flags.set(Object::Object_Flags::Should_be_dead);
 		}
 	}
 
@@ -245,7 +254,7 @@ int free_object_slots(int num_used)
 	for (i=0; i<num_to_free; i++){
 		if ( Objects[obj_list[i]].type == OBJ_WEAPON ) {
 			num_to_free--;
-			Objects[obj_list[i]].flags |= OF_SHOULD_BE_DEAD;
+			Objects[obj_list[i]].flags.set(Object::Object_Flags::Should_be_dead);
 		}
 	}
 
@@ -465,7 +474,7 @@ void obj_free(int objnum)
  * @return the object number 
  */
 int obj_create(ubyte type,int parent_obj,int instance, matrix * orient, 
-               vec3d * pos, float radius, uint flags )
+               vec3d * pos, float radius, const flagset<Object::Object_Flags> &flags )
 {
 	int objnum;
 	object *obj;
@@ -496,7 +505,8 @@ int obj_create(ubyte type,int parent_obj,int instance, matrix * orient,
 		obj->parent_type = obj->type;
 	}
 
-	obj->flags 					= flags | OF_NOT_IN_COLL;
+	obj->flags 					= flags;
+    obj->flags.set(Object::Object_Flags::Not_in_coll);
 	if (pos)	{
 		obj->pos 				= *pos;
 		obj->last_pos			= *pos;
@@ -544,7 +554,7 @@ void obj_delete(int objnum)
 	case OBJ_SHIP:
 		if ((objp == Player_obj) && !Fred_running) {
 			objp->type = OBJ_GHOST;
-			objp->flags &= ~(OF_SHOULD_BE_DEAD);
+            objp->flags.remove(Object::Object_Flags::Should_be_dead);
 			
 			// we have to traverse the ship_obj list and remove this guy from it as well
 			ship_obj *moveup = GET_FIRST(&Ship_obj_list);
@@ -587,7 +597,7 @@ void obj_delete(int objnum)
 	case OBJ_GHOST:
 		if(!(Game_mode & GM_MULTIPLAYER)){
 			mprintf(("Warning: Tried to delete a ghost!\n"));
-			objp->flags &= ~OF_SHOULD_BE_DEAD;
+			objp->flags.remove(Object::Object_Flags::Should_be_dead);
 			return;
 		} else {
 			// we need to be able to delete GHOST objects in multiplayer to allow for player respawns.
@@ -634,10 +644,10 @@ void obj_delete_all_that_should_be_dead()
 	objp = GET_FIRST(&obj_used_list);
 	while( objp !=END_OF_LIST(&obj_used_list) )	{
 		// Goober5000 - HACK HACK HACK - see obj_move_all
-		objp->flags &= ~OF_DOCKED_ALREADY_HANDLED;
+		objp->flags.remove(Object::Object_Flags::Docked_already_handled);
 
 		temp = GET_NEXT(objp);
-		if ( objp->flags&OF_SHOULD_BE_DEAD )
+		if ( objp->flags[Object::Object_Flags::Should_be_dead] )
 			obj_delete( OBJ_INDEX(objp) );			// MWA says that john says that let obj_delete handle everything because of the editor
 		objp = temp;
 	}
@@ -721,7 +731,7 @@ void obj_player_fire_stuff( object *objp, control_info ci )
 {
 	ship *shipp;
 
-	Assert( objp->flags & OF_PLAYER_SHIP);
+	Assert( objp->flags[Object::Object_Flags::Player_ship]);
 
 	// try and get the ship pointer
 	shipp = NULL;
@@ -737,7 +747,7 @@ void obj_player_fire_stuff( object *objp, control_info ci )
 		if ( ci.fire_primary_count ) {
 			// flag the ship as having the trigger down
 			if(shipp != NULL){
-				shipp->flags |= SF_TRIGGER_DOWN;
+				shipp->flags.set(Ship::Ship_Flags::Trigger_down);
 			}
 
 			// fire non-streaming primaries here
@@ -745,7 +755,7 @@ void obj_player_fire_stuff( object *objp, control_info ci )
 		} else {
 			// unflag the ship as having the trigger down
 			if(shipp != NULL){
-				shipp->flags &= ~(SF_TRIGGER_DOWN);
+                shipp->flags.remove(Ship::Ship_Flags::Trigger_down);
 				ship_stop_fire_primary(objp);	//if it hasn't fired do the "has just stoped fireing" stuff
 			}
 		}
@@ -783,9 +793,9 @@ void obj_move_call_physics(object *objp, float frametime)
 	int has_fired = -1;	//stop fireing stuff-Bobboau
 
 	//	Do physics for objects with OF_PHYSICS flag set and with some engine strength remaining.
-	if ( objp->flags & OF_PHYSICS ) {
+	if ( objp->flags[Object::Object_Flags::Physics] ) {
 		// only set phys info if ship is not dead
-		if ((objp->type == OBJ_SHIP) && !(Ships[objp->instance].flags & SF_DYING)) {
+		if ((objp->type == OBJ_SHIP) && !(Ships[objp->instance].flags[Ship::Ship_Flags::Dying])) {
 			ship *shipp = &Ships[objp->instance];
 			float	engine_strength;
 
@@ -844,7 +854,7 @@ void obj_move_call_physics(object *objp, float frametime)
 		}
 
 		// if a weapon is flagged as dead, kill its engines just like a ship
-		if((objp->type == OBJ_WEAPON) && (Weapons[objp->instance].weapon_flags & WF_DEAD_IN_WATER)){
+		if((objp->type == OBJ_WEAPON) && (Weapons[objp->instance].weapon_flags[Weapon::Weapon_Flags::Dead_in_water])){
 			vm_vec_zero(&objp->phys_info.desired_vel);
 			vm_vec_zero(&objp->phys_info.desired_rotvel);
 			objp->phys_info.flags |= (PF_REDUCED_DAMP | PF_DEAD_DAMP);
@@ -883,8 +893,8 @@ void obj_move_call_physics(object *objp, float frametime)
 
 			// in multiplayer, if this object was just updatd (i.e. clients send their own positions),
 			// then reset the flag and don't move the object.
-			if ( MULTIPLAYER_MASTER && (objp->flags & OF_JUST_UPDATED) ) {
-				objp->flags &= ~OF_JUST_UPDATED;
+            if (MULTIPLAYER_MASTER && (objp->flags[Object::Object_Flags::Just_updated])) {
+				objp->flags.remove(Object::Object_Flags::Just_updated);
 				goto obj_maybe_fire;
 			}
 
@@ -894,7 +904,7 @@ void obj_move_call_physics(object *objp, float frametime)
 			// is moved (like firing weapons, etc).  This routine will get called either single
 			// or multiplayer.  We must find the player object to get to the control info field
 obj_maybe_fire:
-			if ( (objp->flags & OF_PLAYER_SHIP) && (objp->type != OBJ_OBSERVER) && (objp == Player_obj)) {
+			if ( (objp->flags[Object::Object_Flags::Player_ship]) && (objp->type != OBJ_OBSERVER) && (objp == Player_obj)) {
 				player *pp;
 				if(Player != NULL){
 					pp = Player;
@@ -918,7 +928,7 @@ obj_maybe_fire:
 	//2D MODE
 	//THIS IS A FREAKIN' HACK
 	//Do not let ship change position on Y axis
-	if(The_mission.flags & MISSION_FLAG_2D_MISSION)
+	if(The_mission.flags[Mission::Mission_Flags::Mission_2d])
 	{
 		angles old_angles, new_angles;
 		objp->pos.xyz.y = objp->last_pos.xyz.y;
@@ -974,7 +984,7 @@ void obj_check_object( object *obj )
 		mprintf(( "Object signature changed!\n" ));
 		Int3();
 	}
-	if ( (CheckObjects[objnum].flags&IMPORTANT_FLAGS) != (obj->flags&IMPORTANT_FLAGS) ) {
+	if ( (CheckObjects[objnum].flags[Object::Object_Flags::Collides]) != (obj->flags[Object::Object_Flags::Collides]) ) {
 		mprintf(( "Object flags changed!\n" ));
 		Int3();
 	}
@@ -997,12 +1007,12 @@ void obj_check_object( object *obj )
  * this you shouldn't get Int3's in the checkobject code.  If you
  * do, then put code in here to correctly handle the case.
  */
-void obj_set_flags( object *obj, uint new_flags )
+void obj_set_flags( object *obj, const flagset<Object::Object_Flags>& new_flags )
 {
 	int objnum = OBJ_INDEX(obj);	
 
 	// turning collision detection off
-	if ( (obj->flags & OF_COLLIDES) && (!(new_flags&OF_COLLIDES)))	{		
+	if ( (obj->flags[Object::Object_Flags::Collides]) && (!(new_flags[Object::Object_Flags::Collides])))	{
 		// Remove all object pairs
 		if ( Cmdline_old_collision_sys ) {
 			obj_remove_pairs( obj );
@@ -1012,17 +1022,17 @@ void obj_set_flags( object *obj, uint new_flags )
 
 		// update object flags properly		
 		obj->flags = new_flags;
-		obj->flags |= OF_NOT_IN_COLL;		
+        obj->flags.set(Object::Object_Flags::Not_in_coll);
 #ifdef OBJECT_CHECK
 		CheckObjects[objnum].flags = new_flags;
-		CheckObjects[objnum].flags |= OF_NOT_IN_COLL;		
+        CheckObjects[objnum].flags.set(Object::Object_Flags::Not_in_coll);
 #endif		
 		return;
 	}
 	
 	
 	// turning collision detection on
-	if ( (!(obj->flags & OF_COLLIDES)) && (new_flags&OF_COLLIDES) )	{
+	if ( (!(obj->flags[Object::Object_Flags::Collides])) && (new_flags[Object::Object_Flags::Collides]) )	{
 		
 		// observers can't collide or be hit, and they therefore have no hit or collide functions
 		// So, don't allow this bit to be set
@@ -1031,7 +1041,7 @@ void obj_set_flags( object *obj, uint new_flags )
 			Int3();
 		}
 
-		obj->flags |= OF_COLLIDES;
+		obj->flags.set(Object::Object_Flags::Collides);
 
 		// Turn on collision detection
 		if ( Cmdline_old_collision_sys ) {
@@ -1041,10 +1051,10 @@ void obj_set_flags( object *obj, uint new_flags )
 		}
 				
 		obj->flags = new_flags;
-		obj->flags &= ~(OF_NOT_IN_COLL);		
+        obj->flags.remove(Object::Object_Flags::Not_in_coll);
 #ifdef OBJECT_CHECK
 		CheckObjects[objnum].flags = new_flags;
-		CheckObjects[objnum].flags &= ~(OF_NOT_IN_COLL);		
+		CheckObjects[objnum].flags.remove(Object::Object_Flags::Not_in_coll);
 #endif
 		return;
 	}
@@ -1053,7 +1063,7 @@ void obj_set_flags( object *obj, uint new_flags )
 	// marked as OF_COULD_BE_PLAYER
 	// this code is pretty much debug code and shouldn't be relied on to always do the right thing
 	// for flags other than 
-	if ( MULTIPLAYER_MASTER && !(obj->flags & OF_COULD_BE_PLAYER) && (new_flags & OF_COULD_BE_PLAYER) ) {
+	if ( MULTIPLAYER_MASTER && !(obj->flags[Object::Object_Flags::Could_be_player]) && (new_flags[Object::Object_Flags::Could_be_player]) ) {
 		ship *shipp;
 		int team, slot;
 
@@ -1086,7 +1096,7 @@ void obj_set_flags( object *obj, uint new_flags )
 	}
 
 	// Check for unhandled flag changing
-	if ( (new_flags&IMPORTANT_FLAGS) != (obj->flags&IMPORTANT_FLAGS) ) {
+	if ( (new_flags[Object::Object_Flags::Collides]) != (obj->flags[Object::Object_Flags::Collides]) ) {
 		mprintf(( "Unhandled flag changing in obj_set_flags!!\n" ));
 		mprintf(( "Add code to support it, see John for questions!!\n" ));
 		Int3();
@@ -1170,6 +1180,8 @@ void obj_move_all_post(object *objp, float frametime)
 	{
 		case OBJ_WEAPON:
 		{
+			profile_auto profile_scope("Weapon post move");
+
 			if ( !physics_paused )
 				weapon_process_post( objp, frametime );
 
@@ -1203,7 +1215,7 @@ void obj_move_all_post(object *objp, float frametime)
 						b = i2fl(c.blue)/255.0f;
 
 						//light_add_point( &objp->pos, 10.0f, 20.0f, 1.0f, r, g, b, objp->parent );
-						light_add_point( &objp->pos, 10.0f, is_minimum_GLSL_version()?100.0f:20.0f, 1.0f, r, g, b, objp->parent );
+						light_add_point( &objp->pos, 10.0f, 100.0f, 1.0f, r, g, b, objp->parent );
 					} else {
 						light_add_point( &objp->pos, 10.0f, 20.0f, 1.0f, 1.0f, 1.0f, 1.0f, objp->parent );
 					} 
@@ -1215,6 +1227,8 @@ void obj_move_all_post(object *objp, float frametime)
 
 		case OBJ_SHIP:
 		{
+			profile_auto profile_scope("Ship post move");
+
 			if ( !physics_paused || (objp==Player_obj) ) {
 				ship_process_post( objp, frametime );
 				ship_model_update_instance(objp);
@@ -1260,6 +1274,8 @@ void obj_move_all_post(object *objp, float frametime)
 
 		case OBJ_FIREBALL:
 		{
+			profile_auto profile_scope("Fireball post move");
+
 			if ( !physics_paused )
 				fireball_process_post(objp,frametime);
 
@@ -1303,6 +1319,8 @@ void obj_move_all_post(object *objp, float frametime)
 
 		case OBJ_DEBRIS:
 		{
+			profile_auto profile_scope("Debris post move");
+
 			if ( !physics_paused )
 				debris_process_post(objp, frametime);
 
@@ -1337,6 +1355,8 @@ void obj_move_all_post(object *objp, float frametime)
 
 		case OBJ_ASTEROID:
 		{
+			profile_auto profile_scope("Asteroid post move");
+
 			if ( !physics_paused )
 				asteroid_process_post(objp);
 
@@ -1400,7 +1420,7 @@ void obj_move_all(float frametime)
 
 	for (objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp)) {
 		// skip objects which should be dead
-		if (objp->flags & OF_SHOULD_BE_DEAD) {
+		if (objp->flags[Object::Object_Flags::Should_be_dead]) {
 			continue;
 		}
 
@@ -1423,7 +1443,7 @@ void obj_move_all(float frametime)
 		objp->last_orient = objp->orient;
 
 		// Goober5000 - skip objects which don't move, but only until they're destroyed
-		if (!(objp->flags & OF_IMMOBILE && objp->hull_strength > 0.0f)) {
+		if (!(objp->flags[Object::Object_Flags::Immobile] && objp->hull_strength > 0.0f)) {
 			// if this is an object which should be interpolated in multiplayer, do so
 			if (multi_oo_is_interp_object(objp)) {
 				multi_oo_interp(objp);
@@ -1496,7 +1516,7 @@ void obj_move_all(float frametime)
 		}
 
 		// unflag all objects as being updates
-		objp->flags &= ~OF_JUST_UPDATED;
+        objp->flags.remove(Object::Object_Flags::Just_updated);
 
 		objp = GET_NEXT(objp);
 	}
@@ -1534,72 +1554,6 @@ MONITOR( NumObjectsRend )
  * Render an object.  Calls one of several routines based on type
  */
 extern int Cmdline_dis_weapons;
-void obj_render_DEPRECATED(object *obj)
-{
-	SCP_list<CJumpNode>::iterator jnp;
-	
-	if ( obj->flags & OF_SHOULD_BE_DEAD ) return;
-
-	MONITOR_INC( NumObjectsRend, 1 );	
-
-	//WMC - By definition, override statements are executed before the actual statement
-	Script_system.SetHookObject("Self", obj);
-	if(!Script_system.IsConditionOverride(CHA_OBJECTRENDER, obj))
-	{
-		switch( obj->type )	{
-		case OBJ_NONE:
-			#ifndef NDEBUG
-			mprintf(( "ERROR!!!! Bogus obj " PTRDIFF_T_ARG " is rendering!\n", obj-Objects ));
-			Int3();
-			#endif
-			break;
-		case OBJ_WEAPON:
-			if(Cmdline_dis_weapons) return;
-			weapon_render_DEPRECATED(obj);
-			break;
-		case OBJ_SHIP:
-			ship_render_DEPRECATED(obj);
-			break;
-		case OBJ_FIREBALL:
-			fireball_render_DEPRECATED(obj);
-			break;
-		case OBJ_SHOCKWAVE:
-			shockwave_render_DEPRECATED(obj);
-			break;
-		case OBJ_DEBRIS:
-			debris_render_DEPRECATED(obj);
-			break;
-		case OBJ_ASTEROID:
-			asteroid_render_DEPRECATED(obj);
-			break;
-	/*	case OBJ_CMEASURE:
-			cmeasure_render(obj);
-			break;*/
-		case OBJ_JUMP_NODE:
-			for (jnp = Jump_nodes.begin(); jnp != Jump_nodes.end(); ++jnp) {
-				if(jnp->GetSCPObject() != obj)
-					continue;
-				jnp->RenderDEPRECATED(&obj->pos, &Eye_position);
-			}
-			break;
-		case OBJ_WAYPOINT:
-			if (Show_waypoints)	{
-				gr_set_color( 128, 128, 128 );
-				g3_draw_sphere_ez( &obj->pos, 5.0f );
-			}
-			break;
-		case OBJ_GHOST:
-			break;
-		case OBJ_BEAM:
-			break;
-		default:
-			Error( LOCATION, "Unhandled obj type %d in obj_render", obj->type );
-		}
-	}
-
-	Script_system.RunCondition(CHA_OBJECTRENDER, '\0', NULL, obj);
-	Script_system.RemHookVar("Self");
-}
 
 void obj_render(object *obj)
 {
@@ -1616,7 +1570,6 @@ void obj_render(object *obj)
 	gr_set_fill_mode(GR_FILL_MODE_SOLID);
 
 	gr_clear_states();
-	gr_set_buffer(-1);
 
 	gr_reset_lighting();
 	gr_set_lighting(false, false);
@@ -1624,7 +1577,7 @@ void obj_render(object *obj)
 
 void obj_queue_render(object* obj, draw_list* scene)
 {
-	if ( obj->flags & OF_SHOULD_BE_DEAD ) return;
+	if ( obj->flags[Object::Object_Flags::Should_be_dead] ) return;
 
 	// need to figure out what to do with this hook. 
 	// maybe save an array of these and run the script conditions after we finish drawing
@@ -1725,7 +1678,7 @@ void obj_client_pre_interpolate()
 		}
 
 		// for all non-dead object which are _not_ ships
-		if ( !(objp->flags&OF_SHOULD_BE_DEAD) )	{				
+		if ( !(objp->flags[Object::Object_Flags::Should_be_dead]) )	{				
 			// pre-move step
 			obj_move_all_pre(objp, flFrametime);
 
@@ -1787,7 +1740,7 @@ void obj_observer_move(float frame_time)
 	ft = flFrametime;
 	obj_move_call_physics( objp, ft );
 	obj_move_all_post(objp, frame_time);
-	objp->flags &= ~OF_JUST_UPDATED;
+	objp->flags.remove(Object::Object_Flags::Just_updated);
 }
 
 /**
@@ -1811,25 +1764,6 @@ void obj_get_average_ship_pos( vec3d *pos )
 
 	if ( count )
 		vm_vec_scale( pos, 1.0f/(float)count );
-}
-
-
-int obj_get_SIF(object *objp)
-{
-	if ((objp->type == OBJ_SHIP) || (objp->type == OBJ_START))
-		return Ship_info[Ships[objp->instance].ship_info_index].flags;
-
-	Int3();
-	return 0;
-}
-
-int obj_get_SIF(int obj)
-{
-	if ((Objects[obj].type == OBJ_SHIP) || (Objects[obj].type == OBJ_START))
-		return Ship_info[Ships[Objects[obj].instance].ship_info_index].flags;
-
-	Int3();
-	return 0;
 }
 
 /**
@@ -1906,14 +1840,15 @@ void obj_add_pairs(int objnum)
 	objp = &Objects[objnum];	
 
 	// don't do anything if its already in the object pair list
-	if(!(objp->flags & OF_NOT_IN_COLL)){
+	if(!(objp->flags[Object::Object_Flags::Not_in_coll])){
 		return;
 	}
 
 #ifdef OBJECT_CHECK 
 	CheckObjects[objnum].type = objp->type;
 	CheckObjects[objnum].signature = objp->signature;
-	CheckObjects[objnum].flags = objp->flags & ~(OF_NOT_IN_COLL);
+    CheckObjects[objnum].flags = objp->flags;
+    CheckObjects[objnum].flags.remove(Object::Object_Flags::Not_in_coll);
 	CheckObjects[objnum].parent_sig = objp->parent_sig;
 	CheckObjects[objnum].parent_type = objp->parent_type;
 #endif	
@@ -1925,7 +1860,7 @@ void obj_add_pairs(int objnum)
 		obj_add_pair( objp, A );
 	}
 	
-	objp->flags &= ~OF_NOT_IN_COLL;	
+	objp->flags.remove(Object::Object_Flags::Not_in_coll);
 }
 
 /**
@@ -1939,9 +1874,9 @@ void obj_remove_pairs( object * a )
 {
 	obj_pair *parent, *tmp;
 
-	a->flags |= OF_NOT_IN_COLL;	
+	a->flags.set(Object::Object_Flags::Not_in_coll);	
 #ifdef OBJECT_CHECK 
-	CheckObjects[OBJ_INDEX(a)].flags |= OF_NOT_IN_COLL;
+	CheckObjects[OBJ_INDEX(a)].flags.set(Object::Object_Flags::Not_in_coll);
 #endif	
 
 	if ( a->num_pairs < 1 )	{
@@ -1986,7 +1921,9 @@ void obj_reset_all_collisions()
 {
 	// clear checkobjects
 #ifndef NDEBUG
-	memset(CheckObjects, 0, sizeof(checkobject) * MAX_OBJECTS);
+    for (int i = 0; i < MAX_OBJECTS; ++i) {
+        CheckObjects[i] = checkobject();
+    }
 #endif
 
 	// clear object pairs
@@ -2001,7 +1938,7 @@ void obj_reset_all_collisions()
 	moveup = GET_FIRST(&obj_used_list);
 	while(moveup != END_OF_LIST(&obj_used_list)){
 		// he's not in the collision list
-		moveup->flags |= OF_NOT_IN_COLL;
+		moveup->flags.set(Object::Object_Flags::Not_in_coll);
 
 		// recalc pairs for this guy
 		if ( Cmdline_old_collision_sys ) {

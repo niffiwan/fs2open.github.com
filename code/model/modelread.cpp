@@ -23,7 +23,7 @@
 #include "bmpman/bmpman.h"
 #include "cfile/cfile.h"
 #include "cmdline/cmdline.h"
-#include "freespace2/freespace.h"		// For flFrameTime
+#include "freespace.h"		// For flFrameTime
 #include "gamesnd/gamesnd.h"
 #include "globalincs/linklist.h"
 #include "io/key.h"
@@ -36,6 +36,7 @@
 #include "render/3dinternal.h"
 #include "ship/ship.h"
 #include "weapon/weapon.h"
+#include <algorithm>
 
 flag_def_list model_render_flags[] =
 {
@@ -59,14 +60,12 @@ SCP_vector<polymodel_instance*> Polygon_model_instances;
 SCP_vector<bsp_collision_tree> Bsp_collision_tree_list;
 
 static int model_initted = 0;
-extern int Cmdline_nohtl;
 
 #ifndef NDEBUG
 CFILE *ss_fp = NULL;			// file pointer used to dump subsystem information
 char  model_filename[_MAX_PATH];		// temp used to store filename
 char	debug_name[_MAX_PATH];
 int ss_warning_shown = 0;		// have we shown the warning dialog concerning the subsystems?
-int Model_ram = 0;			// How much RAM the models use total
 #endif
 
 static uint Global_checksum = 0;
@@ -85,6 +84,7 @@ void interp_configure_vertex_buffers(polymodel*, int);
 void interp_pack_vertex_buffers(polymodel* pm, int mn);
 void interp_create_detail_index_buffer(polymodel *pm, int detail);
 void interp_create_transparency_index_buffer(polymodel *pm, int detail_num);
+void model_interp_process_shield_mesh(polymodel * pm);
 
 void model_set_subsys_path_nums(polymodel *pm, int n_subsystems, model_subsystem *subsystems);
 void model_set_bay_path_nums(polymodel *pm);
@@ -193,10 +193,6 @@ void model_unload(int modelnum, int force)
 	// to get the slots back so we set "release" to true.
 	model_page_out_textures(pm->id, true);
 
-#ifndef NDEBUG
-	Model_ram -= pm->ram_used;
-#endif
-
 	safe_kill(pm->ship_bay);
 	
 	if (pm->paths)	{
@@ -263,9 +259,7 @@ void model_unload(int modelnum, int force)
 
 	if (pm->submodel) {
 		for (i = 0; i < pm->n_models; i++) {
-			if ( !Cmdline_nohtl ) {
-				pm->submodel[i].buffer.clear();
-			}
+			pm->submodel[i].buffer.clear();
 
 			if ( pm->submodel[i].bsp_data )	{
 				vm_free(pm->submodel[i].bsp_data);
@@ -274,15 +268,16 @@ void model_unload(int modelnum, int force)
 			if ( pm->submodel[i].collision_tree_index >= 0 ) {
 				model_remove_bsp_collision_tree(pm->submodel[i].collision_tree_index);
 			}
+
+			if ( pm->submodel[i].outline_buffer != nullptr ) {
+				vm_free(pm->submodel[i].outline_buffer);
+				pm->submodel[i].outline_buffer = nullptr;
+			}
 		}
 
 		delete[] pm->submodel;
 	}
-
-	if ( !Cmdline_nohtl ) {
-		gr_destroy_buffer(pm->vertex_buffer_id);
-	}
-
+	
 	if ( pm->xc ) {
 		vm_free(pm->xc);
 	}
@@ -298,6 +293,35 @@ void model_unload(int modelnum, int force)
 	if ( pm->shield_collision_tree ) {
 		vm_free(pm->shield_collision_tree);
 	}
+
+	if ( pm->shield.buffer_id > -1 ) {
+		gr_delete_buffer(pm->shield.buffer_id);
+		pm->shield.buffer_id = -1;
+		pm->shield.buffer_n_verts = 0;
+	}
+
+	if ( pm->vert_source.Vbuffer_handle > -1 ) {
+		gr_delete_buffer(pm->vert_source.Vbuffer_handle);
+		pm->vert_source.Vbuffer_handle = -1;
+	}
+
+	if ( pm->vert_source.Vertex_list != NULL ) {
+		vm_free(pm->vert_source.Vertex_list);
+		pm->vert_source.Vertex_list = NULL;
+	}
+
+	if ( pm->vert_source.Ibuffer_handle > -1 ) {
+		gr_delete_buffer(pm->vert_source.Ibuffer_handle);
+		pm->vert_source.Ibuffer_handle = -1;
+	}
+
+	if ( pm->vert_source.Index_list != NULL ) {
+		vm_free(pm->vert_source.Index_list);
+		pm->vert_source.Index_list = NULL;
+	}
+
+	pm->vert_source.Vertex_list_size = 0;
+	pm->vert_source.Index_list_size = 0;
 
 	for (i = 0; i < MAX_MODEL_DETAIL_LEVELS; ++i) {
 		pm->detail_buffers[i].clear();
@@ -359,7 +383,7 @@ void model_instance_free_all()
 	// free any outstanding model instances
 	for ( i = 0; i < Polygon_model_instances.size(); ++i ) {
 		if ( Polygon_model_instances[i] ) {
-			model_delete_instance(i);
+			model_delete_instance((int)i);
 		}
 	}
 
@@ -415,15 +439,10 @@ void model_init()
 		return;
 	}
 
-#ifndef NDEBUG
-	Model_ram = 0;
-#endif
-
 	for (i=0;i<MAX_POLYGON_MODELS;i++) {
 		Polygon_models[i] = NULL;
 	}
 
-	atexit( model_free_all );
 	model_initted = 1;
 }
 
@@ -498,6 +517,7 @@ int prop_string(char *props, char **p, const char *option0, const char *option1,
 	return prop_string(props, p, 3, option0, option1, option2);
 }
 
+const Model::Subsystem_Flags carry_flags[] = { Model::Subsystem_Flags::Crewpoint, Model::Subsystem_Flags::Rotates, Model::Subsystem_Flags::Triggered, Model::Subsystem_Flags::Artillery, Model::Subsystem_Flags::Stepped_rotate };
 // funciton to copy model data from one subsystem set to another subsystem set.  This function
 // is called when two ships use the same model data, but since the model only gets read in one time,
 // the subsystem data is only present in one location.  The ship code will call this routine to fix
@@ -512,8 +532,11 @@ void model_copy_subsystems( int n_subsystems, model_subsystem *d_sp, model_subsy
 		for ( j = 0; j < n_subsystems; j++ ) {
 			dest = &d_sp[j];
 			if ( !subsystem_stricmp( source->subobj_name, dest->subobj_name) ) {
-				dest->flags |= (source->flags & MSS_MODEL_FLAG_MASK);
-				dest->flags2 |= (source->flags2 & MSS_MODEL_FLAG2_MASK);
+				for (auto const &flag : carry_flags) {
+					if (source->flags[flag])
+						dest->flags.set(flag);
+				}
+
 				dest->subobj_num = source->subobj_num;
 				dest->model_num = source->model_num;
 				dest->pnt = source->pnt;
@@ -522,7 +545,7 @@ void model_copy_subsystems( int n_subsystems, model_subsystem *d_sp, model_subsy
 				dest->turn_rate = source->turn_rate;
 				dest->turret_gun_sobj = source->turret_gun_sobj;
 
-				strcpy_s( dest->name, source->name );
+                strcpy_s(dest->name, source->name);
 
 				if ( dest->type == SUBSYSTEM_TURRET ) {
 					int nfp;
@@ -535,7 +558,7 @@ void model_copy_subsystems( int n_subsystems, model_subsystem *d_sp, model_subsy
 					for (nfp = 0; nfp < dest->turret_num_firing_points; nfp++ )
 						dest->turret_firing_point[nfp] = source->turret_firing_point[nfp];
 
-					if ( dest->flags & MSS_FLAG_CREWPOINT )
+					if ( dest->flags[Model::Subsystem_Flags::Crewpoint] )
 						strcpy_s(dest->crewspot, source->crewspot);
 				}
 				break;
@@ -558,7 +581,7 @@ static void set_subsystem_info(int model_num, model_subsystem *subsystemp, char 
 	if ( (p = strstr(props, "$name")) != NULL)
 		get_user_prop_value(p+5, subsystemp->name);
 	else
-		strcpy_s( subsystemp->name, dname );
+		strcpy_s(subsystemp->name, dname);
 
 	strcpy_s(lcdname, dname);
 	strlwr(lcdname);
@@ -581,7 +604,7 @@ static void set_subsystem_info(int model_num, model_subsystem *subsystemp, char 
 		subsystemp->turret_num_firing_points = 0;
 
 		if ( (p = strstr(props, "$crewspot")) != NULL) {
-			subsystemp->flags |= MSS_FLAG_CREWPOINT;
+            subsystemp->flags.set(Model::Subsystem_Flags::Crewpoint);
 			get_user_prop_value(p+9, subsystemp->crewspot);
 		}
 
@@ -605,8 +628,8 @@ static void set_subsystem_info(int model_num, model_subsystem *subsystemp, char 
 	}
 
 	if ( (strstr(props, "$triggered")) != NULL ) {
-		subsystemp->flags |= MSS_FLAG_ROTATES;
-		subsystemp->flags |= MSS_FLAG_TRIGGERED;
+        subsystemp->flags.set(Model::Subsystem_Flags::Rotates);
+        subsystemp->flags.set(Model::Subsystem_Flags::Triggered);
 	}
 
 	// Dumb-Rotating subsystem
@@ -618,7 +641,7 @@ static void set_subsystem_info(int model_num, model_subsystem *subsystemp, char 
 	}
 	// Rotating subsystem
 	else if ((idx = prop_string(props, &p, "$rotate_time", "$rotate_rate", "$rotate")) >= 0) {
-		subsystemp->flags |= MSS_FLAG_ROTATES;
+        subsystemp->flags.set(Model::Subsystem_Flags::Rotates);
 
 		// get value for (a) complete rotation (b) step (c) activation
 		get_user_prop_value(p, buf);	// note: p points to the value since we used prop_string
@@ -639,7 +662,7 @@ static void set_subsystem_info(int model_num, model_subsystem *subsystemp, char 
 
 		// CASE OF WEAPON ROTATION (primary only)
 		if ( (p = strstr(props, "$pbank")) != NULL)	{
-			subsystemp->flags |= MSS_FLAG_ARTILLERY;
+            subsystemp->flags.set(Model::Subsystem_Flags::Artillery);
 
 			// get which pbank should trigger rotation
 			get_user_prop_value(p+6, buf);
@@ -652,8 +675,8 @@ static void set_subsystem_info(int model_num, model_subsystem *subsystemp, char 
 		// CASE OF STEPPED ROTATION
 		if ( (strstr(props, "$stepped")) != NULL) {
 
-			subsystemp->stepped_rotation = new(stepped_rotation);
-			subsystemp->flags |= MSS_FLAG_STEPPED_ROTATE;
+			subsystemp->stepped_rotation = new stepped_rotation;
+            subsystemp->flags.set(Model::Subsystem_Flags::Stepped_rotate);
 
 			// get number of steps
 			if ( (p = strstr(props, "$steps")) != NULL) {
@@ -850,18 +873,11 @@ void create_family_tree(polymodel *obj)
 
 void create_vertex_buffer(polymodel *pm)
 {
-	if (Cmdline_nohtl || Is_standalone) {
+	if (Is_standalone) {
 		return;
 	}
 
 	int i;
-
-	// initialize empty buffer
-	pm->vertex_buffer_id = gr_create_buffer();
-
-	if (pm->vertex_buffer_id < 0) {
-		Error(LOCATION, "Could not generate vertex buffer for '%s'!", pm->filename);
-	}
 
 	// determine the size and configuration of each buffer segment
 	for (i = 0; i < pm->n_models; i++) {
@@ -877,8 +893,8 @@ void create_vertex_buffer(polymodel *pm)
 
 	bool use_batched_rendering = true;
 
-	if ( GLSL_version >= 130 && !Cmdline_no_batching ) {
-		uint stride = 0;
+	if ( GLSL_version >= 150 && !Cmdline_no_batching ) {
+		size_t stride = 0;
 
 		// figure out if the vertex stride of this entire model matches. if not, turn off batched rendering for this model
 		for ( i = 0; i < pm->n_models; ++i ) {
@@ -918,7 +934,7 @@ void create_vertex_buffer(polymodel *pm)
 				continue;
 			}
 
-			gr_pack_buffer(pm->vertex_buffer_id, &pm->detail_buffers[i]);
+			model_interp_pack_buffer(&pm->vert_source, &pm->detail_buffers[i]);
 			pm->detail_buffers[i].release();
 		}
 
@@ -926,7 +942,9 @@ void create_vertex_buffer(polymodel *pm)
 	}
 
 	// ... and then finalize buffer
-	gr_pack_buffer(pm->vertex_buffer_id, NULL);
+	model_interp_pack_buffer(&pm->vert_source, NULL);
+
+	model_interp_process_shield_mesh(pm);
 }
 
 // Goober5000
@@ -1816,7 +1834,7 @@ int read_model_file(polymodel * pm, char *filename, int n_subsystems, model_subs
 						if ( (p = strstr(props, "$name"))!= NULL ) {
 							get_user_prop_value(p+5, bay->name);
 
-							int length = strlen(bay->name);
+							auto length = strlen(bay->name);
 							if ((length > 0) && is_white_space(bay->name[length-1])) {
 								nprintf(("Model", "model '%s' has trailing whitespace on bay name '%s'; this will be trimmed\n", pm->filename, bay->name));
 								drop_trailing_white_space(bay->name);
@@ -1923,11 +1941,11 @@ int read_model_file(polymodel * pm, char *filename, int n_subsystems, model_subs
 	
 					cfread_string_len(props, MAX_PROP_LEN, fp);
 					// look for $glow_texture=xxx
-					int length = strlen(props);
+					auto length = strlen(props);
 
 					if (length > 0)
 					{
-						int base_length = strlen("$glow_texture=");
+						auto base_length = strlen("$glow_texture=");
 						Assert(strstr( (const char *)&props, "$glow_texture=") != NULL);
 						Assert(length > base_length);
 						char *glow_texture_name = props + base_length;
@@ -2010,9 +2028,9 @@ int read_model_file(polymodel * pm, char *filename, int n_subsystems, model_subs
 						} else {
 							cfread_string_len( props, MAX_PROP_LEN, fp );
 							// look for $engine_subsystem=xxx
-							int length = strlen(props);
+							auto length = strlen(props);
 							if (length > 0) {
-								int base_length = strlen("$engine_subsystem=");
+								auto base_length = strlen("$engine_subsystem=");
 								Assert( strstr( (const char *)&props, "$engine_subsystem=") != NULL );
 								Assert( length > base_length );
 								char *engine_subsys_name = props + base_length;
@@ -2426,11 +2444,14 @@ void model_load_texture(polymodel *pm, int i, char *file)
 
 	// base maps ---------------------------------------------------------------
 	texture_info *tbase = &tmap->textures[TM_BASE_TYPE];
+	texture_info *tunlit = &tmap->textures[TM_UNLIT_TYPE];
+
 	if (strstr(tmp_name, "thruster") || strstr(tmp_name, "invisible") || strstr(tmp_name, "warpmap"))
 	{
 		// Don't load textures for thruster animations or invisible textures
 		// or warp models!-Bobboau
 		tbase->clear();
+		tunlit->clear();
 	}
 	else
 	{
@@ -2444,8 +2465,17 @@ void model_load_texture(polymodel *pm, int i, char *file)
 		}
 
 		tbase->LoadTexture(tmp_name, pm->filename);
-		if(tbase->GetTexture() < 0)
+		
+		if ( tbase->GetTexture() < 0 ) {
 			Warning(LOCATION, "Couldn't open texture '%s'\nreferenced by model '%s'\n", tmp_name, pm->filename);
+		}
+
+		// look for unlit map as well in case this texture needs a different diffuse response when rendered in no lighting
+		strcpy_s(tmp_name, file);
+		strcat_s(tmp_name, "-unlit");
+		strlwr(tmp_name);
+
+		tunlit->LoadTexture(tmp_name, pm->filename);
 	}
 	// -------------------------------------------------------------------------
 
@@ -2467,12 +2497,22 @@ void model_load_texture(polymodel *pm, int i, char *file)
 
 	// specular maps -----------------------------------------------------------
 	texture_info *tspec = &tmap->textures[TM_SPECULAR_TYPE];
+	texture_info *tspecgloss = &tmap->textures[TM_SPEC_GLOSS_TYPE];
 	if ( (!Cmdline_spec && !Fred_running) || (tbase->GetTexture() < 0))
 	{
 		tspec->clear();
+		tspecgloss->clear();
 	}
 	else
 	{
+		// look for reflectance map
+		strcpy_s(tmp_name, file);
+		strcat_s(tmp_name, "-reflect");
+		strlwr(tmp_name);
+
+		tspecgloss->LoadTexture(tmp_name, pm->filename);
+
+		// look for a legacy shine map as well
 		strcpy_s(tmp_name, file);
 		strcat_s(tmp_name, "-shine");
 		strlwr(tmp_name);
@@ -2506,6 +2546,15 @@ void model_load_texture(polymodel *pm, int i, char *file)
 		theight->LoadTexture(tmp_name, pm->filename);
 	}
 
+	// ambient occlusion maps
+	texture_info *tambient = &tmap->textures[TM_AMBIENT_TYPE];
+
+	strcpy_s(tmp_name, file);
+	strcat_s(tmp_name, "-ao");
+	strlwr(tmp_name);
+
+	tambient->LoadTexture(tmp_name, pm->filename);
+
 	// Utility map -------------------------------------------------------------
 	texture_info *tmisc = &tmap->textures[TM_MISC_TYPE];
 
@@ -2524,32 +2573,32 @@ void model_load_texture(polymodel *pm, int i, char *file)
 		shader_flags |= SDR_FLAG_MODEL_DIFFUSE_MAP;
 	if (tglow->GetTexture() > 0 && Cmdline_glow)
 		shader_flags |= SDR_FLAG_MODEL_GLOW_MAP;
-	if (tspec->GetTexture() > 0 && Cmdline_spec)
+	if ((tspec->GetTexture() > 0 || tspecgloss->GetTexture() > 0) && Cmdline_spec)
 		shader_flags |= SDR_FLAG_MODEL_SPEC_MAP;
 	if (tnorm->GetTexture() > 0 && Cmdline_normal)
 		shader_flags |= SDR_FLAG_MODEL_NORMAL_MAP;
 	if (theight->GetTexture() > 0 && Cmdline_height)
 		shader_flags |= SDR_FLAG_MODEL_HEIGHT_MAP;
-	if (tspec->GetTexture() > 0 && Cmdline_env && Cmdline_spec) // No env maps without spec map
+	if ((tspec->GetTexture() > 0 || tspecgloss->GetTexture() > 0) && Cmdline_env && Cmdline_spec) // No env maps without spec map
 		shader_flags |= SDR_FLAG_MODEL_ENV_MAP;
 	if (tmisc->GetTexture() > 0)
 		shader_flags |= SDR_FLAG_MODEL_MISC_MAP;
+	if (tambient->GetTexture() >0)
+		shader_flags |= SDR_FLAG_MODEL_AMBIENT_MAP;
 	
 	gr_maybe_create_shader(SDR_TYPE_MODEL, SDR_FLAG_MODEL_SHADOW_MAP);
 
-	if(is_minimum_GLSL_version())
-		shader_flags |= SDR_FLAG_MODEL_CLIP;
+	shader_flags |= SDR_FLAG_MODEL_CLIP;
 
 	gr_maybe_create_shader(SDR_TYPE_MODEL, shader_flags | SDR_FLAG_MODEL_LIGHT | SDR_FLAG_MODEL_ANIMATED);
 	gr_maybe_create_shader(SDR_TYPE_MODEL, shader_flags | SDR_FLAG_MODEL_LIGHT | SDR_FLAG_MODEL_ANIMATED | SDR_FLAG_MODEL_FOG);
-	
-	if(is_minimum_GLSL_version())
-		shader_flags |= SDR_FLAG_MODEL_DEFERRED;
+
+	shader_flags |= SDR_FLAG_MODEL_DEFERRED;
 
 	gr_maybe_create_shader(SDR_TYPE_MODEL, shader_flags | SDR_FLAG_MODEL_LIGHT);
 	gr_maybe_create_shader(SDR_TYPE_MODEL, shader_flags | SDR_FLAG_MODEL_LIGHT | SDR_FLAG_MODEL_FOG);
 	
-	if( !Cmdline_no_batching && GLSL_version >= 130 ) {
+	if( !Cmdline_no_batching && GLSL_version >= 150 ) {
 		shader_flags &= ~SDR_FLAG_MODEL_DEFERRED;
 		shader_flags |= SDR_FLAG_MODEL_TRANSFORM;
 
@@ -2577,10 +2626,6 @@ int model_load(char *filename, int n_subsystems, model_subsystem *subsystems, in
 
 	if ( !model_initted )
 		model_init();
-
-#ifndef NDEBUG
-	int ram_before = TotalRam;
-#endif
 
 	num = -1;
 
@@ -2653,7 +2698,7 @@ int model_load(char *filename, int n_subsystems, model_subsystem *subsystems, in
 		char buffer[100];
 		sprintf(buffer,"Serious problem loading model %s, %d normals capped to zero",
 			filename, Parse_normal_problem_count);
-		MessageBox(NULL,buffer,"Error", MB_OK);
+		os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR, buffer);
 	}
 #endif
 
@@ -2708,7 +2753,8 @@ int model_load(char *filename, int n_subsystems, model_subsystem *subsystems, in
 	//==============================
 	// Find all the lower detail versions of the hires model
 	for (i=0; i<pm->n_models; i++ )	{
-		int j, l1;
+		int j;
+		size_t l1;
 		bsp_info * sm1 = &pm->submodel[i];
 
 		// set all arc types to be default 		
@@ -2738,7 +2784,6 @@ int model_load(char *filename, int n_subsystems, model_subsystem *subsystems, in
 		}
 
 		for (j=0; j<pm->n_models; j++ )	{
-			int k;
 			bsp_info * sm2 = &pm->submodel[j];
 
 			if ( i==j ) continue;
@@ -2749,11 +2794,11 @@ int model_load(char *filename, int n_subsystems, model_subsystem *subsystems, in
 			}
 
 			// if sm2 is a detail of sm1 and sm1 is a high detail, then add it to sm1's list
-			if ((int)strlen(sm2->name)!=l1) continue; 
+			if (strlen(sm2->name)!=l1) continue; 
 	
 			int ndiff = 0;
-			int first_diff = 0;
-			for ( k=0; k<l1; k++)	{
+			size_t first_diff = 0;
+			for ( size_t k=0; k<l1; k++)	{
 				// If a backward compatibility LOD name is declared use it
 				if (sm1->lod_name[0] != '\0') {
 					if (sm1->lod_name[k] != sm2->name[k] )	{
@@ -2839,13 +2884,6 @@ int model_load(char *filename, int n_subsystems, model_subsystem *subsystems, in
 		}
 	}
 
-#ifndef NDEBUG
-	int ram_after = TotalRam;
-
-	pm->ram_used = ram_after - ram_before;
-	Model_ram += pm->ram_used;
-#endif
-
 	// Goober5000 - originally done in ship_create for no apparent reason
 	model_set_subsys_path_nums(pm, n_subsystems, subsystems);
 	model_set_bay_path_nums(pm);
@@ -2872,7 +2910,7 @@ int model_create_instance(bool is_ship, int model_num)
 	// if not found, create a slot
 	if ( open_slot < 0 ) {
 		Polygon_model_instances.push_back( pmi );
-		open_slot = Polygon_model_instances.size() - 1;
+		open_slot = (int)(Polygon_model_instances.size() - 1);
 	} else {
 		Polygon_model_instances[open_slot] = pmi;
 	}
@@ -3014,7 +3052,7 @@ void model_set_bay_path_nums(polymodel *pm)
 
 	/*
 	// currently only capital ships have fighter bays
-	if ( !(sip->flags & (SIF_BIG_SHIP | SIF_HUGE_SHIP)) ) {
+	if ( !(sip->is_big_or_huge()) ) {
 		return;
 	}
 	*/
@@ -3474,7 +3512,7 @@ void model_get_rotating_submodel_axis(vec3d *model_axis, vec3d *world_axis, int 
 // Does stepped rotation of a submodel
 void submodel_stepped_rotate(model_subsystem *psub, submodel_instance_info *sii)
 {
-	Assert(psub->flags & MSS_FLAG_STEPPED_ROTATE);
+	Assert(psub->flags[Model::Subsystem_Flags::Stepped_rotate]);
 
 	if ( psub->subobj_num < 0 ) return;
 
@@ -3896,7 +3934,7 @@ void model_make_turret_matrix(int model_num, model_subsystem * turret )
 	// this because I am creating these 3 vectors by making them 90 degrees
 	// apart, so this should be close enough.  I think this will start 
 	// causing weird errors when we view from turrets. -John
-	turret->flags |= MSS_FLAG_TURRET_MATRIX;
+    turret->flags.set(Model::Subsystem_Flags::Turret_matrix);
 }
 
 // Tries to move joints so that the turret points to the point dst.
@@ -3925,10 +3963,10 @@ int model_rotate_gun(int model_num, model_subsystem *turret, matrix *orient, ang
 	}
 
 	// Build the correct turret matrix if there isn't already one
-	if ( !(turret->flags & MSS_FLAG_TURRET_MATRIX) )
+	if ( !(turret->flags[Model::Subsystem_Flags::Turret_matrix]) )
 		model_make_turret_matrix(model_num, turret );
 
-	Assert( turret->flags & MSS_FLAG_TURRET_MATRIX);
+	Assert( turret->flags[Model::Subsystem_Flags::Turret_matrix]);
 //	Assert( gun->movement_axis == MOVEMENT_AXIS_X );				// Gun must be able to change pitch
 //	Assert( base->movement_axis == MOVEMENT_AXIS_Z );	// Parent must be able to change heading
 
@@ -3944,7 +3982,7 @@ int model_rotate_gun(int model_num, model_subsystem *turret, matrix *orient, ang
 	vm_vec_unrotate( &tempv, &base->offset, orient);
 	vm_vec_add( &world_to_turret_translate, pos, &tempv );
 
-	if (turret->flags & MSS_FLAG_TURRET_ALT_MATH)
+	if (turret->flags[Model::Subsystem_Flags::Turret_alt_math])
 		world_to_turret_matrix = ss->world_to_turret_matrix;
 	else
 		vm_matrix_x_matrix( &world_to_turret_matrix, orient, &turret->turret_matrix );
@@ -3978,7 +4016,7 @@ int model_rotate_gun(int model_num, model_subsystem *turret, matrix *orient, ang
 		}
 	}
 
-	if (turret->flags & MSS_FLAG_TURRET_ALT_MATH)
+	if (turret->flags[Model::Subsystem_Flags::Turret_alt_math])
 		limited_base_rotation = true;
 
 	//	mprintf(( "Z = %.1f, atan= %.1f\n", of_dst.xyz.z, desired_angles.p ));
@@ -4025,7 +4063,7 @@ int model_rotate_gun(int model_num, model_subsystem *turret, matrix *orient, ang
 //	base_angles->h -= step_size*(key_down_timef(KEY_1)-key_down_timef(KEY_2) );
 //	gun_angles->p += step_size*(key_down_timef(KEY_3)-key_down_timef(KEY_4) );
 
-	if (turret->flags & MSS_FLAG_FIRE_ON_TARGET)
+	if (turret->flags[Model::Subsystem_Flags::Fire_on_target])
 	{
 		base_delta = vm_delta_from_interp_angle( base_angles->h, desired_angles.h );
 		gun_delta = vm_delta_from_interp_angle( gun_angles->p, desired_angles.p );
@@ -4724,10 +4762,16 @@ void model_set_instance_info(submodel_instance_info *sii, float turn_rate, float
 }
 
 // Sets the submodel instance data in a submodel (for all detail levels)
-void model_set_instance(int model_num, int sub_model_num, submodel_instance_info *sii, int flags)
+void model_set_instance(int model_num, int sub_model_num, submodel_instance_info *sii, flagset<Ship::Subsystem_Flags>* flags)
 {
 	int i;
 	polymodel * pm;
+
+    flagset<Ship::Subsystem_Flags> instance_flags;
+
+    if (flags != NULL)
+        instance_flags = *flags;
+
 
 	pm = model_get(model_num);
 
@@ -4738,14 +4782,14 @@ void model_set_instance(int model_num, int sub_model_num, submodel_instance_info
 	if ( sub_model_num >= pm->n_models ) return;
 	bsp_info *sm = &pm->submodel[sub_model_num];
 
-	if (flags & SSF_NO_DISAPPEAR) {
+	if (instance_flags[Ship::Subsystem_Flags::No_disappear]) {
 		sm->blown_off = 0;
 	} else {
 		// Set the "blown out" flags
 		sm->blown_off = sii->blown_off;
 	}
 
-	if ( (sm->blown_off) && (!(flags & SSF_NO_REPLACE)) )	{
+	if ( (sm->blown_off) && (!(instance_flags[Ship::Subsystem_Flags::No_replace])) )	{
 		if ( sm->my_replacement > -1 )	{
 			pm->submodel[sm->my_replacement].blown_off = 0;
 			pm->submodel[sm->my_replacement].angs = sii->angs;
@@ -4763,7 +4807,7 @@ void model_set_instance(int model_num, int sub_model_num, submodel_instance_info
 
 	// For all the detail levels of this submodel, set them also.
 	for (i=0; i<sm->num_details; i++ )	{
-		model_set_instance(model_num, sm->details[i], sii, flags );
+		model_set_instance(model_num, sm->details[i], sii, &instance_flags);
 	}
 }
 
@@ -4794,7 +4838,7 @@ void model_set_instance_techroom(int model_num, int sub_model_num, float angle_1
 	sm->angs.h = angle_2;
 }
 
-void model_update_instance(int model_instance_num, int sub_model_num, submodel_instance_info *sii, int flags)
+void model_update_instance(int model_instance_num, int sub_model_num, submodel_instance_info *sii, flagset<Ship::Subsystem_Flags>& flags)
 {
 	int i;
 	polymodel *pm;
@@ -4814,13 +4858,13 @@ void model_update_instance(int model_instance_num, int sub_model_num, submodel_i
 	bsp_info *sm = &pm->submodel[sub_model_num];
 	
 	// Set the "blown out" flags
-	if ( flags & SSF_NO_DISAPPEAR ) {
+	if ( flags[Ship::Subsystem_Flags::No_disappear] ) {
 		smi->blown_off = false;
 	} else {
 		smi->blown_off = sii->blown_off ? true : false;
 	}
 
-	if ( smi->blown_off && !(flags & SSF_NO_REPLACE) )	{
+	if ( smi->blown_off && !(flags[Ship::Subsystem_Flags::No_replace]) )	{
 		if ( sm->my_replacement > -1 )	{
 			pmi->submodel[sm->my_replacement].blown_off = false;
 			pmi->submodel[sm->my_replacement].angs = sii->angs;
@@ -4862,7 +4906,8 @@ void model_do_intrinsic_rotations_sub(intrinsic_rotation *ir)
 
 		// Now actually rotate the submodel instance
 		// (Since this is an intrinsic rotation, we have no associated subsystem, so pass 0 for subsystem flags.)
-		model_update_instance(ir->model_instance_num, submodel_it->submodel_num, &submodel_it->submodel_info_1, 0);
+        flagset<Ship::Subsystem_Flags> empty;
+		model_update_instance(ir->model_instance_num, submodel_it->submodel_num, &submodel_it->submodel_info_1, empty);
 	}
 }
 
@@ -5184,7 +5229,7 @@ int model_create_bsp_collision_tree()
 	tree.used = true;
 	Bsp_collision_tree_list.push_back(tree);
 
-	return Bsp_collision_tree_list.size() - 1;
+	return (int)(Bsp_collision_tree_list.size() - 1);
 }
 
 bsp_collision_tree *model_get_bsp_collision_tree(int tree_index)
@@ -5217,7 +5262,6 @@ void model_remove_bsp_collision_tree(int tree_index)
 }
 
 #if BYTE_ORDER == BIG_ENDIAN
-extern void model_allocate_interp_data(int, int, int);
 
 // tigital -
 void swap_bsp_defpoints(ubyte * p)
@@ -5234,7 +5278,7 @@ void swap_bsp_defpoints(ubyte * p)
 	ubyte * normcount = p+20;
 	vec3d *src = vp(p+offset);
 
-	model_allocate_interp_data(nverts, n_norms, 0);
+	model_allocate_interp_data(nverts, n_norms);
 
 	for (n=0; n<nverts; n++ )	{
 		src->xyz.x = INTEL_FLOAT( &src->xyz.x );		//tigital
@@ -5782,4 +5826,81 @@ void glowpoint_init()
 	glowpoint_bank_overrides.clear();
 	parse_glowpoint_table("glowpoints.tbl");
 	parse_modular_table(NOX("*-gpo.tbm"), parse_glowpoint_table);
+}
+
+void model_subsystem::reset()
+{
+    flags.reset();
+    memset(name, 0, sizeof(name));
+    memset(subobj_name, 0, sizeof(alt_dmg_sub_name));
+    memset(alt_sub_name, 0, sizeof(alt_sub_name));
+    memset(alt_dmg_sub_name, 0, sizeof(alt_dmg_sub_name));
+    subobj_num = 0;
+    model_num = 0;
+    type = 0;
+    pnt.xyz.x = pnt.xyz.y = pnt.xyz.z = 0.0f;
+    radius = 0;
+
+    max_subsys_strength = 0;
+    armor_type_idx = 0;
+
+    memset(crewspot, 0, sizeof(crewspot));
+    turret_norm.xyz.x = turret_norm.xyz.y = turret_norm.xyz.z = 0.0f;
+    
+    for (auto it = std::begin(turret_matrix.a1d); it != std::end(turret_matrix.a1d); ++it)
+        *it = 0.0f;
+
+    turret_fov = 0;
+    turret_max_fov = 0;
+    turret_y_fov = 0;
+    turret_num_firing_points = 0;
+    for (auto it = std::begin(turret_firing_point); it != std::end(turret_firing_point); ++it)
+        it->xyz.x = it->xyz.y = it->xyz.z = 0.0f;
+    turret_gun_sobj = 0;
+    turret_turning_rate = 0;
+    turret_base_rotation_snd = 0;
+    turret_base_rotation_snd_mult = 0;
+    turret_gun_rotation_snd = 0;
+    turret_gun_rotation_snd_mult = 0;
+
+    alive_snd = 0;
+    dead_snd = 0;
+    rotation_snd = 0;
+
+    engine_wash_pointer = NULL;
+    turn_rate = 0; 
+    weapon_rotation_pbank = 0;
+    stepped_rotation = NULL;
+
+    awacs_intensity = 0.0f;
+    awacs_radius = 0.0f;
+
+    for (auto it = std::begin(primary_banks); it != std::end(primary_banks); ++it)
+        *it = 0;
+    for (auto it = std::begin(primary_bank_capacity); it != std::end(primary_bank_capacity); ++it)
+        *it = 0;
+    for (auto it = std::begin(secondary_banks); it != std::end(secondary_banks); ++it)
+        *it = 0;
+    for (auto it = std::begin(secondary_bank_capacity); it != std::end(secondary_bank_capacity); ++it)
+        *it = 0;
+
+    path_num = 0;
+
+    n_triggers = 0;
+    triggers = NULL;
+
+    turret_reset_delay = 0;
+
+    for (auto it = std::begin(target_priority); it != std::end(target_priority); ++it)
+        *it = 0;
+
+    num_target_priorities = 0;
+
+    optimum_range = 0;
+    favor_current_facing = 0;
+
+    turret_rof_scaler = 0;
+
+    turret_max_bomb_ownage = 0;
+    turret_max_target_ownage = 0;
 }

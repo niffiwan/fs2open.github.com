@@ -26,6 +26,7 @@
 #include "parse/parselo.h"
 #include "playerman/player.h"
 #include "render/3d.h"
+#include "render/batching.h"
 #include "ship/ship.h"
 #include "sound/fsspeech.h"
 #include "ui/ui.h"
@@ -245,6 +246,7 @@ static UI_SLIDER2 Tech_slider;
 // Intelligence master data structs (these get inited @ game startup from species.tbl)
 intel_data Intel_info[MAX_INTEL_ENTRIES];
 int Intel_info_size = 0;
+static bool intel_info_init_done = false;
 
 // some prototypes to make you happy
 int techroom_load_ani(anim **animpp, char *name);
@@ -252,9 +254,6 @@ void tech_common_render();
 void tech_scroll_list_up();
 void tech_scroll_list_down();
 
-
-//stuff for ht&l, vars and such
-extern int Cmdline_nohtl;
 
 ////////////////////////////////////////////////////
 // like, functions and stuff
@@ -394,7 +393,7 @@ void techroom_render_desc(int xo, int yo, int ho)
 		int more_txt_x = Tech_desc_coords[gr_screen.res][0] + (Tech_desc_coords[gr_screen.res][2]/2) - 10;	// FIXME should move these to constants since they don't move
 		int more_txt_y = Tech_desc_coords[gr_screen.res][1] + Tech_desc_coords[gr_screen.res][3];				// located below brief text, centered
 		int w, h;
-		gr_get_string_size(&w, &h, XSTR("more", 1469), strlen(XSTR("more", 1469)));
+		gr_get_string_size(&w, &h, XSTR("more", 1469), static_cast<int>(strlen(XSTR("more", 1469))));
 		gr_set_color_fast(&Color_black);
 		gr_rect(more_txt_x-2, more_txt_y, w+3, h, GR_RESIZE_MENU);
 		gr_set_color_fast(&Color_more_indicator);
@@ -437,7 +436,7 @@ void tech_common_render()
 		if (Lcl_gr)
 			lcl_translate_ship_name_gr(buf);
 
-		gr_force_fit_string(buf, 255, Tech_list_coords[gr_screen.res][SHIP_W_COORD]);
+		font::force_fit_string(buf, 255, Tech_list_coords[gr_screen.res][SHIP_W_COORD]);
 		gr_string(Tech_list_coords[gr_screen.res][SHIP_X_COORD], Tech_list_coords[gr_screen.res][SHIP_Y_COORD] + y, buf, GR_RESIZE_MENU);
 
 		List_buttons[z - List_offset].update_dimensions(Tech_list_coords[gr_screen.res][SHIP_X_COORD], Tech_list_coords[gr_screen.res][SHIP_Y_COORD] + y, Tech_list_coords[gr_screen.res][SHIP_W_COORD], font_height);
@@ -467,7 +466,7 @@ void techroom_ships_render(float frametime)
 	// now render the trackball ship, which is unique to the ships tab
 	float rev_rate = REVOLUTION_RATE;
 	angles rot_angles, view_angles;
-	int z, i, j;
+	int i, j;
 	ship_info *sip = &Ship_info[Cur_entry_index];
 	model_render_params render_info;
 
@@ -476,11 +475,10 @@ void techroom_ships_render(float frametime)
 	}
 
 	// get correct revolution rate
-	z = sip->flags;
-	if (z & SIF_BIG_SHIP) {
+	if (sip->is_big_ship()) {
 		rev_rate *= 1.7f;
 	}
-	if (z & SIF_HUGE_SHIP) {
+	if (sip->is_huge_ship()) {
 		rev_rate *= 3.0f;
 	}
 
@@ -576,14 +574,12 @@ void techroom_ships_render(float frametime)
 		gr_set_clip(Tech_ship_display_coords[gr_screen.res][SHIP_X_COORD], Tech_ship_display_coords[gr_screen.res][SHIP_Y_COORD], Tech_ship_display_coords[gr_screen.res][SHIP_W_COORD], Tech_ship_display_coords[gr_screen.res][SHIP_H_COORD], GR_RESIZE_MENU);
     }
 	
-	if (!Cmdline_nohtl) {
-		gr_set_proj_matrix(Proj_fov, gr_screen.clip_aspect, Min_draw_distance, Max_draw_distance);
-		gr_set_view_matrix(&Eye_position, &Eye_matrix);
-	}
+	gr_set_proj_matrix(Proj_fov, gr_screen.clip_aspect, Min_draw_distance, Max_draw_distance);
+	gr_set_view_matrix(&Eye_position, &Eye_matrix);
 
 	uint render_flags = MR_AUTOCENTER;
 
-	if(sip->flags2 & SIF2_NO_LIGHTING)
+	if(sip->flags[Ship::Info_Flags::No_lighting])
 		render_flags |= MR_NO_LIGHTING;
 
 	render_info.set_flags(render_flags);
@@ -592,13 +588,10 @@ void techroom_ships_render(float frametime)
 
 	Glowpoint_use_depth_buffer = true;
 
-	batch_render_all();
+	batching_render_all();
 
-	if (!Cmdline_nohtl)
-	{
-		gr_end_view_matrix();
-		gr_end_proj_matrix();
-	}
+	gr_end_view_matrix();
+	gr_end_proj_matrix();
 
 	g3_end_frame();
 
@@ -721,6 +714,10 @@ void techroom_anim_render(float frametime)
 	// render common stuff
 	tech_common_render();
 
+	// exit now if there are no entries to show
+	if (Current_list_size == 0 || Cur_entry < 0)
+		return;
+
 	// render the animation
 	if(Current_list[Cur_entry].animation.num_frames > 0)
 	{
@@ -745,7 +742,9 @@ void techroom_anim_render(float frametime)
 
 void techroom_change_tab(int num)
 {
-	int i, multi = 0, mask, mask2, font_height, max_num_entries_viewable;	
+	int multi = 0, font_height, max_num_entries_viewable;
+    flagset<Weapon::Info_Flags> wi_mask;
+    flagset<Ship::Info_Flags> si_mask;
 
 	//unload the current animation, we load another one for the new current entry
 	if(Tab != SHIPS_DATA_TAB)
@@ -756,7 +755,7 @@ void techroom_change_tab(int num)
 	Cur_entry = 0;
 	multi = Player->flags & PLAYER_FLAGS_IS_MULTI;
 
-	for (i=0; i<LIST_BUTTONS_MAX; i++){
+	for (int i=0; i<LIST_BUTTONS_MAX; i++){
 		List_buttons[i].disable();
 	}
 
@@ -768,8 +767,8 @@ void techroom_change_tab(int num)
 
 	switch (Tab) {
 		case SHIPS_DATA_TAB:
-			mask = multi ? SIF_IN_TECH_DATABASE_M : SIF_IN_TECH_DATABASE;
-			mask2 = multi ? SIF2_DEFAULT_IN_TECH_DATABASE_M : SIF2_DEFAULT_IN_TECH_DATABASE;
+            si_mask.set(multi ? Ship::Info_Flags::In_tech_database_m : Ship::Info_Flags::In_tech_database);
+            si_mask.set(multi ? Ship::Info_Flags::Default_in_tech_database_m : Ship::Info_Flags::Default_in_tech_database);
 			
 			// load ship info if necessary
 			if ( Ships_loaded == 0 ) {
@@ -784,11 +783,11 @@ void techroom_change_tab(int num)
 
 				for (auto it = Ship_info.begin(); it != Ship_info.end(); ++it)
 				{
-					if (Techroom_show_all || (it->flags & mask) || (it->flags2 & mask2))
+                    if (Techroom_show_all || (it->flags & si_mask).any_set())
 					{
 						// this ship should be displayed, fill out the entry struct
 						Ship_list[Ship_list_size].bitmap = -1;
-						Ship_list[Ship_list_size].index = std::distance(Ship_info.begin(), it);
+						Ship_list[Ship_list_size].index = (int)std::distance(Ship_info.begin(), it);
 						Ship_list[Ship_list_size].animation.num_frames = 0;			// no anim for ships
 						Ship_list[Ship_list_size].has_anim = 0;				// no anim for ships
 						Ship_list[Ship_list_size].name = *it->tech_title ? it->tech_title : (*it->alt_name ? it->alt_name : it->name);
@@ -796,9 +795,9 @@ void techroom_change_tab(int num)
 						Ship_list[Ship_list_size].model_num = -1;
 						Ship_list[Ship_list_size].textures_loaded = 0;
 
-						Ship_list_size++;
-					}				
-				}
+                        Ship_list_size++;
+                    }
+                }
 
 				// make sure that at least the default entry is cleared out if we didn't grab anything
 				if (!Ship_info.empty() && !Ship_list_size) {
@@ -837,12 +836,12 @@ void techroom_change_tab(int num)
 				}
 
 				Weapon_list_size = 0;
-				mask = multi ? WIF_PLAYER_ALLOWED : WIF_IN_TECH_DATABASE;
-				mask2 = WIF2_DEFAULT_IN_TECH_DATABASE;
+				wi_mask.set(multi ? Weapon::Info_Flags::Player_allowed : Weapon::Info_Flags::In_tech_database);
+                wi_mask.set(Weapon::Info_Flags::Default_in_tech_database);
 
-				for (i=0; i<Num_weapon_types; i++)
+				for (int i=0; i<Num_weapon_types; i++)
 				{
-					if (Techroom_show_all || (Weapon_info[i].wi_flags & mask) || (Weapon_info[i].wi_flags2 & mask2))
+					if (Techroom_show_all || (Weapon_info[i].wi_flags & wi_mask).any_set())
 					{ 
 						// we have a weapon that should be in the tech db, so fill out the entry struct
 						Weapon_list[Weapon_list_size].index = i;
@@ -891,7 +890,7 @@ void techroom_change_tab(int num)
 				// now populate the entry structs
 				Intel_list_size = 0;
 
-				for (i=0; i<Intel_info_size; i++) {
+				for (int i=0; i<Intel_info_size; i++) {
 					if (Techroom_show_all || (Intel_info[i].flags & IIF_IN_TECH_DATABASE) || (Intel_info[i].flags & IIF_DEFAULT_IN_TECH_DATABASE)) {
 						// leave option for no animation if string == "none"
 						if (!strcmp(Intel_info[i].anim_filename, "none")) {
@@ -1050,9 +1049,8 @@ int techroom_load_ani(anim **animpp, char *name)
 void techroom_intel_init()
 {
 	int  temp;
-	static int inited = 0;
 
-	if (inited)
+	if (intel_info_init_done)
 		return;
 		
 	try
@@ -1090,13 +1088,20 @@ void techroom_intel_init()
 			Intel_info_size++;
 		}
 
-		inited = 1;
+		intel_info_init_done = true;
 	}
 	catch (const parse::ParseException& e)
 	{
 		mprintf(("TABLES: Unable to parse '%s'!  Error message = %s.\n", "species.tbl", e.what()));
 		return;
 	}
+}
+
+void techroom_intel_reset()
+{
+	Intel_info_size = 0;
+	memset(Intel_info, 0, sizeof(Intel_info));
+	intel_info_init_done = false;
 }
 
 void techroom_init()
@@ -1180,7 +1185,7 @@ void techroom_init()
 	help_overlay_set_state(Techroom_overlay_id, gr_screen.res, 0);
 
 	// setup slider
-	Tech_slider.create(&Ui_window, Tech_slider_coords[gr_screen.res][SHIP_X_COORD], Tech_slider_coords[gr_screen.res][SHIP_Y_COORD], Tech_slider_coords[gr_screen.res][SHIP_W_COORD], Tech_slider_coords[gr_screen.res][SHIP_H_COORD], Ship_info.size(), Tech_slider_filename[gr_screen.res], &tech_scroll_list_up, &tech_scroll_list_down, &tech_ship_scroll_capture);
+	Tech_slider.create(&Ui_window, Tech_slider_coords[gr_screen.res][SHIP_X_COORD], Tech_slider_coords[gr_screen.res][SHIP_Y_COORD], Tech_slider_coords[gr_screen.res][SHIP_W_COORD], Tech_slider_coords[gr_screen.res][SHIP_H_COORD], (int)Ship_info.size(), Tech_slider_filename[gr_screen.res], &tech_scroll_list_up, &tech_scroll_list_down, &tech_ship_scroll_capture);
 
 	// zero intel anim/bitmap stuff
 	for(idx=0; idx<MAX_INTEL_ENTRIES; idx++){
@@ -1437,33 +1442,29 @@ int intel_info_lookup(char *name)
 // Goober5000
 void tech_reset_to_default()
 {
-	int i;
-
 	// ships
-	for (auto it = Ship_info.begin(); it != Ship_info.end(); ++it)
-	{
-		if (it->flags2 & SIF2_DEFAULT_IN_TECH_DATABASE)
-			it->flags |= SIF_IN_TECH_DATABASE;
-		else
-			it->flags &= ~SIF_IN_TECH_DATABASE;
+    for (auto it = Ship_info.begin(); it != Ship_info.end(); ++it)
+    {
+        if (it->flags[Ship::Info_Flags::Default_in_tech_database])
+            it->flags.set(Ship::Info_Flags::In_tech_database);
+        else
+            it->flags.remove(Ship::Info_Flags::Default_in_tech_database);
 
-		if (it->flags2 & SIF2_DEFAULT_IN_TECH_DATABASE_M)
-			it->flags |= SIF_IN_TECH_DATABASE_M;
-		else
-			it->flags &= ~SIF_IN_TECH_DATABASE_M;
-	}
+        if (it->flags[Ship::Info_Flags::Default_in_tech_database_m])
+            it->flags.set(Ship::Info_Flags::In_tech_database_m);
+        else
+            it->flags.remove(Ship::Info_Flags::Default_in_tech_database_m);
+    }
+
 
 	// weapons
-	for (i=0; i<Num_weapon_types; i++)
+	for (int i=0; i<Num_weapon_types; i++)
 	{
-		if (Weapon_info[i].wi_flags2 & WIF2_DEFAULT_IN_TECH_DATABASE)
-			Weapon_info[i].wi_flags |= WIF_IN_TECH_DATABASE;
-		else
-			Weapon_info[i].wi_flags &= ~WIF_IN_TECH_DATABASE;
+        Weapon_info[i].wi_flags.set(Weapon::Info_Flags::In_tech_database, Weapon_info[i].wi_flags[Weapon::Info_Flags::Default_in_tech_database]);
 	}
 
 	// intelligence
-	for (i=0; i<Intel_info_size; i++)
+	for (int i=0; i<Intel_info_size; i++)
 	{
 		if (Intel_info[i].flags & IIF_DEFAULT_IN_TECH_DATABASE)
 			Intel_info[i].flags |= IIF_IN_TECH_DATABASE;

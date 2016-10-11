@@ -25,27 +25,6 @@
 
 #define MAX_AUDIO_STREAMS	30
 
-#ifdef NEED_STRHDL
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <mmsystem.h>
-#endif
-
-#include "sound/ogg/ogg.h"
-
-// audio stream file handle information
-typedef struct {
-	HMMIO cfp;		// handle for mmio
-
-	long true_offset;	// true offset of file into VP
-	uint size;			// total size of file being read
-
-	// for OGGs
-	OggVorbis_File vorbis_file;	// vorbis file info
-} STRHDL;
-#endif	// NEED_STRHDL
-
 extern const char *audio_ext_list[];
 extern const int NUM_AUDIO_EXT;
 

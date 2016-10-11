@@ -12,7 +12,7 @@
 #include "cmdline/cmdline.h"
 #include "debris/debris.h"
 #include "fireball/fireballs.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamesnd/gamesnd.h"
 #include "globalincs/linklist.h"
 #include "io/timer.h"
@@ -49,7 +49,7 @@ int Debris_num_submodels = 0;
 
 #define	MAX_DEBRIS_DIST					10000.0f			//	Debris goes away if it's this far away.
 #define	DEBRIS_DISTANCE_CHECK_TIME		(10*1000)		//	Check every 10 seconds.
-#define	DEBRIS_INDEX(dp) (dp-Debris)
+#define	DEBRIS_INDEX(dp) (int)(dp-Debris)
 
 #define	MAX_SPEED_SMALL_DEBRIS		200					// maximum velocity of small debris piece
 #define	MAX_SPEED_BIG_DEBRIS			150					// maximum velocity of big debris piece
@@ -78,7 +78,7 @@ static void debris_start_death_roll(object *debris_obj, debris *debris_p)
 		}
 	}
 
-  	debris_obj->flags |= OF_SHOULD_BE_DEAD;
+    debris_obj->flags.set(Object::Object_Flags::Should_be_dead);
 }
 
 /**
@@ -145,64 +145,6 @@ MONITOR(NumSmallDebrisRend)
 MONITOR(NumHullDebrisRend)
 
 /**
- * Render debris
- */
-void debris_render_DEPRECATED(object * obj)
-{
-	int			i, num, swapped;
-	polymodel	*pm;
-	debris		*db;
-
-
-	swapped = -1;
-	pm = NULL;	
-	num = obj->instance;
-
-	Assert(num >= 0 && num < MAX_DEBRIS_PIECES);
-	db = &Debris[num];
-
-	Assert(db->flags & DEBRIS_USED);
-
-	texture_info *tbase = NULL;
-	
-	model_clear_instance( db->model_num );
-	
-	// Swap in a different texture depending on the species
-	if (db->species >= 0)
-	{
-		pm = model_get( db->model_num );
-
-		//WMC - Someday, we should have glowing debris.
-		if ( pm != NULL && (pm->n_textures == 1) ) {
-			tbase = &pm->maps[0].textures[TM_BASE_TYPE];
-			swapped = tbase->GetTexture();
-			tbase->SetTexture(Species_info[db->species].debris_texture.bitmap_id);
-		}
-	}
-
-	// Only render electrical arcs if within 500m of the eye (for a 10m piece)
-	if ( vm_vec_dist_quick( &obj->pos, &Eye_position ) < obj->radius*50.0f )	{
-		for (i=0; i<MAX_DEBRIS_ARCS; i++ )	{
-			if ( timestamp_valid( db->arc_timestamp[i] ) )	{
-				model_add_arc( db->model_num, db->submodel_num, &db->arc_pts[i][0], &db->arc_pts[i][1], MARC_TYPE_NORMAL );
-			}
-		}
-	}
-
-	if ( db->is_hull )	{
-		MONITOR_INC(NumHullDebrisRend,1);
-		submodel_render_DEPRECATED( db->model_num, db->submodel_num, &obj->orient, &obj->pos );
-	} else {
-		MONITOR_INC(NumSmallDebrisRend,1);
-		submodel_render_DEPRECATED( db->model_num, db->submodel_num, &obj->orient, &obj->pos, MR_NO_LIGHTING );
-	}
-
-	if (tbase != NULL && (swapped!=-1) && pm)	{
-		tbase->SetTexture(swapped);
-	}
-}
-
-/**
  * Removed the ::DEBRIS_EXPIRE flag, and remove item from ::Hull_debris_list
  */
 void debris_clear_expired_flag(debris *db)
@@ -259,7 +201,7 @@ void maybe_delete_debris(debris *db)
 				db->next_distance_check = timestamp(DEBRIS_DISTANCE_CHECK_TIME);
 		} else {
 			for ( objp = GET_FIRST(&obj_used_list); objp !=END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp) ) {
-				if (objp->flags & OF_PLAYER_SHIP) {
+				if (objp->flags[Object::Object_Flags::Player_ship]) {
 					if (vm_vec_dist_quick(&objp->pos, &Objects[db->objnum].pos) < MAX_DEBRIS_DIST) {
 						db->next_distance_check = timestamp(DEBRIS_DISTANCE_CHECK_TIME);
 						return;
@@ -436,7 +378,7 @@ int debris_find_oldest()
 	oldest_time = 0x7fffffff;
 
 	for ( db = GET_FIRST(&Hull_debris_list); db != END_OF_LIST(&Hull_debris_list); db = GET_NEXT(db) ) {
-		if ( (db->time_started < oldest_time) && !(Objects[db->objnum].flags & OF_SHOULD_BE_DEAD) ) {
+		if ( (db->time_started < oldest_time) && !(Objects[db->objnum].flags[Object::Object_Flags::Should_be_dead]) ) {
 			oldest_index = DEBRIS_INDEX(db);
 			oldest_time = db->time_started;
 		}
@@ -476,7 +418,7 @@ object *debris_create(object *source_obj, int model_num, int submodel_num, vec3d
 	Assert( source_obj->instance >= 0 && source_obj->instance < MAX_SHIPS );	
 	shipp = &Ships[source_obj->instance];
 	sip = &Ship_info[shipp->ship_info_index];
-	vaporize = (shipp->flags &SF_VAPORIZE);
+	vaporize = (shipp->flags[Ship::Ship_Flags::Vaporize]);
 
 	if ( !hull_flag )	{
 		// Make vaporize debris seen from farther away
@@ -606,10 +548,12 @@ object *debris_create(object *source_obj, int model_num, int submodel_num, vec3d
 	if ( pos == NULL )
 		pos = &source_obj->pos;
 
-	uint flags = OF_RENDERS | OF_PHYSICS;
-	if ( hull_flag )	
-		flags |= OF_COLLIDES;
-	objnum = obj_create( OBJ_DEBRIS, parent_objnum, n, &source_obj->orient, pos, radius, flags );
+    flagset<Object::Object_Flags> default_flags;
+    default_flags.set(Object::Object_Flags::Renders);
+    default_flags.set(Object::Object_Flags::Physics);
+    default_flags.set(Object::Object_Flags::Collides, hull_flag != 0);
+
+    objnum = obj_create( OBJ_DEBRIS, parent_objnum, n, &source_obj->orient, pos, radius, default_flags);
 	if ( objnum == -1 ) {
 		mprintf(("Couldn't create debris object -- out of object slots\n"));
 		return NULL;
@@ -754,7 +698,7 @@ void debris_hit(object *debris_obj, object *other_obj, vec3d *hitpos, float dama
 
 	// Do a little particle spark shower to show we hit
 	{
-		particle_emitter	pe;
+		particle::particle_emitter pe;
 
 		pe.pos = *hitpos;								// Where the particles emit from
 		pe.vel = debris_obj->phys_info.vel;		// Initial velocity of all the particles
@@ -776,7 +720,7 @@ void debris_hit(object *debris_obj, object *other_obj, vec3d *hitpos, float dama
 		pe.max_vel = 10.0f;				// How fast the fastest particle can move
 		pe.min_life = 0.25f;			// How long the particles live
 		pe.max_life = 0.75f;			// How long the particles live
-		particle_emit( &pe, PARTICLE_FIRE, 0 );
+		particle::emit( &pe, particle::PARTICLE_FIRE, 0 );
 	}
 
 	// multiplayer clients bail here
@@ -805,7 +749,7 @@ void debris_hit(object *debris_obj, object *other_obj, vec3d *hitpos, float dama
  * NOTE: debris_hit_info pointer NULL for debris:weapon collision, otherwise debris:ship collision.
  * @return true if hit, else return false.
  */
-int debris_check_collision(object *pdebris, object *other_obj, vec3d *hitpos, collision_info_struct *debris_hit_info)
+int debris_check_collision(object *pdebris, object *other_obj, vec3d *hitpos, collision_info_struct *debris_hit_info, vec3d* hitNormal)
 {
 	mc_info	mc;
 	mc_info_init(&mc);
@@ -834,11 +778,19 @@ int debris_check_collision(object *pdebris, object *other_obj, vec3d *hitpos, co
 
 		if (model_collide(&mc)) {
 			*hitpos = mc.hit_point_world;
+
+			if (hitNormal)
+			{
+				vec3d normal;
+				model_find_world_dir(&normal, &mc.hit_normal, mc.model_num, mc.hit_submodel, mc.orient);
+
+				*hitNormal = normal;
+			}
 		}
 
 		weapon *wp = &Weapons[other_obj->instance];
-		wp->collisionOccured = true;
-		memcpy(&wp->collisionInfo, &mc, sizeof(mc_info));
+		wp->collisionInfo = new mc_info;	// The weapon will free this memory later
+		memcpy(wp->collisionInfo, &mc, sizeof(mc_info));
 
 		return mc.num_hits;
 	}
@@ -1096,6 +1048,9 @@ void calc_debris_physics_properties( physics_info *pi, vec3d *mins, vec3d *maxs 
 	pi->I_body_inv.vec.fvec.xyz.z = 12.0f / (pi->mass *  (dx*dx + dy*dy));
 }
 
+/**
+* Renders debris
+*/
 void debris_render(object * obj, draw_list *scene)
 {
 	int			i, num, swapped;
@@ -1140,11 +1095,13 @@ void debris_render(object * obj, draw_list *scene)
 
 	model_render_params render_info;
 
-	if ( !db->is_hull )	{
+	if ( db->is_hull ) {
+		MONITOR_INC(NumHullDebrisRend, 1);
+	} else {
+		MONITOR_INC(NumSmallDebrisRend, 1);
 		render_info.set_flags(MR_NO_LIGHTING);
 	}
 
-	MONITOR_INC(NumHullDebrisRend,1);
 	submodel_render_queue( &render_info, scene, db->model_num, db->submodel_num, &obj->orient, &obj->pos );
 
 	if (tbase != NULL && (swapped!=-1) && pm)	{

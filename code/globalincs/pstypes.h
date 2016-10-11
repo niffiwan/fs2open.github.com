@@ -13,26 +13,28 @@
 #define _PSTYPES_H
 
 
+
+#include "windows_stub/config.h"
+#include "globalincs/scp_defines.h"
+#include "globalincs/toolchain.h"
+
+#include "SDL.h"
+
 #include <stdio.h>	// For NULL, etc
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
-#include "globalincs/toolchain.h"
-
-#if defined( __x86_64__ ) || defined( _WIN64 )
-#define IAM_64BIT 1
-#endif
-
-
-#include "windows_stub/config.h"
+#include <algorithm>
+#include <cstdint>
 
 // value to represent an uninitialized state in any int or uint
 #define UNINITIALIZED 0x7f8e6d9c
 
 #define MAX_PLAYERS	12
 
-#define USE_INLINE_ASM 1		// Define this to use inline assembly
-#define STRUCT_CMP(a, b) memcmp((void *) &a, (void *) &b, sizeof(a))
+#ifdef LOCAL
+#undef LOCAL
+#endif
 
 #define LOCAL static			// make module local varilable static.
 
@@ -44,27 +46,19 @@
 #define DIR_SEPARATOR_STR  "/"
 #endif
 
-#ifdef IAM_64BIT
-typedef __int32 _fs_time_t;  // time_t here is 64-bit and we need 32-bit
-typedef __int32 fix;
+typedef std::int32_t _fs_time_t;  // time_t here is 64-bit and we need 32-bit
+typedef std::int32_t fix;
+
 // PTR compatible sizes
-typedef __int64 ptr_s;
-typedef unsigned __int64 ptr_u;
-#else
-typedef long fix;
-typedef	long _fs_time_t;
-typedef int ptr_s;
-typedef unsigned int ptr_u;
-#endif // 64-bit
+typedef ptrdiff_t ptr_s;
+typedef size_t ptr_u;
 
-typedef __int64 longlong;
-typedef unsigned __int64 ulonglong;
-typedef unsigned char ubyte;
-typedef unsigned short ushort;
-typedef unsigned int uint;
+typedef std::int64_t longlong;
+typedef std::uint64_t ulonglong;
+typedef std::uint8_t ubyte;
+typedef std::uint16_t ushort;
+typedef std::uint32_t uint;
 typedef unsigned long ulong;
-
-#define HARDWARE_ONLY
 
 //Stucture to store clipping codes in a word
 typedef struct ccodes {
@@ -81,6 +75,11 @@ typedef struct vec4 {
 		float a1d[4];
 	};
 } vec4;
+
+// sometimes, you just need some integers
+typedef struct ivec3 {
+	int x, y, z;
+} ivec3;
 
 /** Represents a point in 3d space.
 
@@ -173,7 +172,6 @@ typedef struct vertex {
 	screen3d	screen;				// screen space position (sw == 1/z)
 	uv_pair		texture_position;	// texture position
 	ubyte		r, g, b, a;			// color.  Use b for darkening;
-	ubyte		spec_r, spec_g, spec_b, spec_a;	//specular highlights -Bobboau
 	ubyte		codes;				// what sides of view pyramid this point is on/off.  0 = Inside view pyramid.
 	ubyte		flags;				// Projection flags.  Indicates whether it is projected or not or if projection overflowed.
 	ubyte		pad[2];				// pad structure to be 4 byte aligned.
@@ -208,6 +206,14 @@ typedef struct flag_def_list {
 	ubyte var;
 } def_list;
 
+template<class T>
+struct flag_def_list_new {
+    const char* name;			// The parseable representation of this flag
+    T def;				// The flag definition for this flag
+    bool in_use;		// Whether or not this flag is currently in use or obsolete
+    bool is_special;	// Whether this flag requires special processing. See parse_string_flag_list<T, T> for details
+};
+
 // weapon count list (mainly for pilot files)
 typedef struct wep_t {
 	int index;
@@ -218,14 +224,7 @@ typedef struct coord2d {
 	int x,y;
 } coord2d;
 
-//This are defined in MainWin.c
-extern void _cdecl WinAssert(char * text,char *filename, int line);
-void _cdecl WinAssert(char * text, char * filename, int linenum, SCP_FORMAT_STRING const char * format, ... ) SCP_FORMAT_STRING_ARGS(4, 5);
-extern void LuaError(struct lua_State *L, SCP_FORMAT_STRING const char *format=NULL, ...) SCP_FORMAT_STRING_ARGS(2, 3);
-extern void _cdecl Error( const char * filename, int line, SCP_FORMAT_STRING const char * format, ... ) SCP_FORMAT_STRING_ARGS(3, 4);
-extern void _cdecl Warning( char * filename, int line, SCP_FORMAT_STRING const char * format, ... ) SCP_FORMAT_STRING_ARGS(3, 4);
-extern void _cdecl WarningEx( char *filename, int line, SCP_FORMAT_STRING const char *format, ... ) SCP_FORMAT_STRING_ARGS(3, 4);
-extern void _cdecl ReleaseWarning(char *filename, int line, SCP_FORMAT_STRING const char *format, ...) SCP_FORMAT_STRING_ARGS(3, 4);
+#include "osapi/dialogs.h"
 
 extern int Global_warning_count;
 extern int Global_error_count;
@@ -258,10 +257,9 @@ extern int Global_error_count;
 #if defined(NDEBUG)
 #	define Assert(expr) do { ASSUME(expr); } while (0)
 #else
-	void gr_activate(int);
 #	define Assert(expr) do {\
 		if (!(expr)) {\
-			WinAssert(#expr,__FILE__,__LINE__);\
+			os::dialogs::AssertMessage(#expr,__FILE__,__LINE__);\
 		}\
 		ASSUME( expr );\
 	} while (0)
@@ -310,7 +308,9 @@ const float RAND_MAX_1f	= (1.0f / RAND_MAX);
 
 
 extern int Fred_running;  // Is Fred running, or FreeSpace?
+extern bool running_unittests;
 
+const size_t INVALID_SIZE = static_cast<size_t>(-1);
 
 //======================================================================================
 //======================================================================================
@@ -326,28 +326,6 @@ extern int Fred_running;  // Is Fred running, or FreeSpace?
 
 // contants and defined for byteswapping routines (useful for mac)
 
-#define SWAPSHORT(x)	(							\
-						((ubyte)x << 8) |			\
-						(((ushort)x) >> 8)			\
-						)
-
-#define SWAPINT(x)		(							\
-						(x << 24) |					\
-						(((ulong)x) >> 24) |		\
-						((x & 0x0000ff00) << 8) |	\
-						((x & 0x00ff0000) >> 8)		\
-						)
-
-#ifdef SCP_UNIX
-#include "SDL_endian.h"
-#endif
-
-#if SDL_BYTEORDER == SDL_BIG_ENDIAN
-#ifndef BYTE_ORDER
-#define BYTE_ORDER	BIG_ENDIAN
-#endif // !BYTE_ORDER
-#endif // SDL_BYTEORDER
-
 #ifdef SCP_SOLARIS // Solaris
 #define INTEL_INT(x)	x
 #define INTEL_SHORT(x)	x
@@ -356,42 +334,14 @@ extern int Fred_running;  // Is Fred running, or FreeSpace?
 // turn off inline asm
 #undef USE_INLINE_ASM
 
-// tigital -
-inline float SWAPFLOAT(float *x)
-{
-#if !defined(__MWERKS__)
-	// Usage:  void __stwbrx( unsigned int, unsigned int *address, int byteOffsetFromAddress );
-#define __stwbrx(value, base, index) \
-	__asm__ ( "stwbrx %0, %1, %2" :  : "r" (value), "b%" (index), "r" (base) : "memory" )
-#endif
-
-	union
-	{
-		int		i;
-		float	f;
-	} buf;
-
-	// load the float into the integer unit
-	register int a = ((int*) x)[0];
-
-	// store it to the transfer union, with byteswapping
-	__stwbrx(a, 0, &buf.i);
-
-	// load it into the FPU and return it
-	return buf.f;
-}
-
-#ifdef SCP_UNIX
 #define INTEL_INT(x)	SDL_Swap32(x)
+#define INTEL_LONG(x)   SDL_Swap64(x)
 #define INTEL_SHORT(x)	SDL_Swap16(x)
-#else
-#define INTEL_INT(x)	SWAPINT(x)
-#define INTEL_SHORT(x)	SWAPSHORT(x)
-#endif // (unix)
-#define INTEL_FLOAT(x)	SWAPFLOAT(x)
+#define INTEL_FLOAT(x)	SDL_SwapFloat((*x))
 
 #else // Little Endian -
 #define INTEL_INT(x)	x
+#define INTEL_LONG(x)   x
 #define INTEL_SHORT(x)	x
 #define INTEL_FLOAT(x)	(*x)
 #endif // BYTE_ORDER
@@ -415,7 +365,9 @@ typedef struct lod_checker {
 //  - has >0 length
 //  - is not "none"
 //  - is not "<none>"
-#define VALID_FNAME(x) ( strlen((x)) && stricmp((x), "none") && stricmp((x), "<none>") )
+inline bool VALID_FNAME(const char* x) {
+	return strlen((x)) && stricmp((x), "none") && stricmp((x), "<none>");
+}
 
 
 // Callback Loading function.
@@ -487,102 +439,9 @@ template <class T> void CAP( T& v, T mn, T mx )
 // faster version of CAP()
 #define CLAMP(x, min, max) do { if ( (x) < (min) ) (x) = (min); else if ((x) > (max)) (x) = (max); } while(0)
 
-// ========================================================
-// stamp checksum stuff
-// ========================================================
-
-// here is the define for the stamp for this set of code
-#define STAMP_STRING "\001\001\001\001\002\002\002\002Read the Foundation Novels from Asimov.  I liked them."
-#define STAMP_STRING_LENGTH			80
-#define DEFAULT_CHECKSUM_STRING		"\001\001\001\001"
-#define DEFAULT_TIME_STRING			"\002\002\002\002"
-
-// macro to calculate the checksum for the stamp.  Put here so that we can use different methods
-// for different applications.  Requires the local variable 'checksum' to be defined!!!
-#define CALCULATE_STAMP_CHECKSUM() do {	\
-		int i, found;	\
-							\
-		checksum = 0;	\
-		for ( i = 0; i < (int)strlen(ptr); i++ ) {	\
-			found = 0;	\
-			checksum += ptr[i];	\
-			if ( checksum & 0x01 )	\
-				found = 1;	\
-			checksum = checksum >> 1;	\
-			if (found)	\
-				checksum |= 0x80000000;	\
-		}	\
-		checksum |= 0x80000000;	\
-	} while (0) ;
-
 //=========================================================
 // Memory management functions
 //=========================================================
-
-// Returns 0 if not enough RAM.
-int vm_init(int min_heap_size);
-
-// Frees all RAM.
-void vm_free_all();
-
-#ifndef NDEBUG
-	// Debug versions
-
-	// Allocates some RAM.
-	void *_vm_malloc( int size, char *filename = NULL, int line = -1, int quiet = 0 );
-
-	// allocates some RAM for a string
-	char *_vm_strdup( const char *ptr, char *filename, int line );
-
-	// allocates some RAM for a string of a certain length
-	char *_vm_strndup( const char *ptr, int size, char *filename, int line );
-
-	// Frees some RAM.
-	void _vm_free( void *ptr, char *filename = NULL, int line= -1 );
-
-	// reallocates some RAM
-	void *_vm_realloc( void *ptr, int size, char *filename = NULL, int line= -1, int quiet = 0 );
-
-	// Easy to use macros
-	#define vm_malloc(size) _vm_malloc((size),__FILE__,__LINE__,0)
-	#define vm_free(ptr) _vm_free((ptr),__FILE__,__LINE__)
-	#define vm_strdup(ptr) _vm_strdup((ptr),__FILE__,__LINE__)
-	#define vm_strndup(ptr, size) _vm_strndup((ptr),(size),__FILE__,__LINE__)
-	#define vm_realloc(ptr, size) _vm_realloc((ptr),(size),__FILE__,__LINE__,0)
-
-	// quiet macro versions which don't report errors
-	#define vm_malloc_q(size) _vm_malloc((size),__FILE__,__LINE__,1)
-	#define vm_realloc_q(ptr, size) _vm_realloc((ptr),(size),__FILE__,__LINE__,1)
-#else
-	// Release versions
-
-	// Allocates some RAM.
-	void *_vm_malloc( int size, int quiet = 0 );
-
-	// allocates some RAM for a string
-	char *_vm_strdup( const char *ptr );
-
-	// allocates some RAM for a strings of a certain length
-	char *_vm_strndup( const char *ptr, int size );
-
-	// Frees some RAM.
-	void _vm_free( void *ptr );
-
-	// reallocates some RAM
-	void *_vm_realloc( void *ptr, int size, int quiet = 0 );
-
-	// Easy to use macros
-	#define vm_malloc(size) _vm_malloc((size),0)
-	#define vm_free(ptr) _vm_free(ptr)
-	#define vm_strdup(ptr) _vm_strdup(ptr)
-	#define vm_strndup(ptr, size) _vm_strndup((ptr),(size))
-	#define vm_realloc(ptr, size) _vm_realloc((ptr),(size),0)
-
-	// quiet macro versions which don't report errors
-	#define vm_malloc_q(size) _vm_malloc((size),1)
-	#define vm_realloc_q(ptr, size) _vm_realloc((ptr),(size),1)
-
-#endif
 
 #include "globalincs/fsmemory.h"
 
@@ -607,13 +466,13 @@ class camid
 {
 private:
 	int sig;
-	uint idx;
+	size_t idx;
 public:
 	camid();
-	camid(int n_idx, int n_sig);
+	camid(size_t n_idx, int n_sig);
 
 	class camera *getCamera();
-	uint getIndex();
+	size_t getIndex();
 	int getSignature();
 	bool isValid();
 };
@@ -621,11 +480,14 @@ public:
 #include "globalincs/vmallocator.h"
 #include "globalincs/safe_strings.h"
 
+// Function to generate a stacktrace
+SCP_string dump_stacktrace();
+
 // DEBUG compile time catch for dangerous uses of memset/memcpy/memmove
 // would prefer std::is_trivially_copyable but it's not supported by gcc yet
 // ref: http://gcc.gnu.org/onlinedocs/libstdc++/manual/status.html
 #ifndef NDEBUG
-	#if defined(HAVE_CXX11)
+	#if SCP_COMPILER_CXX_STATIC_ASSERT && SCP_COMPILER_CXX_AUTO_TYPE
 	// feature support seems to be: gcc   clang   msvc
 	// auto                         4.4   2.9     2010
 	// std::is_trivial              4.5   ?       2012 (2010 only duplicates std::is_pod)
@@ -637,6 +499,9 @@ public:
 	const auto ptr_memset = std::memset;
 	#define memset memset_if_trivial_else_error
 
+// Put into std to be compatible with code that uses std::mem*
+namespace std
+{
 	template<typename T>
 	void *memset_if_trivial_else_error(T *memset_data, int ch, size_t count)
 	{
@@ -707,6 +572,12 @@ public:
 		static_assert(std::is_trivial<U>::value, "memmove on non-trivial object U");
 		return ptr_memmove(memmove_dest, memmove_src, count);
 	}
+}
+// Put into global namespace
+using std::memcpy_if_trivial_else_error;
+using std::memmove_if_trivial_else_error;
+using std::memset_if_trivial_else_error;
+
 	#endif // HAVE_CXX11
 #endif // NDEBUG
 

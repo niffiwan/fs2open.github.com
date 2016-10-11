@@ -193,10 +193,10 @@ void parse_hud_gauges_tbl(const char *filename)
 		}
 
 		if (optional_string("$Font:")) {
-			stuff_int(&Hud_font);
+			Hud_font = font::parse_font();
 		}
-
-		if (optional_string("$Max Directives:")) {
+	
+		if(optional_string("$Max Directives:")) {
 			stuff_int(&Max_directives);
 		}
 
@@ -312,7 +312,7 @@ void parse_hud_gauges_tbl(const char *filename)
 					}
 
 					if (optional_string("$Font:")) {
-						stuff_int(&ship_font);
+						ship_font = font::parse_font();
 					}
 				}
 				else {
@@ -347,7 +347,7 @@ void parse_hud_gauges_tbl(const char *filename)
 				}
 
 				if (optional_string("$Font:")) {
-					stuff_int(&ship_font);
+					ship_font = font::parse_font();
 				}
 				break;
 			default:
@@ -446,10 +446,7 @@ void parse_hud_gauges_tbl(const char *filename)
 			// let's start parsing for gauges.
 			required_string("$Gauges:");
 
-			while (!check_for_string("$Gauges:") && !check_for_string("$End Gauges")) {
-				// find out what type of gauge we're parsing.
-				gauge_type = parse_gauge_type();
-
+			while ((gauge_type = parse_gauge_type()) >= 0) {
 				// change some of the default gauge settings to the appropriate values.
 				gauge_settings settings;
 				settings.font_num = use_font;
@@ -472,10 +469,15 @@ void parse_hud_gauges_tbl(const char *filename)
 					Mp++;
 				}
 
-				skip_to_start_of_string_either("$", "+");
+				// HACK: The previous code simply skipped invalid entries but now we try to generate a warning for that.
+				// If we don't see either $ or + then it means that there was an invalid token somewhere in between
+				if (!check_for_string("$") && !check_for_string("+")) {
+					error_display(0, "Detected invalid tokens while parsing HUD gauges: [%.32s]", next_tokens());
+					skip_to_start_of_string_either("$", "+");
+				}
+
 				// stolened from AI_profiles
 				// if we've been through once already and are at the same place, force a move
-
 				saved_Mp = Mp;
 			}
 
@@ -626,9 +628,10 @@ void load_missing_retail_gauges()
 
 // Called once after mission load is complete. Sets initial gauge activity states.
 void init_hud() {
-	int i, num_gauges, config_type;
+	int config_type;
+	size_t i, num_gauges;
 
-	if(Ship_info[Player_ship->ship_info_index].hud_gauges.size() > 0) {
+	if(!Ship_info[Player_ship->ship_info_index].hud_gauges.empty()) {
 		num_gauges = Ship_info[Player_ship->ship_info_index].hud_gauges.size();
 
 		for(i = 0; i < num_gauges; i++) {
@@ -673,13 +676,14 @@ extern void hud_init_ballistic_index();
 
 void set_current_hud()
 {
-	int i, num_gauges, config_type;
+	int config_type;
+	size_t i, num_gauges;
 
 	// before we load any hud gauges, see whether we're carring a ballistic weapon (Mantis #2962)
 	hud_init_ballistic_index();
 
 	// go through all HUD gauges. Load gauge properties defined in the HUD config if gauge is not customized.
-	if(Ship_info[Player_ship->ship_info_index].hud_gauges.size() > 0) {
+	if(!Ship_info[Player_ship->ship_info_index].hud_gauges.empty()) {
 		num_gauges = Ship_info[Player_ship->ship_info_index].hud_gauges.size();
 
 		for(i = 0; i < num_gauges; i++) {
@@ -899,8 +903,6 @@ int parse_gauge_type()
 
 	if ( optional_string("+Secondary Weapons:") )
 		return HUD_OBJECT_SECONDARY_WEAPONS;
-
-	error_display(1, "Invalid gauge type [%.32s]", next_tokens());
 	
 	return -1;
 }
@@ -1257,11 +1259,11 @@ T* gauge_load_common(gauge_settings* settings, T* preAllocated = NULL)
 		}
 	}
 
-	if(optional_string("Font:")) {
-		stuff_int(&settings->font_num);
+	if (optional_string("Font:")) {
+		settings->font_num = font::parse_font();
 	} else {
 		if ( settings->font_num < 0 ) {
-			settings->font_num = FONT1;
+			settings->font_num = font::FONT1;
 		}
 	}
 
@@ -1382,11 +1384,11 @@ void load_gauge_custom(gauge_settings* settings)
 			lock_color = true;
 		}
 
-		if ( optional_string("Font:") ) {
-			stuff_int(&settings->font_num);
+		if (optional_string("Font:")) {
+			settings->font_num = font::parse_font();
 		} else {
 			if ( settings->font_num < 0 ) {
-				settings->font_num = FONT1;
+				settings->font_num = font::FONT1;
 			}
 		}
 
@@ -1429,7 +1431,7 @@ void load_gauge_custom(gauge_settings* settings)
 		settings->base_res[1] = 480;
 
 		if ( settings->font_num < 0 ) {
-			settings->font_num = FONT1;
+			settings->font_num = font::FONT1;
 		}
 	}
 
@@ -3047,11 +3049,11 @@ void load_gauge_radar_dradis(gauge_settings* settings)
 		settings->use_coords = true;
 	}
 
-	if(optional_string("Font:")) {
-		stuff_int(&settings->font_num);
+	if (optional_string("Font:")) {
+		settings->font_num = font::parse_font();
 	} else {
 		if ( settings->font_num < 0 ) {
-			settings->font_num = FONT1;
+			settings->font_num = font::FONT1;
 		}
 	}
 
@@ -4463,14 +4465,36 @@ void load_gauge_messages(gauge_settings* settings)
 
 void load_gauge_fixed_messages(gauge_settings* settings)
 {
-	gr_set_font(FONT1);
+	font::set_font(font::FONT1);
+	
 	int h = gr_get_font_height();
 
+	bool center_text;
+
 	settings->use_coords = true;
-	settings->coords[0] = 0x8000; //Magic number, means "Center on X"
-	settings->coords[1] = 5 + (h * 3);
+	// set both coords to INT_MIN so that it's possible to check whether a HUD table has overridden them
+	// (this is necessary to determine the default value for center_text)
+	settings->coords[0] = INT_MIN;
+	settings->coords[1] = INT_MIN;
 
 	HudGaugeFixedMessages* hud_gauge = gauge_load_common<HudGaugeFixedMessages>(settings);
+
+	if(settings->coords[0] == INT_MIN && settings->coords[1] == INT_MIN) {
+		// coords have almost certainly not been overridden; set them to their true defaults and set center_text to true
+		settings->coords[0] = settings->base_res[0] / 2;
+		settings->coords[1] = 5 + (h * 3);
+		hud_gauge->initPosition(settings->coords[0], settings->coords[1]);
+		center_text = true;
+	} else {
+		// coords have been overridden; set center_text to false
+		center_text = false;
+	}
+
+	if(optional_string("Center Text On Gauge X-Position:")) {
+		stuff_boolean(&center_text);
+	}
+
+	hud_gauge->initCenterText(center_text);
 
 	if(settings->ship_idx->at(0) >= 0) {
 		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {

@@ -24,6 +24,9 @@
 #include "network/multiutil.h"
 #include "playerman/player.h"
 #include "ship/ship.h"
+#include "io/timer.h"
+#include "globalincs/pstypes.h"
+#include "osapi/osapi.h"
 
 #include <iostream>
 #include <string>
@@ -63,7 +66,7 @@ int FS2NetD_CheckSingleMission(const char *m_name, uint crc32, bool do_send)
 
 			rc_total += rc;
 
-			Sleep(20);
+			os_sleep(20);
 		} while ( FS2NetD_DataReady() && (rc_total < (int)sizeof(buffer)) );
 
 		if (rc < BASE_PACKET_SIZE) {
@@ -165,7 +168,7 @@ int FS2NetD_SendPlayerData(const char *player_name, player *pl, bool do_send)
 
 			rc_total += rc;
 
-			Sleep(20);
+			os_sleep(20);
 		} while ( FS2NetD_DataReady() && (rc_total < (int)sizeof(buffer)) );
 
 		if (rc < BASE_PACKET_SIZE) {
@@ -232,7 +235,7 @@ int FS2NetD_GetPlayerData(const char *player_name, player *pl, bool can_create, 
 
 			rc_total += rc;
 
-			Sleep(20);
+			os_sleep(20);
 		} while ( FS2NetD_DataReady() && (rc_total < (int)sizeof(buffer)) );
 
 		if (rc < BASE_PACKET_SIZE) {
@@ -261,7 +264,7 @@ int FS2NetD_GetPlayerData(const char *player_name, player *pl, bool can_create, 
 				rc_total += rc;
 			}
 
-			Sleep(20);
+			os_sleep(20);
 		}
 
 		PXO_GET_DATA( reply_type );
@@ -344,7 +347,7 @@ int FS2NetD_GetBanList(SCP_vector<SCP_string> &mask_list, bool do_send)
 
 			rc_total += rc;
 
-			Sleep(20);
+			os_sleep(20);
 		} while ( FS2NetD_DataReady() && (rc_total < (int)sizeof(buffer)) );
 
 		if (rc < BASE_PACKET_SIZE) {
@@ -373,7 +376,7 @@ int FS2NetD_GetBanList(SCP_vector<SCP_string> &mask_list, bool do_send)
 				rc_total += rc;
 			}
 
-			Sleep(20);
+			os_sleep(20);
 		}
 
 		PXO_GET_INT( num_files );
@@ -418,7 +421,7 @@ int FS2NetD_GetMissionsList(SCP_vector<file_record> &m_list, bool do_send)
 
 			rc_total += rc;
 
-			Sleep(20);
+			os_sleep(20);
 		} while ( FS2NetD_DataReady() && (rc_total < (int)sizeof(buffer)) );
 
 		if (rc < BASE_PACKET_SIZE) {
@@ -447,7 +450,7 @@ int FS2NetD_GetMissionsList(SCP_vector<file_record> &m_list, bool do_send)
 				rc_total += rc;
 			}
 
-			Sleep(20);
+			os_sleep(20);
 		}
 
 		PXO_GET_INT( num_files );
@@ -501,7 +504,7 @@ int FS2NetD_Login(const char *username, const char *password, bool do_send)
 
 			rc_total += rc;
 
-			Sleep(20);
+			os_sleep(20);
 		} while ( FS2NetD_DataReady() && (rc_total < (int)sizeof(buffer)) );
 
 		if (rc < BASE_PACKET_SIZE) {
@@ -568,7 +571,9 @@ void FS2NetD_SendServerStart()
 
 	DONE_PACKET();
 
-	FS2NetD_SendData(buffer, buffer_size);
+	if (FS2NetD_SendData(buffer, buffer_size) < 0) {
+		ml_printf("FS2NetD WARNING: Failed to send server start packet!");
+	}
 }
 
 void FS2NetD_SendServerUpdate()
@@ -593,7 +598,9 @@ void FS2NetD_SendServerUpdate()
 
 	DONE_PACKET();
 
-	FS2NetD_SendData(buffer, buffer_size);
+	if (FS2NetD_SendData(buffer, buffer_size) < 0) {
+		ml_printf("FS2NetD WARNING: Failed to send server update packet!");
+	}
 }
 
 void FS2NetD_SendServerDisconnect()
@@ -605,7 +612,9 @@ void FS2NetD_SendServerDisconnect()
 
 	DONE_PACKET();
 
-	FS2NetD_SendData(buffer, buffer_size);
+	if (FS2NetD_SendData(buffer, buffer_size) < 0) {
+		ml_printf("FS2NetD WARNING: Failed to send server disconnect packet!");
+	}
 }
 
 void FS2NetD_RequestServerList()
@@ -646,7 +655,9 @@ void FS2NetD_Ping()
 
 	DONE_PACKET();
 
-	FS2NetD_SendData(buffer, buffer_size);
+	if (FS2NetD_SendData(buffer, buffer_size) < 0) {
+		ml_printf("Failed to send PING packet!");
+	}
 }
 
 void FS2NetD_Pong(int tstamp)
@@ -722,7 +733,7 @@ int FS2NetD_ValidateTableList(bool do_send)
 
 			rc_total += rc;
 
-			Sleep(20);
+			os_sleep(20);
 		} while ( FS2NetD_DataReady() && (rc_total < (int)sizeof(buffer)) );
 
 		if (rc < BASE_PACKET_SIZE) {
@@ -747,7 +758,7 @@ int FS2NetD_ValidateTableList(bool do_send)
 				rc_total += rc;
 			}
 
-			Sleep(20);
+			os_sleep(20);
 		}
 
 		PXO_GET_USHORT( num_tables );
@@ -829,7 +840,9 @@ void FS2NetD_CheckDuplicateLogin()
 
 	DONE_PACKET();
 
-	FS2NetD_SendData(buffer, buffer_size);
+	if (FS2NetD_SendData(buffer, buffer_size) < 0) {
+		ml_printf("FS2NetD WARNING: Failed to send data packet to server!");
+	}
 
 	delete [] ids;
 }

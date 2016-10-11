@@ -106,8 +106,6 @@ void parse_stringstbl_quick(const char *filename);
 // initialize localization, if no language is passed - use the language specified in the registry
 void lcl_init(int lang_init)
 {
-	atexit(lcl_xstr_close);
-
 	char lang_string[128];
 	const char *ret;
 	int lang, idx, i;
@@ -172,6 +170,10 @@ void lcl_init(int lang_init)
 	lcl_set_language(lang);
 }
 
+void lcl_close() {
+	lcl_xstr_close();
+}
+
 // determine what language we're running in, see LCL_* defines above
 int lcl_get_language()
 {
@@ -196,10 +198,10 @@ void parse_stringstbl_quick(const char *filename)
 			stuff_string(language.lang_ext, F_RAW, LCL_LANG_NAME_LEN + 1);
 			required_string("+Special Character Index:");
 			stuff_ubyte(&language.special_char_indexes[0]);
-			for (i = 1; i < MAX_FONTS; ++i) {
+			for (i = 1; i < LCL_MAX_FONTS; ++i) {
 				// default to "none"/0 except for font03 which defaults to 176
 				// NOTE: fonts.tbl may override these values
-				if (i == FONT3) {
+				if (i == font::FONT3) {
 					language.special_char_indexes[i] = 176;
 				} else {
 					language.special_char_indexes[i] = 0;
@@ -232,7 +234,7 @@ void parse_stringstbl_common(const char *filename, const bool external)
 {
 	char chr, buf[4096];
 	char language_tag[512];
-	int i, z, index;
+	int z, index;
 	char *p_offset = NULL;
 	int offset_lo = 0, offset_hi = 0;
 
@@ -274,7 +276,7 @@ void parse_stringstbl_common(const char *filename, const bool external)
 		}
 		
 		if (!external) {
-			i = strlen(buf);
+			size_t i = strlen(buf);
 
 			while (i--) {
 				if ( !isspace(buf[i]) )
@@ -282,15 +284,26 @@ void parse_stringstbl_common(const char *filename, const bool external)
 			}
 
 			// trim unnecessary end of string
-			if (i >= 0) {
-				// Assert(buf[i] == '"');
+			// Assert(buf[i] == '"');
+			if (buf[i] != '"') {
+				// probably an offset on this entry
+
+				// drop down a null terminator (prolly unnecessary)
+				buf[i+1] = 0;
+
+				// back up over the potential offset
+				while ( !is_white_space(buf[i]) )
+					i--;
+
+				// now back up over intervening spaces
+				while ( is_white_space(buf[i]) )
+					i--;
+
+				num_offsets_on_this_line = 1;
+
 				if (buf[i] != '"') {
-					// probably an offset on this entry
-
-					// drop down a null terminator (prolly unnecessary)
-					buf[i+1] = 0;
-
-					// back up over the potential offset
+					// could have a 2nd offset value (one for 640, one for 1024)
+					// so back up again
 					while ( !is_white_space(buf[i]) )
 						i--;
 
@@ -298,29 +311,16 @@ void parse_stringstbl_common(const char *filename, const bool external)
 					while ( is_white_space(buf[i]) )
 						i--;
 
-					num_offsets_on_this_line = 1;
-
-					if (buf[i] != '"') {
-						// could have a 2nd offset value (one for 640, one for 1024)
-						// so back up again
-						while ( !is_white_space(buf[i]) )
-							i--;
-
-						// now back up over intervening spaces
-						while ( is_white_space(buf[i]) )
-							i--;
-
-						num_offsets_on_this_line = 2;
-					}
-
-					p_offset = &buf[i+1];			// get ptr to string section with offset in it
-
-					if (buf[i] != '"')
-						Error(LOCATION, "%s is corrupt", filename);		// now its an error
+					num_offsets_on_this_line = 2;
 				}
 
-				buf[i] = 0;
+				p_offset = &buf[i+1];			// get ptr to string section with offset in it
+
+				if (buf[i] != '"')
+					Error(LOCATION, "%s is corrupt", filename);		// now its an error
 			}
+
+			buf[i] = 0;
 
 			// copy string into buf
 			z = 0;
@@ -494,7 +494,7 @@ void lcl_set_language(int lang)
 
 ubyte lcl_get_font_index(int font_num)
 {
-	Assertion((font_num >= 0) && (font_num < MAX_FONTS), "Passed an invalid font index");
+	Assertion((font_num >= 0) && (font_num < LCL_MAX_FONTS), "Passed an invalid font index");
 	Assertion((Lcl_current_lang >= 0) && (Lcl_current_lang < (int)Lcl_languages.size()), "Current language is not valid, can't get font indexes");
 
 	return Lcl_languages[Lcl_current_lang].special_char_indexes[font_num];
@@ -504,7 +504,7 @@ ubyte lcl_get_font_index(int font_num)
 void lcl_add_dir(char *current_path)
 {
 	char last_char;
-	int path_len;
+	size_t path_len;
 
 	// if the disk extension is 0 length, don't add enything
 	if (strlen(Lcl_languages[Lcl_current_lang].lang_ext) <= 0) {
@@ -886,8 +886,8 @@ int lcl_get_xstr_offset(int index, int res)
 // given a valid XSTR() tag piece of text, extract the string portion, return it in out, nonzero on success
 int lcl_ext_get_text(const char *xstr, char *out)
 {
-	int str_start, str_end;
-	int str_len;
+	size_t str_start, str_end;
+	size_t str_len;
 	const char *p, *p2;
 
 	Assert(xstr != NULL);
@@ -905,7 +905,7 @@ int lcl_ext_get_text(const char *xstr, char *out)
 		str_start = p - xstr + 1;		
 	}
 	// make sure we're not about to walk past the end of the string
-	if((p - xstr) >= str_len){
+	if(static_cast<size_t>(p - xstr) >= str_len){
 		error_display(0, "Error parsing XSTR() tag %s\n", xstr);
 		return 0;
 	}
@@ -963,7 +963,7 @@ int lcl_ext_get_text(const SCP_string &xstr, SCP_string &out)
 int lcl_ext_get_id(const char *xstr, int *out)
 {
 	const char *p, *pnext;
-	int str_len;
+	size_t str_len;
 
 	Assert(xstr != NULL);
 	Assert(out != NULL);
@@ -977,7 +977,7 @@ int lcl_ext_get_id(const char *xstr, int *out)
 		return 0;
 	}
 	// make sure we're not about to walk off the end of the string
-	if((p - xstr) >= str_len){
+	if(static_cast<size_t>(p - xstr) >= str_len){
 		error_display(0, "Error parsing id# in XSTR() tag %s\n", xstr);
 		return 0;
 	}
@@ -1008,7 +1008,7 @@ int lcl_ext_get_id(const char *xstr, int *out)
 		return 0;
 	}
 	// make sure we're not about to walk off the end of the string
-	if((pnext - xstr) >= str_len){
+	if(static_cast<size_t>(pnext - xstr) >= str_len){
 		error_display(0, "Error parsing id# in XSTR() tag %s\n", xstr);
 		return 0;
 	}

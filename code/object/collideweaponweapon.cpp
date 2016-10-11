@@ -9,11 +9,11 @@
 
 
 
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "network/multi.h"
 #include "object/objcollide.h"
 #include "object/object.h"
-#include "parse/scripting.h"
+#include "scripting/scripting.h"
 #include "ship/ship.h"
 #include "stats/scoring.h"
 #include "weapon/weapon.h"
@@ -55,11 +55,11 @@ int collide_weapon_weapon( obj_pair * pair )
 	B_radius = B->radius;
 
 	if (wipA->weapon_hitpoints > 0) {
-		if (!(wipA->wi_flags2 & WIF2_HARD_TARGET_BOMB)) {
+		if (!(wipA->wi_flags[Weapon::Info_Flags::Hard_target_bomb])) {
 			A_radius *= 2;		// Makes bombs easier to hit
 		}
 		
-		if ((The_mission.ai_profile->flags2 & AIPF2_ASPECT_INVULNERABILITY_FIX) && (wipA->wi_flags & WIF_LOCKED_HOMING) && (wpA->homing_object != &obj_used_list)) {
+		if ((The_mission.ai_profile->flags[AI::Profile_Flags::Aspect_invulnerability_fix]) && (wipA->is_locked_homing()) && (wpA->homing_object != &obj_used_list)) {
 			if ( (wipA->max_lifetime - wpA->lifeleft) < The_mission.ai_profile->delay_bomb_arm_timer[Game_skill_level] )
 				return 0;
 		}
@@ -68,10 +68,10 @@ int collide_weapon_weapon( obj_pair * pair )
 	}
 
 	if (wipB->weapon_hitpoints > 0) {
-		if (!(wipB->wi_flags2 & WIF2_HARD_TARGET_BOMB)) {
+		if (!(wipB->wi_flags[Weapon::Info_Flags::Hard_target_bomb])) {
 			B_radius *= 2;		// Makes bombs easier to hit
 		}
-		if ((The_mission.ai_profile->flags2 & AIPF2_ASPECT_INVULNERABILITY_FIX) && (wipB->wi_flags & WIF_LOCKED_HOMING) && (wpB->homing_object != &obj_used_list)) {
+		if ((The_mission.ai_profile->flags[AI::Profile_Flags::Aspect_invulnerability_fix]) && (wipB->is_locked_homing()) && (wpB->homing_object != &obj_used_list)) {
 			if ( (wipB->max_lifetime - wpB->lifeleft) < The_mission.ai_profile->delay_bomb_arm_timer[Game_skill_level] )
 				return 0;
 		}
@@ -101,11 +101,11 @@ int collide_weapon_weapon( obj_pair * pair )
 
 			if (wipA->weapon_hitpoints > 0) {
 				if (wipB->weapon_hitpoints > 0) {		//	Two bombs collide, detonate both.
-					if ((wipA->wi_flags & WIF_BOMB) && (wipB->wi_flags & WIF_BOMB)) {
-						Weapons[A->instance].lifeleft = 0.01f;
-						Weapons[B->instance].lifeleft = 0.01f;
-						Weapons[A->instance].weapon_flags |= WF_DESTROYED_BY_WEAPON;
-						Weapons[B->instance].weapon_flags |= WF_DESTROYED_BY_WEAPON;
+					if ((wipA->wi_flags[Weapon::Info_Flags::Bomb]) && (wipB->wi_flags[Weapon::Info_Flags::Bomb])) {
+						wpA->lifeleft = 0.01f;
+						wpB->lifeleft = 0.01f;
+						wpA->weapon_flags.set(Weapon::Weapon_Flags::Destroyed_by_weapon);
+						wpB->weapon_flags.set(Weapon::Weapon_Flags::Destroyed_by_weapon);
 					} else {
 						A->hull_strength -= bDamage;
 						B->hull_strength -= aDamage;
@@ -120,46 +120,50 @@ int collide_weapon_weapon( obj_pair * pair )
 						}
 						
 						if (A->hull_strength < 0.0f) {
-							Weapons[A->instance].lifeleft = 0.01f;
-							Weapons[A->instance].weapon_flags |= WF_DESTROYED_BY_WEAPON;
+							wpA->lifeleft = 0.01f;
+							wpA->weapon_flags.set(Weapon::Weapon_Flags::Destroyed_by_weapon);
 						}
 						if (B->hull_strength < 0.0f) {
-							Weapons[B->instance].lifeleft = 0.01f;
-							Weapons[B->instance].weapon_flags |= WF_DESTROYED_BY_WEAPON;
+							wpB->lifeleft = 0.01f;
+							wpB->weapon_flags.set(Weapon::Weapon_Flags::Destroyed_by_weapon);
 						}
 					}
 				} else {
 					A->hull_strength -= bDamage;
-					Weapons[B->instance].lifeleft = 0.01f;
-					Weapons[B->instance].weapon_flags |= WF_DESTROYED_BY_WEAPON;
+					wpB->lifeleft = 0.01f;
+					wpB->weapon_flags.set(Weapon::Weapon_Flags::Destroyed_by_weapon);
 					if (A->hull_strength < 0.0f) {
-						Weapons[A->instance].lifeleft = 0.01f;
-						Weapons[A->instance].weapon_flags |= WF_DESTROYED_BY_WEAPON;
+						wpA->lifeleft = 0.01f;
+						wpA->weapon_flags.set(Weapon::Weapon_Flags::Destroyed_by_weapon);
 					}
 				}
 			} else if (wipB->weapon_hitpoints > 0) {
 				B->hull_strength -= aDamage;
-				Weapons[A->instance].lifeleft = 0.01f;
-				Weapons[A->instance].weapon_flags |= WF_DESTROYED_BY_WEAPON;
+				wpA->lifeleft = 0.01f;
+				wpA->weapon_flags.set(Weapon::Weapon_Flags::Destroyed_by_weapon);
 				if (B->hull_strength < 0.0f) {
-					Weapons[B->instance].lifeleft = 0.01f;
-					Weapons[B->instance].weapon_flags |= WF_DESTROYED_BY_WEAPON;
+					wpB->lifeleft = 0.01f;
+					wpB->weapon_flags.set(Weapon::Weapon_Flags::Destroyed_by_weapon);
 				}
 			}
 
 			// single player and multiplayer masters evaluate the scoring and kill stuff
 			if (!MULTIPLAYER_CLIENT) {
 
-				//Save damage for bomb so we can do scoring once it's destroyed. -Halleck
-				if (wipA->wi_flags & WIF_BOMB) {
-					scoring_add_damage_to_weapon(A, B, wipB->damage);
+				// If bomb was destroyed, do scoring
+				if (wipA->wi_flags[Weapon::Info_Flags::Bomb]) {
 					//Update stats. -Halleck
 					scoring_eval_hit(A, B, 0);
+					if (wpA->weapon_flags[Weapon::Weapon_Flags::Destroyed_by_weapon]) {
+						scoring_eval_kill_on_weapon(A, B);
+					}
 				}
-				if (wipB->wi_flags & WIF_BOMB) {
-					scoring_add_damage_to_weapon(B, A, wipA->damage);
+				if (wipB->wi_flags[Weapon::Info_Flags::Bomb]) {
 					//Update stats. -Halleck
 					scoring_eval_hit(B, A, 0);
+					if (wpB->weapon_flags[Weapon::Weapon_Flags::Destroyed_by_weapon]) {
+						scoring_eval_kill_on_weapon(B, A);
+					}
 				}
 			}
 		}
@@ -169,7 +173,7 @@ int collide_weapon_weapon( obj_pair * pair )
 			Script_system.SetHookObjects(4, "Weapon", A, "WeaponB", B, "Self",A, "Object", B);
 			Script_system.RunCondition(CHA_COLLIDEWEAPON, '\0', NULL, A, wpA->weapon_info_index);
 		}
-		if((b_override && !a_override) || (!b_override && !a_override))
+		else
 		{
 			//Should be reversed
 			Script_system.SetHookObjects(4, "Weapon", B, "WeaponB", A, "Self",B, "Object", A);
@@ -182,4 +186,3 @@ int collide_weapon_weapon( obj_pair * pair )
 
 	return 0;
 }
-

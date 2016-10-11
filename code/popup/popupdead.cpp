@@ -17,7 +17,7 @@
 
 #define POPUPDEAD_NUM_CHOICES_MAX		4
 
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamesequence/gamesequence.h"
 #include "gamesnd/gamesnd.h"
 #include "globalincs/alphacolors.h"
@@ -169,7 +169,7 @@ void popupdead_start()
 			Popupdead_button_text[2] = XSTR( "Don't Show Me This Again", 1475);
 			Popupdead_num_choices = POPUPDEAD_NUM_CHOICES_SKIP;
 			Popupdead_skip_active = 1;
-		} else if(The_mission.flags & MISSION_FLAG_RED_ALERT) {
+		} else if(The_mission.flags[Mission::Mission_Flags::Red_alert]) {
 			// We can't staticly declare these because they are externalized
 			Popupdead_button_text[0] = XSTR( "Quick Start Mission", 105);
 			Popupdead_button_text[1] = XSTR( "Return To Flight Deck", 106);
@@ -236,6 +236,9 @@ void popupdead_start()
 		b->create(&Popupdead_window, "", lx, Popupdead_region_coords[gr_screen.res][i][1], Popupdead_region_coords[gr_screen.res][i][2]-lx, Popupdead_region_coords[gr_screen.res][i][3]-Popupdead_region_coords[gr_screen.res][i][1], 0, 1);
 		b->hide();
 	}
+	
+	io::mouse::CursorManager::get()->pushStatus();
+	io::mouse::CursorManager::get()->showCursor(true);
 	
 	Popupdead_default_choice = 0;
 	Popupdead_choice = -1;
@@ -528,6 +531,8 @@ void popupdead_close()
 	gamesnd_play_iface(SND_POPUP_DISAPPEAR);
 	Popupdead_window.destroy();
 	game_flush();
+	
+	io::mouse::CursorManager::get()->popStatus();
 
 	Popupdead_active = 0;
 	Popupdead_skip_active = 0;

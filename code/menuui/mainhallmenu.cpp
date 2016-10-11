@@ -13,7 +13,7 @@
 #include "anim/animplay.h"
 #include "anim/packunpack.h"
 #include "cmdline/cmdline.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamehelp/contexthelp.h"
 #include "gamesequence/gamesequence.h"
 #include "gamesnd/eventmusic.h"
@@ -34,7 +34,7 @@
 #include "network/multiutil.h"
 #include "palman/palman.h"
 #include "parse/parselo.h"
-#include "parse/scripting.h"
+#include "scripting/scripting.h"
 #include "playerman/player.h"
 #include "popup/popup.h"
 #include "sound/audiostr.h"
@@ -375,11 +375,11 @@ void main_hall_blit_table_status()
 {
 	// blit ship table status
 	gr_set_color_fast(Game_ships_tbl_valid ? &Color_bright_green : &Color_bright_red);
-	gr_line(1, gr_screen.max_h_unscaled_zoomed - 1, 1, gr_screen.max_h_unscaled_zoomed - 1, GR_RESIZE_MENU_ZOOMED);
+	gr_rect(1, gr_screen.max_h_unscaled_zoomed - 1, 2, 2, GR_RESIZE_MENU_ZOOMED);
 
 	// blit weapon table status
 	gr_set_color_fast(Game_weapons_tbl_valid ? &Color_bright_green : &Color_bright_red);
-	gr_line(3, gr_screen.max_h_unscaled_zoomed - 1, 3, gr_screen.max_h_unscaled_zoomed - 1, GR_RESIZE_MENU_ZOOMED);
+    gr_rect(3, gr_screen.max_h_unscaled_zoomed - 1, 2, 2, GR_RESIZE_MENU_ZOOMED);
 }
 
 /**
@@ -420,10 +420,10 @@ void main_hall_init(const SCP_string &main_hall_name)
 	}
 
 	// sanity checks
-	if (Main_hall_defines.size() == 0) {
+	if (Main_hall_defines.empty()) {
 		Error(LOCATION, "No main halls were loaded to initialize.");
 	} else if (main_hall_name == "") {
-		Warning(LOCATION, "main_hall_init() was passed a blank main hall name; loading first available main hall.");
+		// we were passed a blank main hall name, so load the first available main hall
 		main_hall_get_name(main_hall_to_load, 0);
 	} else if (main_hall_get_pointer(main_hall_name) == NULL) {
 		Warning(LOCATION, "Tried to load a main hall called '%s', but it does not exist; loading first available main hall.", main_hall_name.c_str());
@@ -692,6 +692,8 @@ void main_hall_do(float frametime)
 		for (int c_idx = 0; c_idx < (int) Main_hall->cheat.size(); c_idx++) {
 			cheat_anim_found = false;
 
+			// TODO change way cheat anims are loaded to work with apngs
+			// maybe load both cheat & normal, advance frames in lockstep, display which one you want
 			if(Main_hall_cheat.find(Main_hall->cheat.at(c_idx)) != SCP_string::npos) {
 				cheat_found = true;
 				// switch animations
@@ -776,11 +778,11 @@ void main_hall_do(float frametime)
 	#ifndef NDEBUG
 		case KEY_1:
 			// no soup for you!
-			movie_play("endprt2b.mve");
+			movie::play("endprt2b.mve");
 			break;
 		case KEY_2:
 			// no soup for you!
-			movie_play_two("endprt2a.mve", "endprt2b.mve");
+			movie::play_two("endprt2a.mve", "endprt2b.mve");
 			break;
 		case KEY_3:
 			main_hall_campaign_cheat();
@@ -793,7 +795,7 @@ void main_hall_do(float frametime)
 		case SNAZZY_OVER:
 			for (it = Main_hall->regions.begin(); Main_hall->regions.end() != it; ++it) {
 				if (it->mask == code) {
-					main_hall_handle_mouse_location(it - Main_hall->regions.begin());
+					main_hall_handle_mouse_location((int)std::distance(Main_hall->regions.begin(), it));
 					break;
 				}
 			}
@@ -930,7 +932,7 @@ void main_hall_do(float frametime)
 
 			// if the escape key wasn't pressed handle any mouse position related events
 			if (code != ESC_PRESSED) {
-				main_hall_handle_mouse_location((region_action == -1 ? -1 : it - Main_hall->regions.begin()));
+				main_hall_handle_mouse_location((region_action == -1 ? -1 : (int)std::distance(Main_hall->regions.begin(), it)));
 			}
 			break;
 
@@ -1615,15 +1617,15 @@ void main_hall_notify_do()
 		} else {
 			int w,h;
 
-			int old_font = gr_get_current_fontnum();
+			int old_font = font::get_current_fontnum();
 
 			gr_set_color_fast(&Color_bright);
-			gr_set_font(Main_hall->font);
+			font::set_font(Main_hall->font);
 
 			gr_get_string_size(&w,&h,Main_hall_notify_text);
 			gr_printf_menu_zoomed((gr_screen.max_w_unscaled_zoomed - w)/2, gr_screen.max_h_unscaled_zoomed - (h * 4 + 4), Main_hall_notify_text);
 
-			gr_set_font(old_font);
+			font::set_font(old_font);
 		}
 	}
 }
@@ -1686,8 +1688,8 @@ void main_hall_blit_version()
 	// format the version string
 	get_version_string(version_string, sizeof(version_string));
 
-	int old_font = gr_get_current_fontnum();
-	gr_set_font(Main_hall->font);
+	int old_font = font::get_current_fontnum();
+	font::set_font(Main_hall->font);
 
 	// get the length of the string
 	gr_get_string_size(&w,&h,version_string);
@@ -1696,7 +1698,7 @@ void main_hall_blit_version()
 	gr_set_color_fast(&Color_bright_white);
 	gr_string(5, gr_screen.max_h_unscaled_zoomed - (h * 2 + 6), version_string, GR_RESIZE_MENU_ZOOMED);
 
-	gr_set_font(old_font);
+	font::set_font(old_font);
 }
 
 /**
@@ -1719,8 +1721,8 @@ void main_hall_maybe_blit_tooltips()
 	if (!help_overlay_active(Main_hall_overlay_id)) {
 		const char* desc = Main_hall->regions[Main_hall_mouse_region].description.c_str();
 		
-		int old_font = gr_get_current_fontnum();
-		gr_set_font(Main_hall->font);
+		int old_font = font::get_current_fontnum();
+		font::set_font(Main_hall->font);
 		// get the width of the string
 		gr_get_string_size(&w, &h, desc);
 		int text_y;
@@ -1737,7 +1739,7 @@ void main_hall_maybe_blit_tooltips()
 		gr_set_color_fast(&Color_bright_white);
 		gr_string((gr_screen.max_w_unscaled - w)/2, text_y, desc, GR_RESIZE_MENU);
 
-		gr_set_font(old_font);
+		font::set_font(old_font);
 	}
 }
 
@@ -1759,8 +1761,8 @@ void main_hall_process_help_stuff()
 		Main_hall_f1_text_frame++;
 	}
 
-	int old_font = gr_get_current_fontnum();
-	gr_set_font(Main_hall->font);
+	int old_font = font::get_current_fontnum();
+	font::set_font(Main_hall->font);
 
 	// otherwise print out the message
 	strcpy_s(str, XSTR( "Press F1 for help", 371));
@@ -1782,7 +1784,7 @@ void main_hall_process_help_stuff()
 	gr_shade(0, 0, gr_screen.max_w_unscaled_zoomed, (2*Main_hall->tooltip_padding) + h - y_anim_offset, GR_RESIZE_MENU_ZOOMED);
 	gr_string((gr_screen.max_w_unscaled_zoomed - w)/2, Main_hall->tooltip_padding - y_anim_offset, str, GR_RESIZE_MENU_ZOOMED);
 
-	gr_set_font(old_font);
+	font::set_font(old_font);
 }
 
 /**
@@ -1826,13 +1828,13 @@ int main_hall_get_index(const SCP_string &name_to_find)
 
 int main_hall_get_resolution_index(int main_hall_num)
 {
-	unsigned int i;
+	size_t i;
 	float aspect_ratio = (float)gr_screen.center_w / (float)gr_screen.center_h;
 
 	for (i = Main_hall_defines.at(main_hall_num).size() - 1; i >= 1; i--) {
 		main_hall_defines* m = &Main_hall_defines.at(main_hall_num).at(i);
 		if (gr_screen.center_w >= m->min_width && gr_screen.center_h >= m->min_height && aspect_ratio >= m->min_aspect_ratio) {
-			return i;
+			return (int)i;
 		}
 	}
 	return 0;
@@ -2069,7 +2071,7 @@ void parse_main_hall_table(const char* filename)
 	main_hall_defines *m, temp;
 	int idx, s_idx, m_idx;
 	int num_resolutions = 2;
-	unsigned int count;
+	size_t count;
 	char temp_string[MAX_FILENAME_LEN];
 	SCP_string temp_scp_string;
 
@@ -2113,7 +2115,7 @@ void parse_main_hall_table(const char* filename)
 						}
 					}
 					else {
-						snprintf(temp_string, MAX_FILENAME_LEN, "%u", count);
+						snprintf(temp_string, MAX_FILENAME_LEN, SIZE_T_ARG, count);
 						m->name = temp_string;
 					}
 				}
@@ -2459,10 +2461,9 @@ void parse_main_hall_table(const char* filename)
 
 				// font for tooltips and other text
 				if (optional_string("+Font:")) {
-					stuff_int(&m->font);
-				}
-				else {
-					m->font = FONT1;
+					m->font = font::parse_font();
+				} else {
+					m->font = font::FONT1;
 				}
 
 				// tooltip padding

@@ -25,22 +25,25 @@
 #include "graphics/font.h"
 #include "graphics/grbatch.h"
 #include "graphics/grinternal.h"
-#include "graphics/gropengl.h" // Includes for different rendering systems
-#include "graphics/gropengldraw.h"
+#include "graphics/opengl/gropengl.h"
+#include "graphics/opengl/gropengldraw.h"
 #include "graphics/grstub.h"
+#include "graphics/paths/PathRenderer.h"
 #include "io/keycontrol.h" // m!m
 #include "io/timer.h"
 #include "osapi/osapi.h"
 #include "palman/palman.h"
-#include "parse/scripting.h"
+#include "scripting/scripting.h"
+#include "parse/parselo.h"
 #include "render/3d.h"
+#include "tracing/tracing.h"
 #include "popup/popup.h"
 
-#if defined(SCP_UNIX) && !defined(__APPLE__)
 #if ( SDL_VERSION_ATLEAST(1, 2, 7) )
 #include "SDL_cpuinfo.h"
 #endif
-#endif // SCP_UNIX && !__APPLE__
+
+#include "SDL_surface.h"
 
 const char *Resolution_prefixes[GR_NUM_RESOLUTIONS] = { "", "2_" };
 
@@ -57,9 +60,7 @@ ubyte Gr_current_palette[768];
 char Gr_current_palette_name[128] = NOX("none");
 
 // cursor stuff
-int Gr_cursor = -1;
-int Web_cursor_bitmap = -1;
-int Gr_cursor_size = 32;	// default w/h
+io::mouse::Cursor* Web_cursor = NULL;
 
 int Gr_inited = 0;
 
@@ -76,16 +77,11 @@ int gr_global_zbuffering = 0;
 // stencil buffer stuff
 int gr_stencil_mode = 0;
 
-// alpha mask stuff
-int gr_alpha_test = 0;
-
 // Default clipping distances
 const float Default_min_draw_distance = 1.0f;
 const float Default_max_draw_distance = 10000000.0f;
 float Min_draw_distance = Default_min_draw_distance;
 float Max_draw_distance = Default_max_draw_distance;
-
-static int GL_cursor_nframes = 0;
 
 // Pre-computed screen resize vars
 static float Gr_full_resize_X = 1.0f, Gr_full_resize_Y = 1.0f;
@@ -239,7 +235,7 @@ bool gr_resize_screen_pos(int *x, int *y, int *w, int *h, int resize_mode)
 		case GR_RESIZE_MENU_NO_OFFSET:
 			xy_tmp = (*x) * Gr_resize_X;
 			break;
-		}
+	}
 		(*x) = fl2ir(xy_tmp);
 	}
 
@@ -264,7 +260,7 @@ bool gr_resize_screen_pos(int *x, int *y, int *w, int *h, int resize_mode)
 		case GR_RESIZE_MENU_NO_OFFSET:
 			xy_tmp = (*y) * Gr_resize_Y;
 			break;
-		}
+	}
 		(*y) = fl2ir(xy_tmp);
 	}
 
@@ -347,7 +343,7 @@ bool gr_unsize_screen_pos(int *x, int *y, int *w, int *h, int resize_mode)
 		case GR_RESIZE_MENU_NO_OFFSET:
 			xy_tmp = (*x) / Gr_resize_X;
 			break;
-		}
+	}
 		(*x) = fl2ir(xy_tmp);
 	}
 
@@ -372,7 +368,7 @@ bool gr_unsize_screen_pos(int *x, int *y, int *w, int *h, int resize_mode)
 		case GR_RESIZE_MENU_NO_OFFSET:
 			xy_tmp = (*y) / Gr_resize_Y;
 			break;
-		}
+	}
 		(*y) = fl2ir(xy_tmp);
 	}
 
@@ -635,7 +631,7 @@ bool gr_unsize_screen_posf(float *x, float *y, float *w, float *h, int resize_mo
 	return true;
 }
 
-void gr_close()
+void gr_close(os::GraphicsOperations* graphicsOps)
 {
 	if ( !Gr_inited ) {
 		return;
@@ -643,9 +639,11 @@ void gr_close()
 
 	palette_flush();
 
+	font::close();
+
 	switch (gr_screen.mode) {
 		case GR_OPENGL:
-			gr_opengl_cleanup();
+			gr_opengl_cleanup(graphicsOps, true);
 			break;
 	
 		case GR_STUB:
@@ -654,8 +652,6 @@ void gr_close()
 		default:
 			Int3();		// Invalid graphics mode
 	}
-
-	gr_font_close();
 
 	Gr_inited = 0;
 }
@@ -703,14 +699,10 @@ void gr_set_palette_internal( const char *name, ubyte * palette, int restrict_fo
 	}
 
 	if ( Gr_inited ) {
-		if (gr_screen.gf_set_palette) {
-			(*gr_screen.gf_set_palette)(Gr_current_palette, restrict_font_to_128 );
-
-			// Since the palette set code might shuffle the palette,
-			// reload it into the source palette
-			if ( palette ) {
-				memmove( palette, Gr_current_palette, 768 );
-			}
+		// Since the palette set code might shuffle the palette,		
+		// reload it into the source palette		
+		if (palette) {
+			memmove(palette, Gr_current_palette, 768);
 		}
 
 		// Update Palette Manager tables
@@ -780,7 +772,7 @@ int gr_get_resolution_class(int width, int height)
 	}
 }
 
-static bool gr_init_sub(int mode, int width, int height, int depth, float center_aspect_ratio)
+static bool gr_init_sub(os::GraphicsOperations* graphicsOps, int mode, int width, int height, int depth, float center_aspect_ratio)
 {
 	int res = GR_1024;
 	bool rc = false;
@@ -879,19 +871,10 @@ static bool gr_init_sub(int mode, int width, int height, int depth, float center
 	gr_screen.save_max_h_unscaled = gr_screen.max_h_unscaled;
 	gr_screen.save_max_w_unscaled_zoomed = gr_screen.max_w_unscaled_zoomed;
 	gr_screen.save_max_h_unscaled_zoomed = gr_screen.max_h_unscaled_zoomed;
-
-#ifdef WIN32
-	// FRED doesn't need this
-	if ( !Fred_running && !Is_standalone ) {
-		// for Windows, we need to do this just before the *_init() calls
-		extern void win32_create_window(int width, int height);
-		win32_create_window( width, height );
-	}
-#endif
-
+	
 	switch (mode) {
 		case GR_OPENGL:
-			rc = gr_opengl_init();
+			rc = gr_opengl_init(graphicsOps);
 			break;
 		case GR_STUB: 
 			rc = gr_stub_init();
@@ -907,22 +890,16 @@ static bool gr_init_sub(int mode, int width, int height, int depth, float center
 	return true;
 }
 
-bool gr_init(int d_mode, int d_width, int d_height, int d_depth)
+bool gr_init(os::GraphicsOperations* graphicsOps, int d_mode, int d_width, int d_height, int d_depth)
 {
 	int width = 1024, height = 768, depth = 32, mode = GR_OPENGL;
 	float center_aspect_ratio = -1.0f;
 	const char *ptr = NULL;
-	const char *Default_video_settings = "OGL -(1024x768)x32 bit";
-
-	if ( !Gr_inited ) {
-		atexit(gr_close);
-	}
-
 	// If already inited, shutdown the previous graphics
 	if (Gr_inited) {
 		switch (gr_screen.mode) {
 			case GR_OPENGL:
-				gr_opengl_cleanup();
+				gr_opengl_cleanup(graphicsOps, false);
 				break;
 			
 			case GR_STUB:
@@ -938,15 +915,54 @@ bool gr_init(int d_mode, int d_width, int d_height, int d_depth)
 
 	// if we don't have a config string then construct one, using OpenGL 1024x768 32-bit as the default
 	if (ptr == NULL) {
-		ptr = Default_video_settings;
-	}
+		// If we don't have a display mode, use SDL to get default settings
+		// We need to initialize SDL to do this
 
-	Assert( ptr != NULL );
+		if (SDL_InitSubSystem(SDL_INIT_VIDEO) == 0)
+		{
+			int display = static_cast<int>(os_config_read_uint("Video", "Display", 0));
+			SDL_DisplayMode displayMode;
+			if (SDL_GetDesktopDisplayMode(display, &displayMode) == 0)
+			{
+				width = displayMode.w;
+				height = displayMode.h;
+				int sdlBits = SDL_BITSPERPIXEL(displayMode.format);
 
-	// NOTE: The "ptr+5" is to skip over the initial "????-" in the video string.
-	//       If the format of that string changes you'll have to change this too!!!
-	if ( sscanf(ptr+5, "(%dx%d)x%d ", &width, &height, &depth) != 3 ) {
-		Error(LOCATION, "Can't understand 'VideocardFs2open' config entry!");
+				if (SDL_ISPIXELFORMAT_ALPHA(displayMode.format))
+				{
+					depth = sdlBits;
+				}
+				else
+				{
+					// Fix a few values
+					if (sdlBits == 24)
+					{
+						depth = 32;
+					}
+					else if (sdlBits == 15)
+					{
+						depth = 16;
+					}
+					else
+					{
+						depth = sdlBits;
+					}
+				}
+
+				SCP_string videomode;
+				sprintf(videomode, "OGL -(%dx%d)x%d bit", width, height, depth);
+
+				os_config_write_string(NULL, NOX("VideocardFs2open"), videomode.c_str());
+			}
+		}
+	} else {
+		Assert(ptr != NULL);
+
+		// NOTE: The "ptr+5" is to skip over the initial "????-" in the video string.
+		//       If the format of that string changes you'll have to change this too!!!
+		if (sscanf(ptr + 5, "(%dx%d)x%d ", &width, &height, &depth) != 3) {
+			Error(LOCATION, "Can't understand 'VideocardFs2open' config entry!");
+		}
 	}
 
 	if (Cmdline_res != NULL) {
@@ -1047,42 +1063,39 @@ bool gr_init(int d_mode, int d_width, int d_height, int d_depth)
 	}
 
 	// now try to actually init everything...
-	if ( gr_init_sub(mode, width, height, depth, center_aspect_ratio) == false ) {
+	if ( gr_init_sub(graphicsOps, mode, width, height, depth, center_aspect_ratio) == false ) {
 		return false;
 	}
+
+	mprintf(("Initializing path renderer...\n"));
+	graphics::paths::PathRenderer::init();
 
 	gr_set_palette_internal(Gr_current_palette_name, NULL, 0);
 
 	bm_init();
+	io::mouse::CursorManager::init();
 
-	if (Gr_cursor < 0) {
-		int w, h;
-
-		Gr_cursor = bm_load( "cursor" );
-
-		if (Gr_cursor >= 0) {
-			// get cursor size, so that we can be sure to account for the full thing
-			// in later cursor hiding code
-			bm_get_info(Gr_cursor, &w, &h);
-			Gr_cursor_size = MAX(w, h);
-
-			if (Gr_cursor_size <= 0) {
-				Int3();
-				Gr_cursor_size = 32;
+	bool missing_installation = false;
+	if (!running_unittests && Web_cursor == nullptr) {
+		if (Is_standalone) {
+			// Cursors don't work in standalone mode, just check if the animation exists.
+			auto handle = bm_load_animation("cursorweb");
+			if (handle < 0) {
+				missing_installation = true;
+			} else {
+				bm_release(handle);
 			}
+		} else {
+			Web_cursor = io::mouse::CursorManager::get()->loadCursor("cursorweb", true);
+			missing_installation = Web_cursor == nullptr;
 		}
 	}
-
-	// load the web pointer cursor bitmap
-	if (Web_cursor_bitmap < 0) {
-		//if it still hasn't loaded then this usually means that the executable isn't in the same directory as the main fs2 install
-		if ( (Web_cursor_bitmap = bm_load_animation("cursorweb")) < 0 ) {
-			Error(LOCATION, "\nWeb cursor bitmap not found.  This is most likely due to one of three reasons:\n"
-				"\t1) You're running FreeSpace Open from somewhere other than your FreeSpace 2 folder;\n"
-				"\t2) You've somehow corrupted your FreeSpace 2 installation, e.g. by modifying or removing the retail VP files;\n"
-				"\t3) You haven't installed FreeSpace 2 at all.  (Note that installing FreeSpace Open does NOT remove the need for a FreeSpace 2 installation.)\n"
-				"Number 1 can be fixed by simply moving the FreeSpace Open executable file to the FreeSpace 2 folder.  Numbers 2 and 3 can be fixed by installing or reinstalling FreeSpace 2.\n");
-		}
+	if (missing_installation) {
+		Error(LOCATION, "\nWeb cursor bitmap not found.  This is most likely due to one of three reasons:\n"
+			"    1) You're running FreeSpace Open from somewhere other than your FreeSpace 2 folder;\n"
+			"    2) You've somehow corrupted your FreeSpace 2 installation, e.g. by modifying or removing the retail VP files;\n"
+			"    3) You haven't installed FreeSpace 2 at all.  (Note that installing FreeSpace Open does NOT remove the need for a FreeSpace 2 installation.)\n"
+			"Number 1 can be fixed by simply moving the FreeSpace Open executable file to the FreeSpace 2 folder.  Numbers 2 and 3 can be fixed by installing or reinstalling FreeSpace 2.\n");
 	}
 
 	mprintf(("GRAPHICS: Initializing default colors...\n"));
@@ -1091,8 +1104,6 @@ bool gr_init(int d_mode, int d_width, int d_height, int d_depth)
 	gr_set_clear_color(0, 0, 0);
 
 	gr_set_shader(NULL);
-
-	os_set_title(Osreg_title);
 
 	Gr_inited = 1;
 
@@ -1115,7 +1126,7 @@ void gr_force_windowed()
 	}
 
 	if ( Os_debugger_running ) {
-		Sleep(1000);
+		os_sleep(1000);
 	}
 }
 
@@ -1130,6 +1141,16 @@ void gr_activate(int active)
 
 	if ( !Gr_inited ) { 
 		return;
+	}
+
+	if (active) {
+		if (Cmdline_fullscreen_window||Cmdline_window) {
+			os::getMainViewport()->restore();
+		} else {
+			os::getMainViewport()->setState(os::ViewportState::Fullscreen);
+		}
+	} else {
+		os::getMainViewport()->minimize();
 	}
 
 	switch( gr_screen.mode ) {
@@ -1230,79 +1251,11 @@ void gr_set_shader(shader *shade)
 	}
 }
 
-/**
- * Set the bitmap for the mouse pointer.  This is called by the animating mouse
- * pointer code.
- *
- * The lock parameter just locks basically disables the next call of this function that doesn't
- * have an unlock feature.  If adding in more cursor-changing situations, be aware of
- * unexpected results. You have been warned.
- *
- * @todo investigate memory leak of original Gr_cursor bitmap when this is called
- */
-void gr_set_cursor_bitmap(int n, int lock)
-{
-	int w, h;
-	static int locked = 0;
-
-	if ( !locked || (lock == GR_CURSOR_UNLOCK) ) {
-		// if we are changing the cursor to something different
-		// then unload the previous cursor's data - taylor
-		if ( (Gr_cursor >= 0) && (Gr_cursor != n) ) {
-			// be sure to avoid changing a cursor which is simply another frame
-			if ( (GL_cursor_nframes < 2) || ((n - Gr_cursor) >= GL_cursor_nframes) ) {
-				gr_unset_cursor_bitmap(Gr_cursor);
-			}
-		}
-
-		if (n != Gr_cursor) {
-			// get cursor size, so that we can be sure to account for the full thing
-			// in later cursor hiding code
-			bm_get_info(n, &w, &h, NULL, &GL_cursor_nframes);
-			Assert( GL_cursor_nframes > 0 );
-
-			Gr_cursor_size = MAX(w, h);
-
-			if (Gr_cursor_size <= 0) {
-				Int3();
-				Gr_cursor_size = 32;
-			}
-		}
-
-		Gr_cursor = n;
-	} else {
-		locked = 0;
-	}
-
-	if (lock == GR_CURSOR_LOCK) {
-		locked = 1;
-	}
-}
-
-void gr_unset_cursor_bitmap(int n)
-{
-	if (n < 0) {
-		return;
-	}
-
-	if (Gr_cursor == n) {
-		bm_unload(Gr_cursor);
-		Gr_cursor = -1;
-	}
-}
-
-/**
- * Retrieves the current bitmap
- * Used in UI_GADGET to save/restore current cursor state
- */
-int gr_get_cursor_bitmap()
-{
-	return Gr_cursor;
-}
-
 // new bitmap functions
 void gr_bitmap(int _x, int _y, int resize_mode)
 {
+	GR_DEBUG_SCOPE("2D Bitmap");
+
 	int _w, _h;
 	float x, y, w, h;
 	vertex verts[4];
@@ -1346,22 +1299,28 @@ void gr_bitmap(int _x, int _y, int resize_mode)
 	verts[3].texture_position.v = 1.0f;
 
 	// turn off zbuffering
-	int saved_zbuffer_mode = gr_zbuffer_get();
-	gr_zbuffer_set(GR_ZBUFF_NONE);
+	//int saved_zbuffer_mode = gr_zbuffer_get();
+	//gr_zbuffer_set(GR_ZBUFF_NONE);
 
-	gr_render(4, verts, TMAP_FLAG_TEXTURED | TMAP_FLAG_INTERFACE);
+	material mat_params;
+	material_set_interface(
+		&mat_params, 
+		gr_screen.current_bitmap, 
+		gr_screen.current_alphablend_mode == GR_ALPHABLEND_FILTER ? true : false, 
+		gr_screen.current_alphablend_mode == GR_ALPHABLEND_FILTER ? gr_screen.current_alpha : 1.0f
+	);
 
-	gr_zbuffer_set(saved_zbuffer_mode);
+	g3_render_primitives_textured(&mat_params, verts, 4, PRIM_TYPE_TRIFAN, true);
+
+	//gr_zbuffer_set(saved_zbuffer_mode);
 }
 
 void gr_bitmap_uv(int _x, int _y, int _w, int _h, float _u0, float _v0, float _u1, float _v1, int resize_mode)
 {
+	GR_DEBUG_SCOPE("2D Bitmap UV");
+
 	float x, y, w, h;
 	vertex verts[4];
-
-	if (gr_screen.mode == GR_STUB) {
-		return;
-	}
 
 	x = i2fl(_x);
 	y = i2fl(_y);
@@ -1395,36 +1354,41 @@ void gr_bitmap_uv(int _x, int _y, int _w, int _h, float _u0, float _v0, float _u
 	verts[3].texture_position.u = _u0;
 	verts[3].texture_position.v = _v1;
 
-	// turn off zbuffering
-	int saved_zbuffer_mode = gr_zbuffer_get();
-	gr_zbuffer_set(GR_ZBUFF_NONE);
-
-	gr_render(4, verts, TMAP_FLAG_TEXTURED | TMAP_FLAG_INTERFACE);
-
-	gr_zbuffer_set(saved_zbuffer_mode);
+	material material_params;
+	material_set_interface(
+		&material_params,
+		gr_screen.current_bitmap,
+		gr_screen.current_alphablend_mode == GR_ALPHABLEND_FILTER ? true : false,
+		gr_screen.current_alphablend_mode == GR_ALPHABLEND_FILTER ? gr_screen.current_alpha : 1.0f
+	);
+	g3_render_primitives_textured(&material_params, verts, 4, PRIM_TYPE_TRIFAN, true);
 }
 
 // NEW new bitmap functions -Bobboau
-void gr_bitmap_list(bitmap_2d_list* list, int n_bm, int resize_mode)
-{
-	for (int i = 0; i < n_bm; i++) {
-		bitmap_2d_list *l = &list[i];
-
-		bm_get_info(gr_screen.current_bitmap, &l->w, &l->h, NULL, NULL, NULL);
-
-		if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
-			gr_resize_screen_pos(&l->x, &l->y, &l->w, &l->h, resize_mode);
-		}
-	}
-
-	g3_draw_2d_poly_bitmap_list(list, n_bm, TMAP_FLAG_INTERFACE);
-}
+// void gr_bitmap_list(bitmap_2d_list* list, int n_bm, int resize_mode)
+// {
+// 	for (int i = 0; i < n_bm; i++) {
+// 		bitmap_2d_list *l = &list[i];
+// 
+// 		bm_get_info(gr_screen.current_bitmap, &l->w, &l->h, NULL, NULL, NULL);
+// 
+// 		if ( resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1)) ) {
+// 			gr_resize_screen_pos(&l->x, &l->y, &l->w, &l->h, resize_mode);
+// 		}
+// 	}
+// 
+// 	g3_draw_2d_poly_bitmap_list(list, n_bm, TMAP_FLAG_INTERFACE);
+// }
 
 // _->NEW<-_ NEW new bitmap functions -Bobboau
 //takes a list of rectangles that have assosiated rectangles in a texture
 void gr_bitmap_list(bitmap_rect_list* list, int n_bm, int resize_mode)
 {
-	for(int i = 0; i < n_bm; i++) {
+	GR_DEBUG_SCOPE("2D Bitmap list");
+
+	// adapted from g3_draw_2d_poly_bitmap_list
+
+	for ( int i = 0; i < n_bm; i++ ) {
 		bitmap_2d_list *l = &list[i].screen_rect;
 
 		// if no valid hight or width values were given get some from the bitmap
@@ -1437,19 +1401,95 @@ void gr_bitmap_list(bitmap_rect_list* list, int n_bm, int resize_mode)
 		}
 	}
 
-	g3_draw_2d_poly_bitmap_rect_list(list, n_bm, TMAP_FLAG_INTERFACE);
+	vertex* vert_list = new vertex[6 * n_bm];
+	float sw = 0.1f;
+
+	for ( int i = 0; i < n_bm; i++ ) {
+		// stuff coords	
+
+		bitmap_2d_list* b = &list[i].screen_rect;
+		texture_rect_list* t = &list[i].texture_rect;
+		//tri one
+		vertex *V = &vert_list[i * 6];
+		V->screen.xyw.x = (float)b->x;
+		V->screen.xyw.y = (float)b->y;
+		V->screen.xyw.w = sw;
+		V->texture_position.u = (float)t->u0;
+		V->texture_position.v = (float)t->v0;
+		V->flags = PF_PROJECTED;
+		V->codes = 0;
+
+		V++;
+		V->screen.xyw.x = (float)(b->x + b->w);
+		V->screen.xyw.y = (float)b->y;
+		V->screen.xyw.w = sw;
+		V->texture_position.u = (float)t->u1;
+		V->texture_position.v = (float)t->v0;
+		V->flags = PF_PROJECTED;
+		V->codes = 0;
+
+		V++;
+		V->screen.xyw.x = (float)(b->x + b->w);
+		V->screen.xyw.y = (float)(b->y + b->h);
+		V->screen.xyw.w = sw;
+		V->texture_position.u = (float)t->u1;
+		V->texture_position.v = (float)t->v1;
+		V->flags = PF_PROJECTED;
+		V->codes = 0;
+
+		//tri two
+		V++;
+		V->screen.xyw.x = (float)b->x;
+		V->screen.xyw.y = (float)b->y;
+		V->screen.xyw.w = sw;
+		V->texture_position.u = (float)t->u0;
+		V->texture_position.v = (float)t->v0;
+		V->flags = PF_PROJECTED;
+		V->codes = 0;
+
+		V++;
+		V->screen.xyw.x = (float)(b->x + b->w);
+		V->screen.xyw.y = (float)(b->y + b->h);
+		V->screen.xyw.w = sw;
+		V->texture_position.u = (float)t->u1;
+		V->texture_position.v = (float)t->v1;
+		V->flags = PF_PROJECTED;
+		V->codes = 0;
+
+		V++;
+		V->screen.xyw.x = (float)b->x;
+		V->screen.xyw.y = (float)(b->y + b->h);
+		V->screen.xyw.w = sw;
+		V->texture_position.u = (float)t->u0;
+		V->texture_position.v = (float)t->v1;
+		V->flags = PF_PROJECTED;
+		V->codes = 0;
+	}
+
+	material mat_params;
+	material_set_interface(
+		&mat_params,
+		gr_screen.current_bitmap,
+		gr_screen.current_alphablend_mode == GR_ALPHABLEND_FILTER ? true : false,
+		gr_screen.current_alphablend_mode == GR_ALPHABLEND_FILTER ? gr_screen.current_alpha : 1.0f
+	);
+	g3_render_primitives_textured(&mat_params, vert_list, 6 * n_bm, PRIM_TYPE_TRIS, true);
+
+	delete[] vert_list;
 }
 
 
+
 /**
- * Given endpoints, and thickness, calculate coords of the endpoint
- */
+* Given endpoints, and thickness, calculate coords of the endpoint
+* Adapted from gr_pline_helper()
+*/
 void gr_pline_helper(vec3d *out, vec3d *in1, vec3d *in2, int thickness)
 {
 	vec3d slope;
 
 	// slope of the line
-	if(vm_vec_same(in1, in2)) {
+	if ( vm_vec_same(in1, in2) ) {
 		slope = vmd_zero_vector;
 	} else {
 		vm_vec_sub(&slope, in2, in1);
@@ -1462,154 +1502,164 @@ void gr_pline_helper(vec3d *out, vec3d *in1, vec3d *in2, int thickness)
 	vm_vec_scale_add(out, in1, &slope, (float)thickness);
 }
 
+
 /**
- * Special function for drawing polylines.
- *
- * This function is specifically intended for polylines where each section 
- * is no more than 90 degrees away from a previous section.
- * Moreover, it is _really_ intended for use with 45 degree angles. 
- */
-void gr_pline_special(SCP_vector<vec3d> *pts, int thickness,int resize_mode)
+* Special function for drawing polylines.
+*
+* This function is specifically intended for polylines where each section
+* is no more than 90 degrees away from a previous section.
+* Moreover, it is _really_ intended for use with 45 degree angles.
+* Adapted from gr_pline_special()
+*/
+void gr_pline_special(SCP_vector<vec3d> *pts, int thickness, int resize_mode)
 {
 	vec3d s1, s2, e1, e2, dir;
 	vec3d last_e1, last_e2;
 	vertex v[4];
-	vertex *verts[4] = {&v[0], &v[1], &v[2], &v[3]};
-	int saved_zbuffer_mode, idx;
 	int started_frame = 0;
 
-	int num_pts = pts->size();
+	size_t num_pts = pts->size();
 
 	// if we have less than 2 pts, bail
-	if(num_pts < 2) {
+	if ( num_pts < 2 ) {
 		return;
 	}
 
 	extern int G3_count;
-	if(G3_count == 0) {
+	if ( G3_count == 0 ) {
 		g3_start_frame(1);
 		started_frame = 1;
 	}
 
-	// turn off zbuffering
-	saved_zbuffer_mode = gr_zbuffer_get();
-	gr_zbuffer_set(GR_ZBUFF_NONE);
+	float sw = 0.1f;
 
-	// turn off culling
-	int cull = gr_set_cull(0);
+	color clr = gr_screen.current_color;
+
+	material material_def;
+
+	material_def.set_depth_mode(ZBUFFER_TYPE_NONE);
+	material_def.set_blend_mode(ALPHA_BLEND_ALPHA_BLEND_ALPHA);
+	material_def.set_cull_mode(false);
 
 	// draw each section
 	last_e1 = vmd_zero_vector;
 	last_e2 = vmd_zero_vector;
 	int j;
-	for(idx=0; idx<num_pts-1; idx++) {
+	for(size_t idx=0; idx<num_pts-1; idx++) {
 		// get the start and endpoints
 		s1 = pts->at(idx);													// start 1 (on the line)
-		e1 = pts->at(idx+1);												// end 1 (on the line)
+		e1 = pts->at(idx + 1);												// end 1 (on the line)
 		gr_pline_helper(&s2, &s1, &e1, thickness);	// start 2
 		vm_vec_sub(&dir, &e1, &s1);
 		vm_vec_add(&e2, &s2, &dir);											// end 2
-		
-		// stuff coords
+
+																			// stuff coords
 		v[0].screen.xyw.x = (float)ceil(s1.xyz.x);
 		v[0].screen.xyw.y = (float)ceil(s1.xyz.y);
-		v[0].screen.xyw.w = 0.0f;
+		v[0].screen.xyw.w = sw;
 		v[0].texture_position.u = 0.5f;
 		v[0].texture_position.v = 0.5f;
 		v[0].flags = PF_PROJECTED;
 		v[0].codes = 0;
-		v[0].r = gr_screen.current_color.red;
-		v[0].g = gr_screen.current_color.green;
-		v[0].b = gr_screen.current_color.blue;
+		v[0].r = clr.red;
+		v[0].g = clr.green;
+		v[0].b = clr.blue;
+		v[0].a = clr.alpha;
 
 		v[1].screen.xyw.x = (float)ceil(s2.xyz.x);
 		v[1].screen.xyw.y = (float)ceil(s2.xyz.y);
-		v[1].screen.xyw.w = 0.0f;
+		v[1].screen.xyw.w = sw;
 		v[1].texture_position.u = 0.5f;
 		v[1].texture_position.v = 0.5f;
 		v[1].flags = PF_PROJECTED;
 		v[1].codes = 0;
-		v[1].r = gr_screen.current_color.red;
-		v[1].g = gr_screen.current_color.green;
-		v[1].b = gr_screen.current_color.blue;
+		v[1].r = clr.red;
+		v[1].g = clr.green;
+		v[1].b = clr.blue;
+		v[1].a = clr.alpha;
 
 		v[2].screen.xyw.x = (float)ceil(e2.xyz.x);
 		v[2].screen.xyw.y = (float)ceil(e2.xyz.y);
-		v[2].screen.xyw.w = 0.0f;
+		v[2].screen.xyw.w = sw;
 		v[2].texture_position.u = 0.5f;
 		v[2].texture_position.v = 0.5f;
 		v[2].flags = PF_PROJECTED;
 		v[2].codes = 0;
-		v[2].r = gr_screen.current_color.red;
-		v[2].g = gr_screen.current_color.green;
-		v[2].b = gr_screen.current_color.blue;
+		v[2].r = clr.red;
+		v[2].g = clr.green;
+		v[2].b = clr.blue;
+		v[2].a = clr.alpha;
 
 		v[3].screen.xyw.x = (float)ceil(e1.xyz.x);
 		v[3].screen.xyw.y = (float)ceil(e1.xyz.y);
-		v[3].screen.xyw.w = 0.0f;
+		v[3].screen.xyw.w = sw;
 		v[3].texture_position.u = 0.5f;
 		v[3].texture_position.v = 0.5f;
 		v[3].flags = PF_PROJECTED;
 		v[3].codes = 0;
-		v[3].r = gr_screen.current_color.red;
-		v[3].g = gr_screen.current_color.green;
-		v[3].b = gr_screen.current_color.blue;
+		v[3].r = clr.red;
+		v[3].g = clr.green;
+		v[3].b = clr.blue;
+		v[3].a = clr.alpha;
 
 		//We could really do this better...but oh well. _WMC
-		if(resize_mode != GR_RESIZE_NONE) {
-			for(j=0;j<4;j++) {
-				gr_resize_screen_posf(&v[j].screen.xyw.x,&v[j].screen.xyw.y,NULL,NULL,resize_mode);
+		if ( resize_mode != GR_RESIZE_NONE ) {
+			for ( j = 0; j<4; j++ ) {
+				gr_resize_screen_posf(&v[j].screen.xyw.x, &v[j].screen.xyw.y, NULL, NULL, resize_mode);
 			}
 		}
 
 		// draw the polys
-		g3_draw_poly_constant_sw(4, verts, TMAP_FLAG_GOURAUD | TMAP_FLAG_RGB, 0.1f);
+		//g3_draw_poly_constant_sw(4, verts, TMAP_FLAG_GOURAUD | TMAP_FLAG_RGB, 0.1f);
+		g3_render_primitives_colored(&material_def, v, 4, PRIM_TYPE_TRIFAN, true);
 
 		// if we're past the first section, draw a "patch" triangle to fill any gaps
-		if(idx > 0) {
+		if ( idx > 0 ) {
 			// stuff coords
 			v[0].screen.xyw.x = (float)ceil(s1.xyz.x);
 			v[0].screen.xyw.y = (float)ceil(s1.xyz.y);
-			v[0].screen.xyw.w = 0.0f;
+			v[0].screen.xyw.w = sw;
 			v[0].texture_position.u = 0.5f;
 			v[0].texture_position.v = 0.5f;
 			v[0].flags = PF_PROJECTED;
 			v[0].codes = 0;
-			v[0].r = gr_screen.current_color.red;
-			v[0].g = gr_screen.current_color.green;
-			v[0].b = gr_screen.current_color.blue;
+			v[0].r = clr.red;
+			v[0].g = clr.green;
+			v[0].b = clr.blue;
+			v[0].a = clr.alpha;
 
 			v[1].screen.xyw.x = (float)ceil(s2.xyz.x);
 			v[1].screen.xyw.y = (float)ceil(s2.xyz.y);
-			v[1].screen.xyw.w = 0.0f;
+			v[1].screen.xyw.w = sw;
 			v[1].texture_position.u = 0.5f;
 			v[1].texture_position.v = 0.5f;
 			v[1].flags = PF_PROJECTED;
 			v[1].codes = 0;
-			v[1].r = gr_screen.current_color.red;
-			v[1].g = gr_screen.current_color.green;
-			v[1].b = gr_screen.current_color.blue;
-
+			v[1].r = clr.red;
+			v[1].g = clr.green;
+			v[1].b = clr.blue;
+			v[1].a = clr.alpha;
 
 			v[2].screen.xyw.x = (float)ceil(last_e2.xyz.x);
 			v[2].screen.xyw.y = (float)ceil(last_e2.xyz.y);
-			v[2].screen.xyw.w = 0.0f;
+			v[2].screen.xyw.w = sw;
 			v[2].texture_position.u = 0.5f;
 			v[2].texture_position.v = 0.5f;
 			v[2].flags = PF_PROJECTED;
 			v[2].codes = 0;
-			v[2].r = gr_screen.current_color.red;
-			v[2].g = gr_screen.current_color.green;
-			v[2].b = gr_screen.current_color.blue;
+			v[2].r = clr.red;
+			v[2].g = clr.green;
+			v[2].b = clr.blue;
+			v[2].a = clr.alpha;
 
 			//Inefficiency or flexibility? you be the judge -WMC
-			if(resize_mode != GR_RESIZE_NONE) {
-				for(j=0;j<3;j++) {
-					gr_resize_screen_posf(&v[j].screen.xyw.x,&v[j].screen.xyw.y,NULL,NULL,resize_mode);
+			if ( resize_mode != GR_RESIZE_NONE ) {
+				for ( j = 0; j<3; j++ ) {
+					gr_resize_screen_posf(&v[j].screen.xyw.x, &v[j].screen.xyw.y, NULL, NULL, resize_mode);
 				}
 			}
 
-			g3_draw_poly_constant_sw(3, verts, TMAP_FLAG_GOURAUD | TMAP_FLAG_RGB, 0.1f);
+			g3_render_primitives_colored(&material_def, v, 3, PRIM_TYPE_TRIFAN, true);
 		}
 
 		// store our endpoints
@@ -1617,15 +1667,9 @@ void gr_pline_special(SCP_vector<vec3d> *pts, int thickness,int resize_mode)
 		last_e2 = e2;
 	}
 
-	if(started_frame) {
+	if ( started_frame ) {
 		g3_end_frame();
 	}
-
-	// restore zbuffer mode
-	gr_zbuffer_set(saved_zbuffer_mode);
-
-	// restore culling
-	gr_set_cull(cull);
 }
 
 int poly_list::find_first_vertex(int idx)
@@ -1740,7 +1784,7 @@ void poly_list::allocate(int _verts)
 			tsb = (tsb_t*)vm_malloc(sizeof(tsb_t) * _verts);
 		}
 
-		if ( GLSL_version >= 130 ) {
+		if ( GLSL_version >= 150 ) {
 			submodels = (int*)vm_malloc(sizeof(int) * _verts);
 		}
 
@@ -1922,7 +1966,7 @@ void poly_list::make_index_buffer(SCP_vector<int> &vertex_list)
 			buffer_list_internal.tsb[z] = tsb[j];
 		}
 
-		if ( GLSL_version >= 130 ) {
+		if ( GLSL_version >= 150 ) {
 			buffer_list_internal.submodels[z] = submodels[j];
 		}
 
@@ -1952,7 +1996,7 @@ poly_list& poly_list::operator = (poly_list &other_list)
 		memcpy(tsb, other_list.tsb, sizeof(tsb_t) * other_list.n_verts);
 	}
 
-	if ( GLSL_version >= 130 ) {
+	if ( GLSL_version >= 150 ) {
 		memcpy(submodels, other_list.submodels, sizeof(int) * other_list.n_verts);
 	}
 
@@ -2049,21 +2093,8 @@ void gr_shield_icon(coord2d coords[6], int resize_mode)
 	if (gr_screen.mode == GR_STUB) {
 		return;
 	}
-
-	if (resize_mode != GR_RESIZE_NONE) {
-		gr_resize_screen_pos(&coords[0].x, &coords[0].y, NULL, NULL, resize_mode);
-		gr_resize_screen_pos(&coords[1].x, &coords[1].y, NULL, NULL, resize_mode);
-		gr_resize_screen_pos(&coords[2].x, &coords[2].y, NULL, NULL, resize_mode);
-		gr_resize_screen_pos(&coords[3].x, &coords[3].y, NULL, NULL, resize_mode);
-		gr_resize_screen_pos(&coords[4].x, &coords[4].y, NULL, NULL, resize_mode);
-		gr_resize_screen_pos(&coords[5].x, &coords[5].y, NULL, NULL, resize_mode);
-	}
-
-	g3_draw_2d_shield_icon(coords,
-		gr_screen.current_color.red,
-		gr_screen.current_color.green,
-		gr_screen.current_color.blue,
-		gr_screen.current_color.alpha);
+	
+	g3_render_shield_icon(&gr_screen.current_color, coords, resize_mode);
 }
 
 void gr_rect(int x, int y, int w, int h, int resize_mode)
@@ -2072,15 +2103,7 @@ void gr_rect(int x, int y, int w, int h, int resize_mode)
 		return;
 	}
 
-	if (resize_mode != GR_RESIZE_NONE) {
-		gr_resize_screen_pos(&x, &y, &w, &h, resize_mode);
-	}
-
-	g3_draw_2d_rect(x, y, w, h,
-		gr_screen.current_color.red,
-		gr_screen.current_color.green,
-		gr_screen.current_color.blue,
-		gr_screen.current_color.alpha);
+	g3_render_colored_rect(&gr_screen.current_color, x, y, w, h, resize_mode);
 }
 
 void gr_shade(int x, int y, int w, int h, int resize_mode)
@@ -2090,17 +2113,16 @@ void gr_shade(int x, int y, int w, int h, int resize_mode)
 	if (gr_screen.mode == GR_STUB) {
 		return;
 	}
-
-	if (resize_mode != GR_RESIZE_NONE) {
-		gr_resize_screen_pos(&x, &y, &w, &h, resize_mode);
-	}
-
+	
 	r = (int)gr_screen.current_shader.r;
 	g = (int)gr_screen.current_shader.g;
 	b = (int)gr_screen.current_shader.b;
 	a = (int)gr_screen.current_shader.c;
+	
+	color clr;
+	gr_init_alphacolor(&clr, r, g, b, a);
 
-	g3_draw_2d_rect(x, y, w, h, r, g, b, a);
+	g3_render_colored_rect(&clr, x, y, w, h, resize_mode);
 }
 
 void gr_set_bitmap(int bitmap_num, int alphablend_mode, int bitblt_mode, float alpha)
@@ -2142,6 +2164,7 @@ uint gr_determine_model_shader_flags(
 	int glow_map, 
 	int normal_map, 
 	int height_map,
+	int ambient_map,
 	int env_map,
 	int misc_map
 ) {
@@ -2201,6 +2224,10 @@ uint gr_determine_model_shader_flags(
 				shader_flags |= SDR_FLAG_MODEL_HEIGHT_MAP;
 			}
 
+			if ( ambient_map > 0 ) {
+				shader_flags |= SDR_FLAG_MODEL_AMBIENT_MAP;
+			}
+
 			if ( Cmdline_shadow_quality && !in_shadow_map && !Shadow_override) {
 				shader_flags |= SDR_FLAG_MODEL_SHADOWS;
 			}
@@ -2223,5 +2250,20 @@ uint gr_determine_model_shader_flags(
 		shader_flags |= SDR_FLAG_MODEL_THRUSTER;
 	}
 
+	if ( High_dynamic_range ) {
+		shader_flags |= SDR_FLAG_MODEL_HDR;
+	}
+
 	return shader_flags;
+}
+
+void gr_print_timestamp(int x, int y, int timestamp, int resize_mode)
+{
+	char time[8];
+
+	// format the time information into strings
+	sprintf(time, "%.1d:%.2d:%.2d", (timestamp / 3600000) % 10, (timestamp / 60000) % 60, (timestamp / 1000) % 60);
+	time[7] = '\0';
+
+	gr_string(x, y, time, resize_mode);
 }

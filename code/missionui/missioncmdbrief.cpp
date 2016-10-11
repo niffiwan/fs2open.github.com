@@ -559,9 +559,7 @@ void cmd_brief_init(int team)
 
 	gr_reset_clip();
 	gr_clear();
-	Mouse_hidden++;
 	gr_flip();
-	Mouse_hidden--;
 
 	// first determine which layout to use
 	Uses_scroll_buttons = 1;	// assume true
@@ -719,7 +717,7 @@ void cmd_brief_do_frame(float frametime)
 		Cmd_brief_buttons[gr_screen.res][CMD_BRIEF_BUTTON_PAUSE].button.draw_forced(2);
 	}
 
-	gr_set_font(FONT1);
+	font::set_font(font::FONT1);
 	gr_set_color_fast(&Color_text_heading);
 
 	sprintf(buf, XSTR( "Stage %d of %d", 464), Cur_stage + 1, Cur_cmd_brief->num_stages);
@@ -738,7 +736,7 @@ void cmd_brief_do_frame(float frametime)
 		int more_txt_x = Cmd_text_wnd_coords[Uses_scroll_buttons][gr_screen.res][CMD_X_COORD] + (Cmd_text_wnd_coords[Uses_scroll_buttons][gr_screen.res][CMD_W_COORD]/2) - 10;
 		int more_txt_y = Cmd_text_wnd_coords[Uses_scroll_buttons][gr_screen.res][CMD_Y_COORD] + Cmd_text_wnd_coords[Uses_scroll_buttons][gr_screen.res][CMD_H_COORD] - 2;				// located below brief text, centered
 
-		gr_get_string_size(&w, &h, XSTR("more", 1469), strlen(XSTR("more", 1469)));
+		gr_get_string_size(&w, &h, XSTR("more", 1469), static_cast<int>(strlen(XSTR("more", 1469))));
 		gr_set_color_fast(&Color_black);
 		gr_rect(more_txt_x-2, more_txt_y, w+3, h, GR_RESIZE_MENU);
 		gr_set_color_fast(&Color_more_indicator);

@@ -17,8 +17,8 @@
 #endif
 
 #include "network/stand_gui.h"
-#include "freespace2/freespace.h"
-#include "freespace2/freespaceresource.h"
+#include "freespace.h"
+#include "freespaceresource.h"
 #include "network/multi.h"
 #include "network/multimsgs.h"
 #include "network/multiutil.h"
@@ -36,6 +36,7 @@
 #include "ship/ship.h"
 #include "cfile/cfile.h"
 #include "fs2netd/fs2netd_client.h"
+#include "osapi/osapi.h"
 
 #include <string>
 
@@ -169,16 +170,16 @@ void std_gen_set_text(char *str, int field_num)
 	}
 
 	// otherwise set the text
-	ctrl = GetDlgItem(Multi_gen_dialog, (int)MAKEINTRESOURCE(IDC_FIELD1));
+	ctrl = GetDlgItem(Multi_gen_dialog, (int)(uintptr_t)MAKEINTRESOURCE(IDC_FIELD1));
 	switch(field_num){
 	case 0:
-		ctrl = GetDlgItem(Multi_gen_dialog,(int)MAKEINTRESOURCE(IDC_FIELD1));
+		ctrl = GetDlgItem(Multi_gen_dialog,(int)(uintptr_t)MAKEINTRESOURCE(IDC_FIELD1));
 		break;
 	case 1:
-		ctrl = GetDlgItem(Multi_gen_dialog,(int)MAKEINTRESOURCE(IDC_FIELD2));
+		ctrl = GetDlgItem(Multi_gen_dialog,(int)(uintptr_t)MAKEINTRESOURCE(IDC_FIELD2));
 		break;
 	case 2:
-		ctrl = GetDlgItem(Multi_gen_dialog,(int)MAKEINTRESOURCE(IDC_FIELD3));
+		ctrl = GetDlgItem(Multi_gen_dialog,(int)(uintptr_t)MAKEINTRESOURCE(IDC_FIELD3));
 		break;	
 	}
 	SetWindowText(ctrl, str);
@@ -224,7 +225,7 @@ int std_connect_set_connect_count()
 	strcat_s(str,val);
 
 	// set the text itself
-   ctrl = GetDlgItem(Page_handles[CONNECT_PAGE],(int)MAKEINTRESOURCE(IDC_CON_COUNT));
+   ctrl = GetDlgItem(Page_handles[CONNECT_PAGE],(int)(uintptr_t)MAKEINTRESOURCE(IDC_CON_COUNT));
    SetWindowText(ctrl,str);
 
 	// return the num of players found
@@ -247,7 +248,7 @@ void std_connect_set_host_connect_status()
 	}
 
 	// get the control and set the status
-	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE],(int)MAKEINTRESOURCE(IDC_HOST_IS));
+	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE],(int)(uintptr_t)MAKEINTRESOURCE(IDC_HOST_IS));
 	if(found){
 		SetWindowText(ctrl, XSTR("Host connected ? Yes",912));
 	} else {
@@ -261,23 +262,22 @@ void std_connect_add_ip_string(char *string)
    HWND ctrl;
 	
 	// add the item
-	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE], (int)MAKEINTRESOURCE(IDC_CONPING));
+	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_CONPING));
 	SendMessage(ctrl, LB_ADDSTRING, (WPARAM)0, (LPARAM)(LPCTSTR)string);
 }
 
 // remove an ip string from the connect page listbox
 void std_connect_remove_ip_string(char *string)
 {
-	HWND ctrl;	
-	int loc;
+	HWND ctrl;
 	
 	// get the control handle
-	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE], (int)MAKEINTRESOURCE(IDC_CONPING));
+	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_CONPING));
 
 	// NOTE the use of FINDSTRING and _not_ FINDSTRINGEXACT !!
 	// since we've appended the ping to the end of the string, we can only check the 
 	// "prefix" which is the net_players name
-	loc = SendMessage(ctrl, LB_FINDSTRING, (WPARAM)-1, (LPARAM)(LPCTSTR)string);
+	auto loc = SendMessage(ctrl, LB_FINDSTRING, (WPARAM)-1, (LPARAM)(LPCTSTR)string);
 
 	if(loc!=LB_ERR){
 		SendMessage(ctrl, LB_DELETESTRING, (WPARAM)loc, (LPARAM)0);
@@ -288,15 +288,14 @@ void std_connect_remove_ip_string(char *string)
 void std_connect_set_ip_string(char *lookup,char *string)
 {
 	HWND ctrl;
-	int loc;
 
 	// get the control handle
-	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE],(int)MAKEINTRESOURCE(IDC_CONPING));
+	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE],(int)(uintptr_t)MAKEINTRESOURCE(IDC_CONPING));
  
 	// NOTE the use of FINDSTRING and _not_ FINDSTRINGEXACT !!
 	// since we've appended the ping to the end of the string, we can only check the 
 	// "prefix" which is the net_players name
-	loc = SendMessage(ctrl,LB_FINDSTRING,(WPARAM)-1,(LPARAM)(LPCTSTR)lookup);
+	auto loc = SendMessage(ctrl,LB_FINDSTRING,(WPARAM)-1,(LPARAM)(LPCTSTR)lookup);
 
 	if(loc!=LB_ERR){
 		SendMessage(ctrl,LB_DELETESTRING,(WPARAM)loc,(LPARAM)0);
@@ -306,16 +305,16 @@ void std_connect_set_ip_string(char *lookup,char *string)
 
 void std_connect_kick_player()
 {		
-	int player_num,sel;
+	int player_num;
 	HWND ctrl;	
 
 	// get the control handle
-	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE],(int)MAKEINTRESOURCE(IDC_CONPING));
+	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE],(int)(uintptr_t)MAKEINTRESOURCE(IDC_CONPING));
 
-	sel = SendMessage(ctrl,LB_GETCURSEL,(WPARAM)0,(LPARAM)0);
+	auto sel = SendMessage(ctrl,LB_GETCURSEL,(WPARAM)0,(LPARAM)0);
 	// attempt to get the player index
 	if(sel != CB_ERR){
-		player_num = std_connect_lindex_to_npindex(sel);
+		player_num = std_connect_lindex_to_npindex((int)sel);
 
 		// if we found him, then kick the bastard
 		if(player_num != -1){
@@ -365,7 +364,7 @@ void std_connect_clear_controls()
 	std_connect_set_host_connect_status();
 
 	// reset the list of players and pings
-	handle = GetDlgItem(Page_handles[CONNECT_PAGE],(int)MAKEINTRESOURCE(IDC_CONPING));
+	handle = GetDlgItem(Page_handles[CONNECT_PAGE],(int)(uintptr_t)MAKEINTRESOURCE(IDC_CONPING));
 	SendMessage(handle,LB_RESETCONTENT,(WPARAM)0,(LPARAM)0);
 }
 
@@ -388,7 +387,7 @@ void std_connect_set_gamename(char *name)
 		// update fs2netd
 		if (MULTI_IS_TRACKER_GAME) {
 			fs2netd_gameserver_disconnect();
-			Sleep(50);
+			os_sleep(50);
 			fs2netd_gameserver_start();
 		}
 	}
@@ -428,7 +427,7 @@ void std_connect_handle_name_change()
 		// update fs2netd with the info
 		if (MULTI_IS_TRACKER_GAME) {
 			fs2netd_gameserver_disconnect();
-			Sleep(50);
+			os_sleep(50);
 			fs2netd_gameserver_start();
 		}
 	}
@@ -459,7 +458,7 @@ int std_connect_lindex_to_npindex(int index)
 	int ret,idx;
 
 	// get the control handle
-	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE],(int)MAKEINTRESOURCE(IDC_CONPING));
+	ctrl = GetDlgItem(Page_handles[CONNECT_PAGE],(int)(uintptr_t)MAKEINTRESOURCE(IDC_CONPING));
 
 	// get the string contained at a given index	
 	SendMessage(ctrl,LB_GETTEXT,(WPARAM)index,(LPARAM)(LPSTR)list_text);
@@ -493,12 +492,12 @@ BOOL CALLBACK connect_proc(HWND hwndDlg,UINT uMsg,WPARAM wParam,LPARAM lParam)
 		Page_handles[CONNECT_PAGE] = hwndDlg;		
 		
 		// create the standalone name text box and limit its text length
-		Multi_std_name = GetDlgItem(hwndDlg, (int)MAKEINTRESOURCE(IDC_STD_NAME));
+		Multi_std_name = GetDlgItem(hwndDlg, (int)(uintptr_t)MAKEINTRESOURCE(IDC_STD_NAME));
 		SendMessage(Multi_std_name, EM_SETLIMITTEXT, (WPARAM)MAX_GAMENAME_LEN, (LPARAM)0);
 		Multi_std_namechange_force = 1;
 
 		// create the standalone host password input box
-		Multi_std_host_passwd = GetDlgItem(hwndDlg, (int)MAKEINTRESOURCE(IDC_STD_HOST_PASSWD));
+		Multi_std_host_passwd = GetDlgItem(hwndDlg, (int)(uintptr_t)MAKEINTRESOURCE(IDC_STD_HOST_PASSWD));
 		SendMessage(Multi_std_host_passwd, EM_SETLIMITTEXT, (WPARAM)STD_PASSWD_LEN, (LPARAM)0);
 		memset(Multi_options_g.std_passwd, 0, STD_PASSWD_LEN+1);
 
@@ -885,15 +884,15 @@ void std_multi_update_netgame_info_controls()
 // handle the user sliding the framerate cap scrollbar around
 void std_multi_handle_framecap_scroll(HWND ctrl)
 {
-   int pos;
+	int pos;
 	char pos_text[10];
    
 	// determine where the slider now is
-	pos = SendMessage(ctrl,TBM_GETPOS,(WPARAM)0,(LPARAM)0);
+	pos = (int)SendMessage(ctrl,TBM_GETPOS,(WPARAM)0,(LPARAM)0);
 
 	// update the text display 
 	sprintf(pos_text,"%d",pos);
-	SetWindowText(GetDlgItem(Page_handles[MULTIPLAYER_PAGE],(int)MAKEINTRESOURCE(IDC_FRAMECAP_STATIC)),pos_text);
+	SetWindowText(GetDlgItem(Page_handles[MULTIPLAYER_PAGE],(int)(uintptr_t)MAKEINTRESOURCE(IDC_FRAMECAP_STATIC)),pos_text);
 	
 	// set the framecap var
 	Multi_options_g.std_framecap = pos;
@@ -933,25 +932,25 @@ void std_multi_init_multi_controls(HWND hwndDlg)
 	std_multi_init_framecap_slider(hwndDlg);
 
 	// create the framerate display text box
-	Standalone_FPS = GetDlgItem(hwndDlg,(int)MAKEINTRESOURCE(IDC_STANDALONE_FPS));
+	Standalone_FPS = GetDlgItem(hwndDlg,(int)(uintptr_t)MAKEINTRESOURCE(IDC_STANDALONE_FPS));
 
 	// create the missiontime text box
-	Standalone_missiontime = GetDlgItem(hwndDlg,(int)MAKEINTRESOURCE(IDC_STANDALONE_MTIME));
+	Standalone_missiontime = GetDlgItem(hwndDlg,(int)(uintptr_t)MAKEINTRESOURCE(IDC_STANDALONE_MTIME));
 
 	// create the mission name text box
-	Standalone_mission_name = GetDlgItem(hwndDlg,(int)MAKEINTRESOURCE(IDC_MISSION_NAME));
+	Standalone_mission_name = GetDlgItem(hwndDlg,(int)(uintptr_t)MAKEINTRESOURCE(IDC_MISSION_NAME));
 
 	// create the netgame max players text box
-	Std_ng_max_players = GetDlgItem(hwndDlg,(int)MAKEINTRESOURCE(IDC_NG_MAXPLAYERS));
+	Std_ng_max_players = GetDlgItem(hwndDlg,(int)(uintptr_t)MAKEINTRESOURCE(IDC_NG_MAXPLAYERS));
 
 	// create the netgame max observers text box
-	Std_ng_max_observers = GetDlgItem(hwndDlg,(int)MAKEINTRESOURCE(IDC_NG_MAXOBSERVERS));
+	Std_ng_max_observers = GetDlgItem(hwndDlg,(int)(uintptr_t)MAKEINTRESOURCE(IDC_NG_MAXOBSERVERS));
 
 	// create the netgame security text box
-	Std_ng_security = GetDlgItem(hwndDlg,(int)MAKEINTRESOURCE(IDC_NG_SECURITY));
+	Std_ng_security = GetDlgItem(hwndDlg,(int)(uintptr_t)MAKEINTRESOURCE(IDC_NG_SECURITY));
 
 	// create the netgame respawns # text box
-	Std_ng_respawns = GetDlgItem(hwndDlg,(int)MAKEINTRESOURCE(IDC_NG_RESPAWNS));
+	Std_ng_respawns = GetDlgItem(hwndDlg,(int)(uintptr_t)MAKEINTRESOURCE(IDC_NG_RESPAWNS));
 
    // load the goal tree-view bitmaps
 	Goal_bitmaps = ImageList_Create(16,16,ILC_COLOR4 | ILC_MASK,5,0);
@@ -1159,11 +1158,9 @@ void std_pinfo_add_player_list_item(net_player *p)
 
 // remove a player from the list on the player info page
 void std_pinfo_remove_player_list_item(net_player *p)
-{
-	int loc;
-	
+{	
 	// lookup thie player
-	loc = SendMessage(Player_name_list,CB_FINDSTRINGEXACT,(WPARAM)-1,(LPARAM)(LPCTSTR)p->m_player->callsign);
+	auto loc = SendMessage(Player_name_list,CB_FINDSTRINGEXACT,(WPARAM)-1,(LPARAM)(LPCTSTR)p->m_player->callsign);
 
 	// if we found the entry, then delete it
 	if(loc!=CB_ERR){
@@ -1212,55 +1209,54 @@ void std_pinfo_clear_controls()
 void std_pinfo_init_player_info_controls(HWND hwndDlg)
 {	
 	// create the player callsign listbox
-	Player_name_list = GetDlgItem(Page_handles[PLAYER_INFO_PAGE],(int)MAKEINTRESOURCE(IDC_PLAYER_LIST));
+	Player_name_list = GetDlgItem(Page_handles[PLAYER_INFO_PAGE],(int)(uintptr_t)MAKEINTRESOURCE(IDC_PLAYER_LIST));
 
 	// create the player ship type text box
-	Player_ship_type = GetDlgItem(Page_handles[PLAYER_INFO_PAGE],(int)MAKEINTRESOURCE(IDC_PSHIP_TYPE));
+	Player_ship_type = GetDlgItem(Page_handles[PLAYER_INFO_PAGE],(int)(uintptr_t)MAKEINTRESOURCE(IDC_PSHIP_TYPE));
 
 	// create the player ping time text box
-	Player_ping_time = GetDlgItem(Page_handles[PLAYER_INFO_PAGE],(int)MAKEINTRESOURCE(IDC_PING_TIME));
+	Player_ping_time = GetDlgItem(Page_handles[PLAYER_INFO_PAGE],(int)(uintptr_t)MAKEINTRESOURCE(IDC_PING_TIME));
 
 	// initialize the various and sundry statistics text controls (alltime)
-	Player_stats[0] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_SCORE));
-	Player_stats[1] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_KILL_COUNT));
-	Player_stats[2] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_KILL_COUNT_BH));
-	Player_stats[3] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_ASSISTS));
-	Player_stats[4] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_PSHOTS));
-	Player_stats[5] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_PHITS));
-	Player_stats[6] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_PBHHITS));
-	Player_stats[7] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_PPCT));
-	Player_stats[8] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_PBHPCT));
-	Player_stats[9] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_SSHOTS));
-	Player_stats[10] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_SECHITS));
-	Player_stats[11] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_SBHHITS));
-	Player_stats[12] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_SPCT));
-	Player_stats[13] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_SBHPCT));
+	Player_stats[0] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_SCORE));
+	Player_stats[1] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_KILL_COUNT));
+	Player_stats[2] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_KILL_COUNT_BH));
+	Player_stats[3] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_ASSISTS));
+	Player_stats[4] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_PSHOTS));
+	Player_stats[5] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_PHITS));
+	Player_stats[6] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_PBHHITS));
+	Player_stats[7] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_PPCT));
+	Player_stats[8] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_PBHPCT));
+	Player_stats[9] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_SSHOTS));
+	Player_stats[10] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_SECHITS));
+	Player_stats[11] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_SBHHITS));
+	Player_stats[12] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_SPCT));
+	Player_stats[13] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_SBHPCT));
 
 	// initialize the various and sundry statistics text controls (this mission)
-	Player_mstats[0] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MSCORE));
-	Player_mstats[1] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MKILL_COUNT));
-	Player_mstats[2] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MKILL_COUNT_BH));
-	Player_mstats[3] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MASSISTS));
-	Player_mstats[4] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MPSHOTS));
-	Player_mstats[5] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MPHITS));
-	Player_mstats[6] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MPBHHITS));
-	Player_mstats[7] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MPPCT));
-	Player_mstats[8] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MPBHPCT));
-	Player_mstats[9] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MSSHOTS));
-	Player_mstats[10] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MSECHITS));
-	Player_mstats[11] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MSBHHITS));
-	Player_mstats[12] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MSPCT));
-	Player_mstats[13] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)MAKEINTRESOURCE(IDC_MSBHPCT));
+	Player_mstats[0] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MSCORE));
+	Player_mstats[1] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MKILL_COUNT));
+	Player_mstats[2] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MKILL_COUNT_BH));
+	Player_mstats[3] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MASSISTS));
+	Player_mstats[4] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MPSHOTS));
+	Player_mstats[5] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MPHITS));
+	Player_mstats[6] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MPBHHITS));
+	Player_mstats[7] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MPPCT));
+	Player_mstats[8] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MPBHPCT));
+	Player_mstats[9] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MSSHOTS));
+	Player_mstats[10] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MSECHITS));
+	Player_mstats[11] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MSBHHITS));
+	Player_mstats[12] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MSPCT));
+	Player_mstats[13] = GetDlgItem(Page_handles[PLAYER_INFO_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_MSBHPCT));
 }
 
 // returns true or false depending on whether the passed netplayer is the currently selected guy
 int std_pinfo_player_is_active(net_player *p)
 {
-	int sel;
 	char player[40];
 
 	// get the index of the currently selected item
-	sel = SendMessage(Player_name_list,CB_GETCURSEL,(WPARAM)0,(LPARAM)0);
+	auto sel = SendMessage(Player_name_list,CB_GETCURSEL,(WPARAM)0,(LPARAM)0);
 
 	// if we didn't find the item, return a 0 length string
 	if(sel == LB_ERR){
@@ -1277,7 +1273,7 @@ int std_pinfo_player_is_active(net_player *p)
 // message handler for the player info tab
 BOOL CALLBACK player_info_proc(HWND hwndDlg,UINT uMsg,WPARAM wParam,LPARAM lParam)
 {
-	int val,player_num;	
+	int player_num;	
 	char callsign[40];
 
 	switch(uMsg){
@@ -1296,21 +1292,23 @@ BOOL CALLBACK player_info_proc(HWND hwndDlg,UINT uMsg,WPARAM wParam,LPARAM lPara
 		switch(HIWORD(wParam)){
 		// a listbox selection change message
 		case CBN_SELCHANGE :
+		{
 			// get the newly selected item
-			val = SendMessage(Player_name_list,CB_GETCURSEL,(WPARAM)0,(LPARAM)0);
-			if(val!=CB_ERR){		
+			auto val = SendMessage(Player_name_list, CB_GETCURSEL, (WPARAM)0, (LPARAM)0);
+			if (val != CB_ERR) {
 				// get the callsign
-				if(SendMessage(Player_name_list,CB_GETLBTEXT,(WPARAM)val,(LPARAM)callsign) != CB_ERR){				
+				if (SendMessage(Player_name_list, CB_GETLBTEXT, (WPARAM)val, (LPARAM)callsign) != CB_ERR) {
 					// lookup the player
 					player_num = multi_find_player_by_callsign(callsign);
-					
+
 					// if we found him then display his info
-					if(player_num != -1){
+					if (player_num != -1) {
 						std_pinfo_display_player_info(&Net_players[player_num]);
 					}
 				}
 			}
 			break;
+		}
 		}
       break;
 	
@@ -1367,10 +1365,8 @@ void std_gs_add_god_player(net_player *p)
 // remove a player from the listbox on the godstuff page
 void std_gs_remove_god_player(net_player *p)
 {
-	int loc;
-	
 	// lookup the player
-	loc = SendMessage(God_player_list,CB_FINDSTRINGEXACT,(WPARAM)-1,(LPARAM)(LPCTSTR)p->m_player->callsign);
+	auto loc = SendMessage(God_player_list,CB_FINDSTRINGEXACT,(WPARAM)-1,(LPARAM)(LPCTSTR)p->m_player->callsign);
 
 	// if we found him, them delete the item
 	if(loc!=CB_ERR){
@@ -1431,18 +1427,18 @@ void std_gs_clear_controls()
 void std_gs_init_godstuff_controls(HWND hwndDlg)
 {
 	// initialize the player listbox control   
-	God_player_list = GetDlgItem(Page_handles[GODSTUFF_PAGE], (int)MAKEINTRESOURCE(IDC_PLAYER_GOD_LIST));
+	God_player_list = GetDlgItem(Page_handles[GODSTUFF_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_PLAYER_GOD_LIST));
 	
 	// initialize the framerate text box
-	Godstuff_fps = GetDlgItem(Page_handles[GODSTUFF_PAGE], (int)MAKEINTRESOURCE(IDC_GODSTUFF_FPS));
+	Godstuff_fps = GetDlgItem(Page_handles[GODSTUFF_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_GODSTUFF_FPS));
 
 	// initialize the messaging edit control
-	Godstuff_broadcast_text = GetDlgItem(Page_handles[GODSTUFF_PAGE], (int)MAKEINTRESOURCE(IDC_GODSTUFF_BROADCAST));
+	Godstuff_broadcast_text = GetDlgItem(Page_handles[GODSTUFF_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_GODSTUFF_BROADCAST));
 	SendMessage(Godstuff_broadcast_text, EM_SETLIMITTEXT, (WPARAM)CHATBOX_MAX_LEN, (LPARAM)0);
 	SendMessage(Godstuff_broadcast_text, EM_FMTLINES, (WPARAM)TRUE, (LPARAM)0);
 
 	// create the player chatter list box
-	Godstuff_player_messages = GetDlgItem(Page_handles[GODSTUFF_PAGE], (int)MAKEINTRESOURCE(IDC_GOD_CHAT));	
+	Godstuff_player_messages = GetDlgItem(Page_handles[GODSTUFF_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_GOD_CHAT));	
 	// we'll need a DC for player messages as well
 	if (!Godstuff_player_messages_HDC)
 		Godstuff_player_messages_HDC = GetDC(Godstuff_player_messages);
@@ -1450,7 +1446,7 @@ void std_gs_init_godstuff_controls(HWND hwndDlg)
 	Godstuff_longest_message = 0;
 
 	// initialize the message broadcast button
-	Godstuff_broadcast_button = GetDlgItem(Page_handles[GODSTUFF_PAGE], (int)MAKEINTRESOURCE(IDC_GODSTUFF_SENDMESS));
+	Godstuff_broadcast_button = GetDlgItem(Page_handles[GODSTUFF_PAGE], (int)(uintptr_t)MAKEINTRESOURCE(IDC_GODSTUFF_SENDMESS));
 	// hide the button -- we can now process return key
 	ShowWindow(Godstuff_broadcast_button, SW_HIDE);
 
@@ -1565,16 +1561,16 @@ void std_debug_multilog_add_line(const char *str)
 		SendMessage(Standalone_multilog_string, LB_ADDSTRING, 0, (LPARAM)log_str.c_str());
 
 		// reset our width, using best guess, so that we have a working hscroll
-		uint h_size = SendMessage(Standalone_multilog_string, LB_GETHORIZONTALEXTENT, 0, 0);
+		uint h_size = (uint)SendMessage(Standalone_multilog_string, LB_GETHORIZONTALEXTENT, 0, 0);
 
 		if ( (h_size / 6) < log_str.size() ) {
 			SendMessage(Standalone_multilog_string, LB_SETHORIZONTALEXTENT, log_str.size() * 6, 0);
 		}
 
 		// remove excess lines, if needed
-		int l_count = SendMessage(Standalone_multilog_string, LB_GETCOUNT, 0, 0);
+		auto l_count = SendMessage(Standalone_multilog_string, LB_GETCOUNT, 0, 0);
 
-		if ( (l_count > 0) && (l_count >= 100) ) {
+		if ( (l_count >= 100) ) {
 			SendMessage(Standalone_multilog_string, LB_DELETESTRING, 0, 0);
 		}
 
@@ -1600,13 +1596,13 @@ void std_debug_clear_controls()
 void std_debug_init_debug_controls(HWND hwndDlg)
 {
 	// create the state string text box
-	Standalone_state_string = GetDlgItem(hwndDlg,(int)MAKEINTRESOURCE(IDC_STANDALONE_STATE));
+	Standalone_state_string = GetDlgItem(hwndDlg,(int)(uintptr_t)MAKEINTRESOURCE(IDC_STANDALONE_STATE));
 	
 	// standalone state indicator
 	SetWindowText(Standalone_state_string,"");
 
 	// do the multi-log string too
-	Standalone_multilog_string = GetDlgItem(hwndDlg, (int)MAKEINTRESOURCE(IDC_MULTILOG));
+	Standalone_multilog_string = GetDlgItem(hwndDlg, (int)(uintptr_t)MAKEINTRESOURCE(IDC_MULTILOG));
 	SendMessage(Standalone_multilog_string, LB_RESETCONTENT, 0, 0);
 }
 
@@ -1808,7 +1804,6 @@ void std_reset_timestamps()
 // add a line of text chat to the standalone
 void std_add_chat_text(const char *text,int player_index,int add_id)
 {
-	int num_items,ret_val;
 	char format[512];
 	SIZE text_size = { 0, 0 };
 
@@ -1829,7 +1824,7 @@ void std_add_chat_text(const char *text,int player_index,int add_id)
 
 	// this thing isn't all that accurate, it typically produces a longer line, but I don't really care :p
 	if (Godstuff_player_messages_HDC)
-		GetTextExtentPoint32(Godstuff_player_messages_HDC, format, strlen(format), &text_size);
+		GetTextExtentPoint32(Godstuff_player_messages_HDC, format, (int)strlen(format), &text_size);
 
 	if (Godstuff_longest_message < text_size.cx)
 		Godstuff_longest_message = (int)text_size.cx;
@@ -1838,7 +1833,7 @@ void std_add_chat_text(const char *text,int player_index,int add_id)
 
 	// this thing isn't all that accurate, it typically produces a longer line, but I don't really care :p
 	if (Godstuff_player_messages_HDC)
-		GetTextExtentPoint32(Godstuff_player_messages_HDC, format, strlen(format), &text_size);
+		GetTextExtentPoint32(Godstuff_player_messages_HDC, format, (int)strlen(format), &text_size);
 
 	if (Godstuff_longest_message < text_size.cx)
 		Godstuff_longest_message = (int)text_size.cx;
@@ -1848,10 +1843,10 @@ void std_add_chat_text(const char *text,int player_index,int add_id)
 	// insert the text string into the godstuff chat box and scroll it down to the bottom
 	SendMessage(Godstuff_player_messages, LB_INSERTSTRING, (WPARAM)-1, (LPARAM)format);
 
-	num_items = SendMessage(Godstuff_player_messages, LB_GETCOUNT, (WPARAM)0, (LPARAM)0);
+	auto num_items = SendMessage(Godstuff_player_messages, LB_GETCOUNT, (WPARAM)0, (LPARAM)0);
 
 	if (num_items > 19) {
-		ret_val = SendMessage(Godstuff_player_messages, LB_SETTOPINDEX, (WPARAM)num_items - GODSTUFF_MAX_ITEMS, (LPARAM)0);		
+		SendMessage(Godstuff_player_messages, LB_SETTOPINDEX, (WPARAM)num_items - GODSTUFF_MAX_ITEMS, (LPARAM)0);		
 	}
 }
 
@@ -2041,9 +2036,9 @@ void std_build_title_string(char *str)
 	// build the version #
 	memset(ver_str, 0, sizeof(ver_str));
 
-	if (FS_VERSION_BUILD == 0 && FS_VERSION_REVIS == 0) { //-V547
+	if (FS_VERSION_BUILD == 0 && FS_VERSION_HAS_REVIS == 0) { //-V547
 		snprintf(ver_str, sizeof(ver_str)-1, "%i.%i", FS_VERSION_MAJOR, FS_VERSION_MINOR);
-	} else if (FS_VERSION_REVIS == 0) {
+	} else if (FS_VERSION_HAS_REVIS == 0) {
 		snprintf(ver_str, sizeof(ver_str)-1, "%i.%i.%i", FS_VERSION_MAJOR, FS_VERSION_MINOR, FS_VERSION_BUILD);
 	} else {
 		snprintf(ver_str, sizeof(ver_str)-1, "%i.%i.%i.%i", FS_VERSION_MAJOR, FS_VERSION_MINOR, FS_VERSION_BUILD, FS_VERSION_REVIS);
@@ -2159,7 +2154,7 @@ static HMENU std_create_systray_menu()
 	return stdPopup;
 }
 
-BOOL CALLBACK std_message_handler_proc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK std_message_handler_proc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	switch (uMsg) {
 		case WM_SYSCOMMAND: {
@@ -2238,7 +2233,7 @@ BOOL std_create_standalone_window()
 
 	wclass.hInstance 		= hInst;
 	wclass.lpszClassName	= "FS2StandaloneClass";
-	wclass.lpfnWndProc		= (WNDPROC)std_message_handler_proc;	  
+	wclass.lpfnWndProc		= std_message_handler_proc;	  
 	wclass.style			= CS_OWNDC;
 	wclass.cbSize			= sizeof(WNDCLASSEX);
 	wclass.hIcon			= LoadIcon(hInst, MAKEINTRESOURCE(IDI_APP_ICON) );

@@ -9,7 +9,7 @@
 
 
 
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamehelp/contexthelp.h"
 #include "gamesequence/gamesequence.h"
 #include "gamesnd/gamesnd.h"
@@ -603,11 +603,11 @@ int hotkey_build_team_listing(int enemy_team_mask, int y, bool list_enemies)
 		shipnum = Objects[so->objnum].instance;
 
 		// filter out cargo containers, navbouys, etc, and non-ships
-		if ( Ship_info[Ships[shipnum].ship_info_index].class_type < 0 || !(Ship_types[Ship_info[Ships[shipnum].ship_info_index].class_type].hud_bools & STI_HUD_HOTKEY_ON_LIST ))
+		if ( Ship_info[Ships[shipnum].ship_info_index].class_type < 0 || !(Ship_types[Ship_info[Ships[shipnum].ship_info_index].class_type].flags[Ship::Type_Info_Flags::Hotkey_on_list] ))
 			continue;
 
 		// don't process ships invisible to sensors, dying or departing
-		if ( Ships[shipnum].flags & (SF_HIDDEN_FROM_SENSORS|SF_DYING|SF_DEPARTING) )
+		if ( Ships[shipnum].flags[Ship::Ship_Flags::Hidden_from_sensors] || Ships[shipnum].is_dying_or_departing() )
 			continue;
 
 		// if a ship's hotkey is the last hotkey on the list, then maybe make the hotkey -1 if
@@ -641,7 +641,7 @@ int hotkey_build_team_listing(int enemy_team_mask, int y, bool list_enemies)
 
 			// don't add any wing data whose ships are hidden from sensors
 			for ( j = 0; j < Wings[i].current_count; j++ ) {
-				if ( Ships[Wings[i].ship_index[j]].flags & SF_HIDDEN_FROM_SENSORS )
+				if ( Ships[Wings[i].ship_index[j]].flags[Ship::Ship_Flags::Hidden_from_sensors] )
 					break;
 			}
 			// if we didn't reach the end of the list, don't display the wing
@@ -649,7 +649,7 @@ int hotkey_build_team_listing(int enemy_team_mask, int y, bool list_enemies)
 				continue;
 
 			z = hotkey_line_add_sorted(Wings[i].name, HOTKEY_LINE_WING, i, start);
-			if (Wings[i].flags & WF_EXPANDED) {
+			if (Wings[i].flags[Ship::Wing_Flags::Expanded]) {
 				for (j=0; j<Wings[i].current_count; j++) {
 					s = Wings[i].ship_index[j];
 					z = hotkey_line_insert(z + 1, Ships[s].ship_name, HOTKEY_LINE_SUBSHIP, s);
@@ -765,7 +765,7 @@ void expand_wing()
 
 	if (Hotkey_lines[Selected_line].type == HOTKEY_LINE_WING) {
 		i = Hotkey_lines[Selected_line].index;
-		Wings[i].flags ^= WF_EXPANDED;
+        Wings[i].flags.toggle(Ship::Wing_Flags::Expanded);
 		hotkey_build_listing();
 		for (z=0; z<Num_lines; z++)
 			if ((Hotkey_lines[z].type == HOTKEY_LINE_WING) && (Hotkey_lines[z].index == i)) {
@@ -1154,13 +1154,13 @@ void mission_hotkey_do_frame(float frametime)
 	gr_init_color(&circle_color, 160, 160, 0);
 
 	// draw the big "F10" in the little box	
-	gr_set_font(FONT2);
+	font::set_font(font::FONT2);
 	gr_set_color_fast(&Color_text_normal);
 	strcpy_s(buf, Scan_code_text[Key_sets[Cur_hotkey]]);
 	gr_get_string_size(&w, &h, buf);
 	gr_printf_menu(Hotkey_function_name_coords[gr_screen.res][0] + (Hotkey_function_name_coords[gr_screen.res][2] - w) / 2, Hotkey_function_name_coords[gr_screen.res][1], buf);
 
-	gr_set_font(FONT1);
+	font::set_font(font::FONT1);
 	line = Scroll_offset;
 	while (hotkey_line_query_visible(line)) {
 		z = Hotkey_lines[line].index;
@@ -1244,7 +1244,7 @@ void mission_hotkey_do_frame(float frametime)
 			Assert(strlen(buf) > 1);
 			buf[strlen(buf) - 2] = 0;  // lose the ", " on the end
 
-			gr_force_fit_string(buf, 255, GROUP_LIST_W);
+			font::force_fit_string(buf, 255, GROUP_LIST_W);
 			gr_printf_menu(GROUP_LIST_X, y, buf);*/
 		}
 	
@@ -1253,10 +1253,10 @@ void mission_hotkey_do_frame(float frametime)
 		end_string_at_first_hash_symbol(buf);
 		if (Hotkey_lines[line].type == HOTKEY_LINE_SUBSHIP) {
 			// indent
-			gr_force_fit_string(buf, 255, Hotkey_list_coords[gr_screen.res][0] + Hotkey_list_coords[gr_screen.res][2] - (Hotkey_ship_x[gr_screen.res]+20));
+			font::force_fit_string(buf, 255, Hotkey_list_coords[gr_screen.res][0] + Hotkey_list_coords[gr_screen.res][2] - (Hotkey_ship_x[gr_screen.res]+20));
 			gr_printf_menu(Hotkey_ship_x[gr_screen.res]+20, y, buf);
 		} else {
-			gr_force_fit_string(buf, 255, Hotkey_list_coords[gr_screen.res][0] + Hotkey_list_coords[gr_screen.res][2] - Hotkey_ship_x[gr_screen.res]);
+			font::force_fit_string(buf, 255, Hotkey_list_coords[gr_screen.res][0] + Hotkey_list_coords[gr_screen.res][2] - Hotkey_ship_x[gr_screen.res]);
 			gr_printf_menu(Hotkey_ship_x[gr_screen.res], y, buf);
 		}
 

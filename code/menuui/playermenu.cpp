@@ -15,7 +15,7 @@
 #include "cfile/cfile.h"
 #include "cmdline/cmdline.h"
 #include "debugconsole/console.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamesequence/gamesequence.h"
 #include "gamesnd/gamesnd.h"
 #include "globalincs/alphacolors.h"
@@ -33,6 +33,7 @@
 #include "popup/popup.h"
 #include "ui/ui.h"
 
+#include "graphics/paths/PathRenderer.h"
 
 // --------------------------------------------------------------------------------------------------------
 // PLAYER SELECT defines

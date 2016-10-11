@@ -131,9 +131,6 @@ void UI_WINDOW::set_foreground_bmap(char *fname)
 	if (foreground_bmap_id < 0) {
 		Error(LOCATION,"Could not load in %s!",fname);
 	}
-#ifndef HARDWARE_ONLY
-	palette_use_bm_palette(foreground_bmap_id);
-#endif
 }
 
 
@@ -144,7 +141,7 @@ void UI_WINDOW::create( int _x, int _y, int _w, int _h, int _flags, int _f_id )
 	w = _w;
 	h = _h;
 	flags = _flags;
-	f_id = (_f_id >= 0 && _f_id < Num_fonts) ? _f_id : FONT1;
+	f_id = font::FontManager::isFontNumberValid(_f_id) ? _f_id : font::FONT1;
 
 	first_gadget = NULL;
 	selected_gadget = NULL;
@@ -222,7 +219,7 @@ void UI_WINDOW::draw()
 	UI_GADGET *tmp;
 
 	gr_reset_clip();
-	gr_set_font(f_id);
+	font::set_font(f_id);
 
 	if (foreground_bmap_id >= 0) {
 		gr_set_bitmap(foreground_bmap_id);
@@ -567,7 +564,7 @@ void UI_WINDOW::add_XSTR(UI_XSTR *xstr)
 
 void UI_WINDOW::draw_one_xstr(UI_XSTR *xs, int frame)
 {
-	font *f_backup = NULL;		
+	font::FSFont *f_backup = NULL;
 	char str[255] = "";
 
 	// sanity
@@ -583,11 +580,11 @@ void UI_WINDOW::draw_one_xstr(UI_XSTR *xs, int frame)
 	// maybe set the font
 	if(xs->font_id >= 0){
 		// backup the current font
-		Assert(Current_font != NULL);
-		f_backup = Current_font;
+		Assert(font::get_current_font() != NULL);
+		f_backup = font::get_current_font();
 
 		// set the new font
-		gr_set_font(xs->font_id);
+		font::set_font(xs->font_id);
 	}
 
 	// set the color
@@ -646,7 +643,7 @@ void UI_WINDOW::draw_one_xstr(UI_XSTR *xs, int frame)
 
 	// maybe restore the old font
 	if(f_backup != NULL){
-		Current_font = f_backup;
+		font::FontManager::setCurrentFont(f_backup);
 	}			
 }
 
@@ -823,4 +820,3 @@ void do_help()
 {
 	mprintf(( "Help!\n" ));
 }
-

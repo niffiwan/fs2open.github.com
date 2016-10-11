@@ -16,6 +16,7 @@
 #include "model/modelrender.h"
 #include "object/object.h"
 #include "render/3d.h"
+#include "render/batching.h"
 #include "ship/ship.h"
 #include "ship/shiphit.h"
 #include "weapon/shockwave.h"
@@ -44,7 +45,6 @@ int Shockwave_inited = 0;
 // Externals
 // -----------------------------------------------------------
 extern int Show_area_effect;
-extern int Cmdline_nohtl;
 extern int Cmdline_enable_3d_shockwave;
 extern bool Cmdline_fb_explosions;
 
@@ -137,8 +137,8 @@ int shockwave_create(int parent_objnum, vec3d *pos, shockwave_create_info *sci, 
 
 	orient = vmd_identity_matrix;
 	vm_angles_2_matrix(&orient, &sw->rot_angles);
-
-	objnum = obj_create( OBJ_SHOCKWAVE, real_parent, i, &orient, &sw->pos, sw->outer_radius, OF_RENDERS );
+    flagset<Object::Object_Flags> tmp_flags;
+	objnum = obj_create( OBJ_SHOCKWAVE, real_parent, i, &orient, &sw->pos, sw->outer_radius, tmp_flags + Object::Object_Flags::Renders);
 
 	if ( objnum == -1 ){
 		Int3();
@@ -177,7 +177,7 @@ void shockwave_delete_all()
 	while ( sw != &Shockwave_list ) {
 		next = sw->next;
 		Assert(sw->objnum != -1);
-		Objects[sw->objnum].flags |= OF_SHOULD_BE_DEAD;
+        Objects[sw->objnum].flags.set(Object::Object_Flags::Should_be_dead);
 		sw = next;
 	}
 }
@@ -187,7 +187,6 @@ void shockwave_delete_all()
  */
 void shockwave_set_framenum(int index)
 {
-	int				framenum;
 	shockwave		*sw;
 	shockwave_info	*si;
 
@@ -200,50 +199,27 @@ void shockwave_set_framenum(int index)
 	if (si->bitmap_id < 0)
 		return;
 
-	framenum = fl2i(sw->time_elapsed / sw->total_time * si->num_frames + 0.5);
-
-	// ensure we don't go past the number of frames of animation
-	if ( framenum > (si->num_frames-1) ) {
-		framenum = (si->num_frames-1);
-		Objects[sw->objnum].flags |= OF_SHOULD_BE_DEAD;
-	}
-
-	if ( framenum < 0 ) {
-		framenum = 0;
-	}
-
-	sw->current_bitmap = si->bitmap_id + framenum;
+	sw->current_bitmap = si->bitmap_id + shockwave_get_framenum(index, si->bitmap_id);
 }
 
 /**
- * Given a shockwave index and the number of frames in an animation return what
- * the current frame # should be  (for use with 3d shockwaves)
+ * Given a shockwave index and the animation id/handle return what the current frame num should be
+ *
+ * @note for direct use with 3d shockwaves & indirect use with 2d shockwaves
  */
-int shockwave_get_framenum(int index, int num_frames)
+int shockwave_get_framenum(const int sw_idx, const int ani_id)
 {
-	int				framenum;
 	shockwave		*sw;
 
-	if ( (index < 0) || (index >= MAX_SHOCKWAVES) ) {
+	if ( (sw_idx < 0) || (sw_idx >= MAX_SHOCKWAVES) ) {
 		Int3();
 		return 0;
 	}
 
-	sw = &Shockwaves[index];
+	sw = &Shockwaves[sw_idx];
 
-	framenum = fl2i(sw->time_elapsed / sw->total_time * num_frames + 0.5);
-
-	// ensure we don't go past the number of frames of animation
-	if ( framenum > (num_frames-1) ) {
-		framenum = (num_frames-1);
-		Objects[sw->objnum].flags |= OF_SHOULD_BE_DEAD;
-	}
-
-	if ( framenum < 0 ) {
-		framenum = 0;
-	}
-
-	return framenum;
+	// ignore setting of OF_SHOULD_BE_DEAD, handled by shockwave_move
+	return bm_get_anim_frame(ani_id, sw->time_elapsed, sw->total_time);
 }
 
 /**
@@ -280,7 +256,7 @@ void shockwave_move(object *shockwave_objp, float frametime)
 	sw->radius += (frametime * sw->speed);
 	if ( sw->radius > sw->outer_radius ) {
 		sw->radius = sw->outer_radius;
-		shockwave_objp->flags |= OF_SHOULD_BE_DEAD;
+        shockwave_objp->flags.set(Object::Object_Flags::Should_be_dead);
 		return;
 	}
 
@@ -297,14 +273,14 @@ void shockwave_move(object *shockwave_objp, float frametime)
 			if (wip->weapon_hitpoints <= 0)
 				continue;
 
-			if (!(wip->wi_flags2 & WIF2_TAKES_SHOCKWAVE_DAMAGE || (sw->weapon_info_index >= 0 && Weapon_info[sw->weapon_info_index].wi_flags2 & WIF2_CIWS)))
+			if (!(wip->wi_flags[Weapon::Info_Flags::Takes_shockwave_damage] || (sw->weapon_info_index >= 0 && Weapon_info[sw->weapon_info_index].wi_flags[Weapon::Info_Flags::Ciws])))
 				continue;
 		}
 
 	
 		if ( objp->type == OBJ_SHIP ) {
 			// don't blast navbuoys
-			if ( ship_get_SIF(objp->instance) & SIF_NAVBUOY ) {
+			if ( ship_get_SIF(objp->instance)[Ship::Info_Flags::Navbuoy] ) {
 				continue;
 			}
 		}
@@ -336,7 +312,7 @@ void shockwave_move(object *shockwave_objp, float frametime)
 		case OBJ_SHIP:
 			sw->obj_sig_hitlist[sw->num_objs_hit++] = objp->signature;
 			// If we're doing an AoE Electronics shockwave, do the electronics stuff. -MageKing17
-			if ( (sw->weapon_info_index >= 0) && (Weapon_info[sw->weapon_info_index].wi_flags3 & WIF3_AOE_ELECTRONICS) && !(objp->flags & OF_INVULNERABLE) ) {
+			if ( (sw->weapon_info_index >= 0) && (Weapon_info[sw->weapon_info_index].wi_flags[Weapon::Info_Flags::Aoe_Electronics]) && !(objp->flags[Object::Object_Flags::Invulnerable]) ) {
 				weapon_do_electronics_effect(objp, &sw->pos, sw->weapon_info_index);
 			}
 			ship_apply_global_damage(objp, shockwave_objp, &sw->pos, damage );
@@ -353,7 +329,7 @@ void shockwave_move(object *shockwave_objp, float frametime)
 			objp->hull_strength -= damage;
 			if (objp->hull_strength < 0.0f) {
 				Weapons[objp->instance].lifeleft = 0.01f;
-				Weapons[objp->instance].weapon_flags |= WF_DESTROYED_BY_WEAPON;
+				Weapons[objp->instance].weapon_flags.set(Weapon::Weapon_Flags::Destroyed_by_weapon);
 			}
 			break;
 		default:
@@ -381,84 +357,11 @@ void shockwave_move(object *shockwave_objp, float frametime)
 }
 
 /**
- * Draw the shockwave identified by handle
- *
- * @param objp	pointer to shockwave object
- */
-void shockwave_render_DEPRECATED(object *objp)
-{
-	shockwave		*sw;
-	vertex			p;
-
-	Assert(objp->type == OBJ_SHOCKWAVE);
-	Assert(objp->instance >= 0 && objp->instance < MAX_SHOCKWAVES);
-
-    memset(&p, 0, sizeof(p));
-	sw = &Shockwaves[objp->instance];
-
-	if( (sw->delay_stamp != -1) && !timestamp_elapsed(sw->delay_stamp)){
-		return;
-	}
-
-	if ( (sw->current_bitmap < 0) && (sw->model_id < 0) )
-		return;
-
-	// turn off fogging
-	if(The_mission.flags & MISSION_FLAG_FULLNEB){
-		gr_fog_set(GR_FOGMODE_NONE, 0, 0, 0);
-	}
-
-	if (sw->model_id > -1) {
-		float model_Interp_scale_xyz = sw->radius / 50.0f;
-
-		model_set_warp_globals( model_Interp_scale_xyz, model_Interp_scale_xyz, model_Interp_scale_xyz, -1, 1.0f - (sw->radius/sw->outer_radius) );
-		
-		float dist = vm_vec_dist_quick( &sw->pos, &Eye_position );
-
-		model_set_detail_level((int)(dist / (sw->radius * 10.0f)));
-		model_render_DEPRECATED( sw->model_id, &Objects[sw->objnum].orient, &sw->pos, MR_DEPRECATED_NO_LIGHTING | MR_DEPRECATED_NO_FOGGING | MR_DEPRECATED_NORMAL | MR_DEPRECATED_CENTER_ALPHA | MR_DEPRECATED_NO_CULL, sw->objnum);
-
-		model_set_warp_globals();
-		if(Cmdline_fb_explosions)
-		{
-			g3_transfer_vertex(&p, &sw->pos);
-				
-			distortion_add_bitmap_rotated(
-				Shockwave_info[1].bitmap_id+shockwave_get_framenum(objp->instance, 94), 
-				TMAP_FLAG_TEXTURED | TMAP_HTL_3D_UNLIT | TMAP_FLAG_SOFT_QUAD | TMAP_FLAG_DISTORTION, 
-				&p, 
-				fl_radians(sw->rot_angles.p), 
-				sw->radius,
-				((sw->time_elapsed/sw->total_time)>0.9f)?(1.0f-(sw->time_elapsed/sw->total_time))*10.0f:1.0f
-			);
-		}
-	}else{
-		if (!Cmdline_nohtl) {
-			g3_transfer_vertex(&p, &sw->pos);
-		} else {
-			g3_rotate_vertex(&p, &sw->pos);
-		}
-		if(Cmdline_fb_explosions)
-		{
-			distortion_add_bitmap_rotated(
-				sw->current_bitmap, 
-				TMAP_FLAG_TEXTURED | TMAP_HTL_3D_UNLIT | TMAP_FLAG_SOFT_QUAD | TMAP_FLAG_DISTORTION, 
-				&p, 
-				fl_radians(sw->rot_angles.p), 
-				sw->radius,
-				((sw->time_elapsed/sw->total_time)>0.9f)?(1.0f-(sw->time_elapsed/sw->total_time))*10.0f:1.0f
-			);
-		}
-		batch_add_bitmap_rotated(
-			sw->current_bitmap, 
-			TMAP_FLAG_TEXTURED | TMAP_HTL_3D_UNLIT | TMAP_FLAG_SOFT_QUAD,
-			&p, 
-			fl_radians(sw->rot_angles.p), 
-			sw->radius
-		);
-	}
-}
-
+* Draw the shockwave identified by handle
+*
+* @param objp	pointer to shockwave object
+* @param scene	the scene's draw list we're adding this to
+*/
 void shockwave_render(object *objp, draw_list *scene)
 {
 	shockwave		*sw;
@@ -495,40 +398,18 @@ void shockwave_render(object *objp, draw_list *scene)
 		if ( Cmdline_fb_explosions ) {
 			g3_transfer_vertex(&p, &sw->pos);
 
-			distortion_add_bitmap_rotated(
-				Shockwave_info[1].bitmap_id+shockwave_get_framenum(objp->instance, 94), 
-				TMAP_FLAG_TEXTURED | TMAP_HTL_3D_UNLIT | TMAP_FLAG_SOFT_QUAD | TMAP_FLAG_DISTORTION, 
-				&p, 
-				fl_radians(sw->rot_angles.p), 
-				sw->radius,
-				((sw->time_elapsed/sw->total_time)>0.9f)?(1.0f-(sw->time_elapsed/sw->total_time))*10.0f:1.0f
-				);
+			float intensity = ((sw->time_elapsed / sw->total_time) > 0.9f) ? (1.0f - (sw->time_elapsed / sw->total_time))*10.0f : 1.0f;
+			batching_add_distortion_bitmap_rotated(Shockwave_info[1].bitmap_id + shockwave_get_framenum(objp->instance, Shockwave_info[1].bitmap_id), &p, fl_radians(sw->rot_angles.p), sw->radius, intensity);
 		}
 	} else {
-		if (!Cmdline_nohtl) {
-			g3_transfer_vertex(&p, &sw->pos);
-		} else {
-			g3_rotate_vertex(&p, &sw->pos);
-		}
+		g3_transfer_vertex(&p, &sw->pos);
 
 		if ( Cmdline_fb_explosions ) {
-			distortion_add_bitmap_rotated(
-				sw->current_bitmap, 
-				TMAP_FLAG_TEXTURED | TMAP_HTL_3D_UNLIT | TMAP_FLAG_SOFT_QUAD | TMAP_FLAG_DISTORTION, 
-				&p, 
-				fl_radians(sw->rot_angles.p), 
-				sw->radius,
-				((sw->time_elapsed/sw->total_time)>0.9f)?(1.0f-(sw->time_elapsed/sw->total_time))*10.0f:1.0f
-			);
+			float intensity = ((sw->time_elapsed / sw->total_time) > 0.9f) ? (1.0f - (sw->time_elapsed / sw->total_time)) * 10.0f : 1.0f;
+			batching_add_distortion_bitmap_rotated(sw->current_bitmap, &p, fl_radians(sw->rot_angles.p), sw->radius, intensity);
 		}
 
-		batch_add_bitmap_rotated(
-			sw->current_bitmap, 
-			TMAP_FLAG_TEXTURED | TMAP_HTL_3D_UNLIT | TMAP_FLAG_SOFT_QUAD,
-			&p, 
-			fl_radians(sw->rot_angles.p), 
-			sw->radius
-		);
+		batching_add_volume_bitmap_rotated(sw->current_bitmap, &p, fl_radians(sw->rot_angles.p), sw->radius);
 	}
 }
 
@@ -549,7 +430,7 @@ int shockwave_load(char *s_name, bool shock_3D)
 
 	for (i = 0; i < Shockwave_info.size(); i++) {
 		if ( !stricmp(Shockwave_info[i].filename, s_name) ) {
-			s_index = i;
+			s_index = (int)i;
 			break;
 		}
 	}
@@ -578,7 +459,7 @@ int shockwave_load(char *s_name, bool shock_3D)
 			return -1;
 		}
 	} else {
-		si->bitmap_id = bm_load_animation( si->filename, &si->num_frames, &si->fps, NULL, 1 );
+		si->bitmap_id = bm_load_animation( si->filename, &si->num_frames, &si->fps, nullptr, nullptr, true );
 
 		if ( si->bitmap_id < 0 ) {
 			Shockwave_info.pop_back();
@@ -715,22 +596,6 @@ void shockwave_move_all(float frametime)
 		next = sw->next;
 		Assert(sw->objnum != -1);
 		shockwave_move(&Objects[sw->objnum], frametime);
-		sw = next;
-	}
-}
-
-/**
- * Render all shockwaves
- */
-void shockwave_render_all()
-{
-	shockwave	*sw, *next;
-
-	sw = GET_FIRST(&Shockwave_list);
-	while ( sw != &Shockwave_list ) {
-		next = sw->next;
-		Assert(sw->objnum != -1);
-		shockwave_render_DEPRECATED(&Objects[sw->objnum]);
 		sw = next;
 	}
 }

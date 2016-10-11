@@ -12,7 +12,7 @@
 #include <stdlib.h>
 
 #include "cfile/cfile.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamesequence/gamesequence.h"
 #include "gamesnd/eventmusic.h"	/* for Master_event_music_volume */
 #include "gamesnd/gamesnd.h"
@@ -100,6 +100,7 @@ char *fs2_open_credit_text =
 	"liblua - Copyright (C) 1994-2008 Lua.org, PUC-Rio\n"
 	"zlib - Copyright (C) 1995-2005 Jean-loup Gailly and Mark Adler\n"
 	"FXAA - Copyright (c) 2010 NVIDIA Corporation. All rights reserved.\n"
+	"This software uses libraries from the FFmpeg project under the LGPLv2.1\n"
 	"\n"
 	"\n"
 	"\n";
@@ -595,7 +596,7 @@ void credits_init()
 
 	for (iter = Credit_text_parts.begin(); iter != Credit_text_parts.end(); ++iter)
 	{
-		gr_get_string_size(NULL, &temp_h, iter->c_str(), iter->length());
+		gr_get_string_size(NULL, &temp_h, iter->c_str(), (int)iter->length());
 
 		h = h + temp_h;
 	}
@@ -665,6 +666,8 @@ void credits_close()
 
 void credits_do_frame(float frametime)
 {
+	GR_DEBUG_SCOPE("Credits do frame");
+
 	int i, k, next, percent, bm1, bm2;
 	int bx1, by1, bw1, bh1;
 	int bx2, by2, bw2, bh2;
@@ -750,6 +753,8 @@ void credits_do_frame(float frametime)
 	bm2 = Credits_bmps[next];
 
 	if((bm1 != -1) && (bm2 != -1)){
+		GR_DEBUG_SCOPE("Render credits bitmap");
+
 		Assert(percent >= 0 && percent <= 100);
 
 		// get width and height
@@ -762,7 +767,13 @@ void credits_do_frame(float frametime)
 		bx2 = Credits_image_coords[gr_screen.res][CREDITS_X_COORD] + ((Credits_image_coords[gr_screen.res][CREDITS_W_COORD] - bw2)/2);
 		by2 = Credits_image_coords[gr_screen.res][CREDITS_Y_COORD] + ((Credits_image_coords[gr_screen.res][CREDITS_H_COORD] - bh2)/2);
 
-		gr_cross_fade(bm1, bm2, bx1, by1, bx2, by2, (float)percent / 100.0f, GR_RESIZE_MENU);
+		auto alpha = (float)percent / 100.0f;
+
+		gr_set_bitmap(bm1, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 1.0f - alpha);
+		gr_bitmap(bx1, by1, GR_RESIZE_MENU);
+
+		gr_set_bitmap(bm2, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, alpha);
+		gr_bitmap(bx2, by2, GR_RESIZE_MENU);
 	}
 
 	Ui_window.draw();
@@ -778,24 +789,37 @@ void credits_do_frame(float frametime)
 	}
 
 	gr_set_clip(Credits_text_coords[gr_screen.res][CREDITS_X_COORD], Credits_text_coords[gr_screen.res][CREDITS_Y_COORD], Credits_text_coords[gr_screen.res][CREDITS_W_COORD], Credits_text_coords[gr_screen.res][CREDITS_H_COORD], GR_RESIZE_MENU);
-	gr_set_font(FONT1);
+	font::set_font(font::FONT1);
 	gr_set_color_fast(&Color_normal);
 	
 	int y_offset = 0;
 	for (SCP_vector<SCP_string>::iterator iter = Credit_text_parts.begin(); iter != Credit_text_parts.end(); ++iter)
 	{
-		int height;
-
-		gr_get_string_size(NULL, &height, iter->c_str(), iter->length());
-
-		// Check if the text part is actually visible
-		if (Credit_position + y_offset + height > 0.0f)
+		size_t currentPos = 0;
+		size_t lineEnd;
+		do
 		{
-			extern void gr_opengl_string(float sx, float sy, const char *s, int resize_mode);
-			gr_opengl_string((float)0x8000, Credit_position + y_offset, iter->c_str(), GR_RESIZE_MENU);
-		}
+			int height;
+			int width;
+			lineEnd = iter->find('\n', currentPos);
 
-		y_offset += height;
+			auto length = lineEnd - currentPos;
+			if (lineEnd == SCP_string::npos)
+			{
+				length = std::numeric_limits<size_t>::max();
+			}
+
+			gr_get_string_size(&width, &height, iter->c_str() + currentPos, static_cast<int>(length));
+			// Check if the text part is actually visible
+			if (Credit_position + y_offset + height > 0.0f)
+			{
+				float x = static_cast<float>((gr_screen.clip_width_unscaled - width) / 2);
+				gr_string(x, Credit_position + y_offset, iter->c_str() + currentPos, GR_RESIZE_MENU, static_cast<int>(length));
+			}
+
+			y_offset += height;
+			currentPos = lineEnd + 1;
+		} while (lineEnd < iter->length() && lineEnd != SCP_string::npos);
 	}
 
 	int temp_time;
@@ -803,7 +827,7 @@ void credits_do_frame(float frametime)
 
 	Credits_frametime = temp_time - Credits_last_time;
 	Credits_last_time = temp_time;
-	timestamp_inc(Credits_frametime);
+	timestamp_inc(i2f(Credits_frametime) / TIMESTAMP_FREQUENCY);
 
 	float fl_frametime = i2fl(Credits_frametime) / 1000.f;
 	if (keyd_pressed[KEY_LSHIFT]) {

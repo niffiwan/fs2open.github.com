@@ -26,6 +26,7 @@
 #ifdef _WIN32
 	#include <windows.h>
 	#include <sapi.h>
+
 	#include <sphelper.h>
 
 	ISpVoice *Voice_device;
@@ -38,6 +39,14 @@
 #else 
 	#pragma error( "ERROR: Unknown platform, speech (FS2_SPEECH) is not supported" )
 #endif	//_WIN32
+
+#pragma warning(push)
+#pragma warning(disable: 4995)
+// Visual Studio complains that some functions are deprecated so this fixes that
+#include <cstring>
+#include <cwchar>
+#include <cstdio>
+#pragma warning(pop)
 
 #include "globalincs/pstypes.h"
 #include "speech.h"
@@ -70,6 +79,7 @@ bool speech_init()
 	Speech_init = true;
 #endif
 
+	nprintf(("Speech", "Speech init %s\n", Speech_init ? "succeeded!" : "failed!"));
 	return Speech_init;
 }
 
@@ -87,19 +97,24 @@ void speech_deinit()
 
 bool speech_play(const char *text)
 {
+	nprintf(("Speech", "Attempting to play speech string %s...\n", text));
+
 	if(Speech_init == false) return true;
-	if(text == NULL) return false;
+	if (text == NULL) {
+		nprintf(("Speech", "Not playing speech because passed text is null.\n"));
+		return false;
+	}
 
 #ifdef _WIN32
-	int len = strlen(text);
+	size_t len = strlen(text);
 	wchar_t Conversion_buffer[MAX_SPEECH_CHAR_LEN];
 
 	if(len > (MAX_SPEECH_CHAR_LEN - 1)) {
 		len = MAX_SPEECH_CHAR_LEN - 1;
 	}
 
-	int count = 0;
-	for(int i = 0; i < len; i++) {
+	size_t count = 0;
+	for(size_t i = 0; i < len; i++) {
 		if(text[i] == '$') {
 			i++;
 			continue;

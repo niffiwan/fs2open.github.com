@@ -41,7 +41,7 @@
 #	define Assertion(expr, msg, ...)                                      \
 		do {                                                              \
 			if (!(expr)) {                                                \
-				WinAssert(#expr, __FILE__, __LINE__, msg, ##__VA_ARGS__); \
+				os::dialogs::AssertMessage(#expr, __FILE__, __LINE__, msg, ##__VA_ARGS__); \
 			}                                                             \
 		} while (0)
 #endif
@@ -59,3 +59,5 @@
 
 #define likely(x)    __builtin_expect((long) !!(x), 1L)
 #define unlikely(x)  __builtin_expect((long) !!(x), 0L)
+
+#define __STDC_FORMAT_MACROS 1

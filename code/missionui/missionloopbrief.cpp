@@ -10,7 +10,7 @@
 
 
 #include "anim/animplay.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamesequence/gamesequence.h"
 #include "gamesnd/eventmusic.h"
 #include "gamesnd/gamesnd.h"
@@ -246,6 +246,16 @@ void loop_brief_do(float frametime)
 
 	// render the briefing text
 	brief_render_text(0, Loop_brief_text_coords[gr_screen.res][0], Loop_brief_text_coords[gr_screen.res][1], Loop_brief_text_coords[gr_screen.res][3], flFrametime);
+	
+	if(Loop_anim.num_frames > 0) {
+		int x;
+		int y;
+
+		bm_get_info((Loop_anim.streaming) ? Loop_anim.bitmap_id : Loop_anim.first_frame, &x, &y, NULL, NULL, NULL);
+		x = Loop_brief_anim_center_coords[gr_screen.res][0] - x / 2;
+		y = Loop_brief_anim_center_coords[gr_screen.res][1] - y / 2;
+		generic_anim_render(&Loop_anim, frametime, x, y, true);
+	}
 
 	if(Loop_anim.num_frames > 0) {
 		int x;

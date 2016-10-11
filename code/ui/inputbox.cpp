@@ -32,37 +32,17 @@ int keypad_to_ascii(int c)
 {
 	switch(c){
 	case KEY_PAD0:
-		return key_to_ascii(KEY_0);
-		break;
 	case KEY_PAD1:
-		return key_to_ascii(KEY_1);
-		break;
 	case KEY_PAD2:
-		return key_to_ascii(KEY_2);
-		break;
 	case KEY_PAD3:
-		return key_to_ascii(KEY_3);
-		break;
 	case KEY_PAD4:
-		return key_to_ascii(KEY_4);
-		break;
 	case KEY_PAD5:
-		return key_to_ascii(KEY_5);
-		break;
 	case KEY_PAD6:
-		return key_to_ascii(KEY_6);
-		break;
 	case KEY_PAD7:
-		return key_to_ascii(KEY_7);
-		break;
 	case KEY_PAD8:
-		return key_to_ascii(KEY_8);
-		break;
 	case KEY_PAD9:
-		return key_to_ascii(KEY_9);
-		break;
 	case KEY_PADPERIOD:
-		return key_to_ascii(KEY_PERIOD);
+		return key_to_ascii(c);
 		break;
 	default :
 		return -1;
@@ -74,7 +54,7 @@ int keypad_to_ascii(int c)
 void strcins(char *s, int p, char c)
 {
 	int n;
-	for (n=strlen(s)-p; n>=0; n-- )
+	for (n=(int)strlen(s)-p; n>=0; n-- )
 		*(s+p+n+1) = *(s+p+n);   // Move everything over	
 	*(s+p) = c;         // then insert the character
 }
@@ -104,7 +84,7 @@ void UI_INPUTBOX::create(UI_WINDOW *wnd, int _x, int _y, int _w, int _text_len, 
 
 	Assert(_text_len >= 0);
 	Assert((int) strlen(_text) <= _text_len);
-	gr_set_font(wnd->f_id);
+	font::set_font(wnd->f_id);
 	gr_get_string_size( &tw, &th, "*" );
 
 	// check to see if the user passed in a text color otherwise use the default green color
@@ -137,7 +117,7 @@ void UI_INPUTBOX::create(UI_WINDOW *wnd, int _x, int _y, int _w, int _text_len, 
 		strncpy( text, _text, _text_len );
 	}
 	text[_text_len] = 0;
-	position = strlen(_text);
+	position = (int)strlen(_text);
 	oldposition = position;
 	length = _text_len;
 	pressed_down = 0;
@@ -211,7 +191,7 @@ void UI_INPUTBOX::draw()
 	h1 = h;
 	invis = flags & UI_INPUTBOX_FLAG_INVIS;
 
-	gr_set_font(my_wnd->f_id);
+	font::set_font(my_wnd->f_id);
 	gr_reset_clip();
 	if (!invis && !(flags & UI_INPUTBOX_FLAG_NO_BACK)) {
 		// draw the entire text box region
@@ -270,16 +250,9 @@ void UI_INPUTBOX::draw()
 				ui_vline(1, h1, text_x + tw + 5);
 			} else {
 				// draw animating cursor
-				int time_delta = timer_get_milliseconds() - cursor_elapsed_time;
-
-				if ( (time_delta / 1000.0f) > (1.0f / cursor_fps) ) {
-					// advance frame
-					cursor_elapsed_time += time_delta;
-					cursor_current_frame++;
-					if (cursor_current_frame >= cursor_nframes) {
-						cursor_current_frame = 0;
-					}
-				}
+				// new method is simpler and should give the same results unless the target device is super slow
+				// i.e. can't render an interface frame in less than the anim frame delays (retail 15 fps == 66.67 msec)
+				cursor_current_frame = bm_get_anim_frame(cursor_first_frame, i2fl(timer_get_milliseconds()) / 1000.0f, 0.0f, true);
 
 				// draw current frame
 				gr_set_bitmap(cursor_first_frame + cursor_current_frame);
@@ -491,7 +464,7 @@ void UI_INPUTBOX::set_text(const char *in)
 {
 	int in_length;
 	
-	in_length = strlen(in);
+	in_length = (int)strlen(in);
 	if (in_length > length)
 		Assert(0);	// tried to force text into an input box that won't fit into allocated memory
 

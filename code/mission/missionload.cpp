@@ -10,7 +10,7 @@
 
 
 #include "cfile/cfilesystem.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamesequence/gamesequence.h"
 #include "globalincs/alphacolors.h"
 #include "hud/hudparse.h"
@@ -338,7 +338,9 @@ void mission_load_menu_do()
 
 	gr_clear();
 	gr_set_color_fast( &Color_bright );
-	gr_printf_menu( 0x8000, 10, NOX("Select Mission") );
+	int w;
+	gr_get_string_size(&w, NULL, NOX("Select Mission"));
+	gr_printf_menu( (gr_screen.clip_width_unscaled - w) / 2, 10, NOX("Select Mission") );
 
 	gr_printf_menu( 50, 135, NOX("Campaign Filter"));
 	gr_printf_menu( 250, 135, NOX("Recently Played"));
@@ -373,4 +375,3 @@ void mission_load_menu_close()
 	mlm_window.destroy();
 
 }
-

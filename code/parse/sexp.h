@@ -753,6 +753,7 @@ class waypoint_list;
 #define OP_AI_PLAY_DEAD						(0x0010 | OP_CATEGORY_AI | OP_NONCAMPAIGN_FLAG)
 #define OP_AI_IGNORE_NEW					(0x0011 | OP_CATEGORY_AI | OP_NONCAMPAIGN_FLAG)	// Goober5000
 #define OP_AI_FORM_ON_WING					(0x0012 | OP_CATEGORY_AI | OP_NONCAMPAIGN_FLAG) // The E
+#define OP_AI_CHASE_SHIP_CLASS				(0x0013 | OP_CATEGORY_AI | OP_NONCAMPAIGN_FLAG)	// Goober5000
 
 #define OP_GOALS_ID							(0x0000 | OP_CATEGORY_UNLISTED)
 #define OP_NEXT_MISSION						(0x0001 | OP_CATEGORY_UNLISTED)		// used in campaign files for branching
@@ -1180,12 +1181,12 @@ int num_block_variables();
 bool has_special_explosion_block_index(ship *shipp, int *index);
 
 // Karajorma
-void set_primary_ammo (int ship_index, int requested_bank, int requested_ammo, int rearm_limit=-1, bool update=true);
-void set_secondary_ammo (int ship_index, int requested_bank, int requested_ammo, int rearm_limit=-1, bool update=true);
+void set_primary_ammo (int ship_index, int requested_bank, int requested_ammo, int rearm_limit=-1);
+void set_secondary_ammo (int ship_index, int requested_bank, int requested_ammo, int rearm_limit=-1);
 
 // DahBlount - Similar to Karajorma's functions, but for turrets
-void set_turret_primary_ammo(ship_subsys *turret, int requested_bank, int requested_ammo, bool update = true);
-void set_turret_secondary_ammo(ship_subsys *turret, int requested_bank, int requested_ammo, bool update = true);
+void set_turret_primary_ammo(ship_subsys *turret, int requested_bank, int requested_ammo);
+void set_turret_secondary_ammo(ship_subsys *turret, int requested_bank, int requested_ammo);
 
 // menu and category stuff
 extern int get_sexp_id(char *sexp_name);

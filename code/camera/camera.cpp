@@ -612,8 +612,8 @@ subtitle::subtitle(int in_x_pos, int in_y_pos, const char* in_text, const char* 
 		int old_fontnum;
 		if (text_fontnum >= 0)
 		{
-			old_fontnum = gr_get_current_fontnum();
-			gr_set_font(text_fontnum);
+			old_fontnum = font::get_current_fontnum();
+			font::set_font(text_fontnum);
 		}
 		else
 		{
@@ -634,7 +634,7 @@ subtitle::subtitle(int in_x_pos, int in_y_pos, const char* in_text, const char* 
 		// restore old font
 		if (old_fontnum >= 0)
 		{
-			gr_set_font(old_fontnum);
+			font::set_font(old_fontnum);
 		}
 
 		//Get image size
@@ -710,8 +710,8 @@ void subtitle::do_frame(float frametime)
 	int old_fontnum;
 	if (text_fontnum >= 0)
 	{
-		old_fontnum = gr_get_current_fontnum();
-		gr_set_font(text_fontnum);
+		old_fontnum = font::get_current_fontnum();
+		font::set_font(text_fontnum);
 	}
 	else
 	{
@@ -732,7 +732,7 @@ void subtitle::do_frame(float frametime)
 	// restore old font
 	if (old_fontnum >= 0)
 	{
-		gr_set_font(old_fontnum);
+		font::set_font(old_fontnum);
 	}
 
 	if(image_id >= 0)
@@ -824,7 +824,7 @@ camid::camid()
 	sig = -1;
 }
 
-camid::camid(int n_idx, int n_sig)
+camid::camid(size_t n_idx, int n_sig)
 {
 	idx = n_idx;
 	sig = n_sig;
@@ -838,7 +838,7 @@ camera* camid::getCamera()
 	return Cameras[idx];
 }
 
-uint camid::getIndex()
+size_t camid::getIndex()
 {
 	return idx;
 }
@@ -954,7 +954,7 @@ camid cam_get_current()
 	return Current_camera;
 }
 
-uint cam_get_num()
+size_t cam_get_num()
 {
 	return Cameras.size();
 }

@@ -17,8 +17,12 @@
 #include "globalincs/version.h"
 #include "hud/hudconfig.h"
 #include "network/multi.h"
-#include "parse/scripting.h"
+#include "scripting/scripting.h"
 #include "parse/sexp.h"
+#include "globalincs/version.h"
+#include "globalincs/pstypes.h"
+#include "osapi/osapi.h"
+#include "cfile/cfilesystem.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -34,6 +38,11 @@
 
 #include <string.h>
 #include <stdlib.h>
+
+// Stupid windows workaround...
+#ifdef MessageBox
+#undef MessageBox
+#endif
 
 enum cmdline_arg_type
 {
@@ -92,9 +101,13 @@ enum
 	EASY_DEFAULT_MEM = EASY_DEFAULT | EASY_MEM_OFF
 };
 
-#define BUILD_CAP_OPENAL	(1<<0)
-#define BUILD_CAP_NO_D3D	(1<<1)
-#define BUILD_CAP_NEW_SND	(1<<2)
+enum BuildCaps
+{
+	BUILD_CAPS_OPENAL = (1<<0),
+	BUILD_CAPS_NO_D3D = (1<<1),
+	BUILD_CAPS_NEW_SND = (1<<2),
+	BUILD_CAPS_SDL = (1<<3)
+};
 
 #define PARSE_COMMAND_LINE_STRING	"-parse_cmdline_only"
 
@@ -144,6 +157,7 @@ Flag exe_params[] =
 	{ "-fxaa",				"Enable FXAA anti-aliasing",				true,	EASY_MEM_ALL_ON,	EASY_DEFAULT,		"Graphics",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-fxaa" },
 	{ "-nolightshafts",		"Disable lightshafts",						true,	EASY_DEFAULT,		EASY_DEFAULT,		"Graphics",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-flightshaftsoff"},
 	{ "-fb_explosions",		"Enable Framebuffer Shockwaves",			true,	EASY_ALL_ON,		EASY_DEFAULT,		"Graphics",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-fb_explosions", },
+    { "-fb_thrusters",      "Enable Framebuffer Thrusters",             true,   EASY_ALL_ON,        EASY_DEFAULT,       "Graphics",     "http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-fb_thrusters", },
 	{ "-no_deferred",		"Disable Deferred Lighting",				true,	EASY_DEFAULT_MEM,	EASY_DEFAULT,		"Graphics",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-no_deferred"},
 	{ "-enable_shadows",	"Enable Shadows",							true,	EASY_MEM_ALL_ON,	EASY_DEFAULT,		"Graphics",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-no_shadows"},
 	{ "-no_vsync",			"Disable vertical sync",					true,	0,					EASY_DEFAULT,		"Game Speed",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-no_vsync", },
@@ -167,6 +181,8 @@ Flag exe_params[] =
 	{ "-nomusic",			"Disable music",							false,	0,					EASY_DEFAULT,		"Audio",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-nomusic", },
 	{ "-no_enhanced_sound",	"Disable enhanced sound",					false,	0,					EASY_DEFAULT,		"Audio",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-no_enhanced_sound", },
 
+	{ "-portable_mode",		"Store config in portable location",		false,	0,					EASY_DEFAULT,		"Launcher",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-portable_mode", },
+
 	{ "-standalone",		"Run as standalone server",					false,	0,					EASY_DEFAULT,		"Multiplayer",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-standalone", },
 	{ "-startgame",			"Skip mainhall and start hosting",			false,	0,					EASY_DEFAULT,		"Multiplayer",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-startgame", },
 	{ "-closed",			"Start hosted server as closed",			false,	0,					EASY_DEFAULT,		"Multiplayer",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-closed", },
@@ -175,42 +191,35 @@ Flag exe_params[] =
 	{ "-clientdamage",		"",											false,	0,					EASY_DEFAULT,		"Multiplayer",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-clientdamage", },
 	{ "-mpnoreturn",		"Disable flight deck option",				true,	0,					EASY_DEFAULT,		"Multiplayer",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-mpnoreturn", },
 
-	{ "-nohtl",				"Software mode (very slow)",				true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-nohtl", },
 	{ "-no_set_gamma",		"Disable setting of gamma",					true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-no_set_gamma", },
 	{ "-nomovies",			"Disable video playback",					true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-nomovies", },
 	{ "-noparseerrors",		"Disable parsing errors",					true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-noparseerrors", },
 	{ "-query_speech",		"Check if this build has speech",			true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-query_speech", },
-	{ "-novbo",				"Disable OpenGL VBO",						true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-novbo", },
 	{ "-loadallweps",		"Load all weapons, even those not used",	true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-loadallweps", },
 	{ "-disable_fbo",		"Disable OpenGL RenderTargets",				true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-disable_fbo", },
 	{ "-disable_pbo",		"Disable OpenGL Pixel Buffer Objects",		true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-disable_pbo", },
-	{ "-no_glsl",			"Disable GLSL (shader) support",			true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-no_glsl", },
 	{ "-ati_swap",			"Fix colour issues on some ATI cards",		true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-ati_swap", },
 	{ "-no_3d_sound",		"Use only 2D/stereo for sound effects",		true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-no_3d_sound", },
 	{ "-mipmap",			"Enable mipmapping",						true,	0,					EASY_DEFAULT_MEM,	"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-mipmap", },
- #ifndef SCP_UNIX
-	{ "-disable_di_mouse",	"Don't use DirectInput for mouse control",	true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-disable_di_mouse", },
- #endif
 	{ "-use_gldrawelements","Don't use glDrawRangeElements",			true,	0,					EASY_DEFAULT,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-use_gldrawelements", },
 	{ "-old_collision",		"Use old collision detection system",		true,	EASY_DEFAULT,		EASY_ALL_ON,		"Troubleshoot",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-old_collision", },
 	{ "-gl_finish",			"Fix input lag on some ATI+Linux systems",	true,	0,					EASY_DEFAULT,		"Troubleshoot", "http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-gl_finish", },
 	{ "-no_batching",		"Disable batched model rendering",			true,	0,					EASY_DEFAULT,		"Troubleshoot", "", },
 	{ "-no_geo_effects",	"Disable geometry shader for effects",		true,	0,					EASY_DEFAULT,		"Troubleshoot", "", },
 	{ "-set_cpu_affinity",	"Sets processor affinity to config value",	true,	0,					EASY_DEFAULT,		"Troubleshoot", "", },
+	{ "-nograb",			"Disables mouse grabbing",					true,	0,					EASY_DEFAULT,		"Troubleshoot", "http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-nograb", },
+	{ "-noshadercache",		"Disables the shader cache",				true,	0,					EASY_DEFAULT,		"Troubleshoot", "http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-noshadercache", },
 #ifdef WIN32
 	{ "-fix_registry",	"Use a different registry path",			true,		0,					EASY_DEFAULT,		"Troubleshoot", "", },
 #endif
 
 	{ "-ingame_join",		"Allow in-game joining",					true,	0,					EASY_DEFAULT,		"Experimental",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-ingame_join", },
 	{ "-voicer",			"Enable voice recognition",					true,	0,					EASY_DEFAULT,		"Experimental",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-voicer", },
-	{ "-brief_lighting",	"Enable lighting on briefing models",		true,	0,					EASY_DEFAULT,		"Experimental",	"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-brief_lighting", },
 
 	{ "-fps",				"Show frames per second on HUD",			false,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-fps", },
 	{ "-pos",				"Show position of camera",					false,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-pos", },
 	{ "-window",			"Run in window",							true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-window", },
- #ifndef SCP_UNIX
 	{ "-fullscreen_window",	"Run in fullscreen window",					false,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-fullscreen_window", },
- #endif
 	{ "-stats",				"Show statistics",							true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-stats", },
 	{ "-coords",			"Show coordinates",							false,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-coords", },
 	{ "-show_mem_usage",	"Show memory usage",						true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-show_mem_usage", },
@@ -222,16 +231,15 @@ Flag exe_params[] =
 	{ "-output_sexps",		"Output SEXPs to sexps.html",				true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-output_sexps", },
 	{ "-output_scripting",	"Output scripting to scripting.html",		true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-output_scripting", },
 	{ "-save_render_target",	"Save render targets to file",			true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-save_render_target", },
-	{ "-debug_window",		"Display debug window",						true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-debug_window", },
 	{ "-verify_vps",		"Spew VP CRCs to vp_crcs.txt",				true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-verify_vps", },
- #ifdef SCP_UNIX
-	{ "-nograb",			"Don't grab mouse/keyboard in a window",	true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-nograb", },
- #endif
 	{ "-reparse_mainhall",	"Reparse mainhall.tbl when loading halls",	false,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-reparse_mainhall", },
-	{ "-profile_frame_time", "Profile engine subsystems",				true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-profile_frame_timings", },
+	{ "-profile_frame_time","Profile engine subsystems",				true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-profile_frame_timings", },
 	{ "-profile_write_file", "Write profiling information to file",		true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-profile_write_file", },
 	{ "-no_unfocused_pause","Don't pause if the window isn't focused",	true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-no_unfocused_pause", },
 	{ "-benchmark_mode",	"Puts the game into benchmark mode",		true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-benchmark_mode", },
+	{ "-noninteractive",	"Disables interactive dialogs",				true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-noninteractive", },
+	{ "-json_pilot",		"Dump pilot files in JSON format",			true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-json_pilot", },
+	{ "-json_profiling",	"Generate JSON profiling output",			true,	0,					EASY_DEFAULT,		"Dev Tool",		"http://www.hard-light.net/wiki/index.php/Command-Line_Reference#-json_profiling", },
 };
 
 // forward declaration
@@ -309,8 +317,8 @@ cmdline_parm bloom_intensity_arg("-bloom_intensity", "Set bloom intensity, requi
 cmdline_parm fxaa_arg("-fxaa", NULL, AT_NONE);
 cmdline_parm fxaa_preset_arg("-fxaa_preset", "FXAA quality (0-9), requires -post_process and -fxaa", AT_INT);
 cmdline_parm fb_explosions_arg("-fb_explosions", NULL, AT_NONE);
+cmdline_parm fb_thrusters_arg("-fb_thrusters", NULL, AT_NONE);
 cmdline_parm flightshaftsoff_arg("-nolightshafts", NULL, AT_NONE);
-cmdline_parm brieflighting_arg("-brief_lighting", NULL, AT_NONE);
 cmdline_parm no_batching("-no_batching", NULL, AT_NONE);
 cmdline_parm shadow_quality_arg("-shadow_quality", NULL, AT_INT);
 cmdline_parm enable_shadows_arg("-enable_shadows", NULL, AT_NONE);
@@ -338,9 +346,9 @@ bool Cmdline_fxaa = false;
 int Cmdline_fxaa_preset = 6;
 extern int Fxaa_preset_last_frame;
 bool Cmdline_fb_explosions = 0;
+bool Cmdline_fb_thrusters = false;
 bool Cmdline_no_batching = false;
 extern bool ls_force_off;
-bool Cmdline_brief_lighting = 0;
 int Cmdline_shadow_quality = 0;
 int Cmdline_no_deferred_lighting = 0;
 
@@ -411,45 +419,46 @@ char *Cmdline_spew_mission_crcs = NULL;
 char *Cmdline_spew_table_crcs = NULL;
 int Cmdline_objupd = 3;		// client object updates on LAN by default
 
+// Launcher related options
+cmdline_parm portable_mode("-portable_mode", NULL, AT_NONE);
+
+bool Cmdline_portable_mode = false;
+
 // Troubleshooting
 cmdline_parm loadallweapons_arg("-loadallweps", NULL, AT_NONE);	// Cmdline_load_all_weapons
-cmdline_parm htl_arg("-nohtl", NULL, AT_NONE);				// Cmdline_nohtl  -- don't use HT&L
 cmdline_parm nomovies_arg("-nomovies", NULL, AT_NONE);		// Cmdline_nomovies  -- Allows video streaming
 cmdline_parm no_set_gamma_arg("-no_set_gamma", NULL, AT_NONE);	// Cmdline_no_set_gamma
-cmdline_parm no_vbo_arg("-novbo", NULL, AT_NONE);			// Cmdline_novbo
 cmdline_parm no_fbo_arg("-disable_fbo", NULL, AT_NONE);		// Cmdline_no_fbo
 cmdline_parm no_pbo_arg("-disable_pbo", NULL, AT_NONE);		// Cmdline_no_pbo
-cmdline_parm noglsl_arg("-no_glsl", NULL, AT_NONE);			// Cmdline_noglsl  -- disable GLSL support in OpenGL
 cmdline_parm mipmap_arg("-mipmap", NULL, AT_NONE);			// Cmdline_mipmap
 cmdline_parm atiswap_arg("-ati_swap", NULL, AT_NONE);        // Cmdline_atiswap - Fix ATI color swap issue for screenshots.
 cmdline_parm no3dsound_arg("-no_3d_sound", NULL, AT_NONE);		// Cmdline_no_3d_sound - Disable use of full 3D sounds
-cmdline_parm no_di_mouse_arg("-disable_di_mouse", "Disable DirectInput mouse code (Windows only)", AT_NONE); // Cmdline_no_di_mouse -- Disables directinput use for mouse control
 cmdline_parm no_drawrangeelements("-use_gldrawelements", NULL, AT_NONE); // Cmdline_drawelements -- Uses glDrawElements instead of glDrawRangeElements
 cmdline_parm keyboard_layout("-keyboard_layout", "Specify keyboard layout (qwertz or azerty)", AT_STRING);
 cmdline_parm old_collision_system("-old_collision", NULL, AT_NONE); // Cmdline_old_collision_sys
 cmdline_parm gl_finish ("-gl_finish", NULL, AT_NONE);
 cmdline_parm no_geo_sdr_effects("-no_geo_effects", NULL, AT_NONE);
 cmdline_parm set_cpu_affinity("-set_cpu_affinity", NULL, AT_NONE);
+cmdline_parm nograb_arg("-nograb", NULL, AT_NONE);
+cmdline_parm noshadercache_arg("-noshadercache", NULL, AT_NONE);
 #ifdef WIN32
 cmdline_parm fix_registry("-fix_registry", NULL, AT_NONE);
 #endif
 
 int Cmdline_load_all_weapons = 0;
-int Cmdline_nohtl = 0;
 int Cmdline_nomovies = 0;
 int Cmdline_no_set_gamma = 0;
-int Cmdline_novbo = 0; // turn off OGL VBO support, troubleshooting
 int Cmdline_no_fbo = 0;
 int Cmdline_no_pbo = 0;
-int Cmdline_noglsl = 0;
 int Cmdline_ati_color_swap = 0;
 int Cmdline_no_3d_sound = 0;
-int Cmdline_no_di_mouse = 0;
 int Cmdline_drawelements = 0;
 char* Cmdline_keyboard_layout = NULL;
 bool Cmdline_gl_finish = false;
 bool Cmdline_no_geo_sdr_effects = false;
 bool Cmdline_set_cpu_affinity = false;
+bool Cmdline_nograb = false;
+bool Cmdline_noshadercache = false;
 #ifdef WIN32
 bool Cmdline_alternate_registry_path = false;
 #endif
@@ -459,30 +468,25 @@ cmdline_parm start_mission_arg("-start_mission", "Skip mainhall and run this mis
 cmdline_parm dis_collisions("-dis_collisions", NULL, AT_NONE);	// Cmdline_dis_collisions
 cmdline_parm dis_weapons("-dis_weapons", NULL, AT_NONE);		// Cmdline_dis_weapons
 cmdline_parm noparseerrors_arg("-noparseerrors", NULL, AT_NONE);	// Cmdline_noparseerrors  -- turns off parsing errors -C
-#ifdef Allow_NoWarn
-cmdline_parm nowarn_arg("-no_warn", "Disable warnings (not recommended)", AT_NONE);			// Cmdline_nowarn
-#endif
 cmdline_parm extra_warn_arg("-extra_warn", "Enable 'extra' warnings", AT_NONE);	// Cmdline_extra_warn
 cmdline_parm fps_arg("-fps", NULL, AT_NONE);					// Cmdline_show_fps
-cmdline_parm show_mem_usage_arg("-show_mem_usage", NULL, AT_NONE);	// Cmdline_show_mem_usage
 cmdline_parm pos_arg("-pos", NULL, AT_NONE);					// Cmdline_show_pos
 cmdline_parm stats_arg("-stats", NULL, AT_NONE);				// Cmdline_show_stats
 cmdline_parm save_render_targets_arg("-save_render_target", NULL, AT_NONE);	// Cmdline_save_render_targets
-cmdline_parm debug_window_arg("-debug_window", NULL, AT_NONE);	// Cmdline_debug_window
 cmdline_parm window_arg("-window", NULL, AT_NONE);				// Cmdline_window
 cmdline_parm fullscreen_window_arg("-fullscreen_window", "Fullscreen/borderless window (Windows only)", AT_NONE);
 cmdline_parm res_arg("-res", "Resolution, formatted like 1600x900", AT_STRING);
 cmdline_parm center_res_arg("-center_res", "Resolution of center monitor, formatted like 1600x900", AT_STRING);
 cmdline_parm verify_vps_arg("-verify_vps", NULL, AT_NONE);	// Cmdline_verify_vps  -- spew VP crcs to vp_crcs.txt
 cmdline_parm parse_cmdline_only(PARSE_COMMAND_LINE_STRING, "Ignore any cmdline_fso.cfg files", AT_NONE);
-#ifdef SCP_UNIX
-cmdline_parm no_grab("-nograb", NULL, AT_NONE);				// Cmdline_no_grab
-#endif
 cmdline_parm reparse_mainhall_arg("-reparse_mainhall", NULL, AT_NONE); //Cmdline_reparse_mainhall
 cmdline_parm frame_profile_arg("-profile_frame_time", NULL, AT_NONE); //Cmdline_frame_profile
 cmdline_parm frame_profile_write_file("-profile_write_file", NULL, AT_NONE); // Cmdline_profile_write_file
 cmdline_parm no_unfocused_pause_arg("-no_unfocused_pause", NULL, AT_NONE); //Cmdline_no_unfocus_pause
 cmdline_parm benchmark_mode_arg("-benchmark_mode", NULL, AT_NONE); //Cmdline_benchmark_mode
+cmdline_parm noninteractive_arg("-noninteractive", NULL, AT_NONE); //Cmdline_noninteractive
+cmdline_parm json_pilot("-json_pilot", NULL, AT_NONE); //Cmdline_json_pilot
+cmdline_parm json_profiling("-json_profiling", NULL, AT_NONE); //Cmdline_json_profiling
 
 
 char *Cmdline_start_mission = NULL;
@@ -494,24 +498,22 @@ int Cmdline_noparseerrors = 0;
 int Cmdline_nowarn = 0; // turn warnings off in FRED
 #endif
 int Cmdline_extra_warn = 0;
-int Cmdline_show_mem_usage = 0;
 int Cmdline_show_pos = 0;
 int Cmdline_show_stats = 0;
 int Cmdline_save_render_targets = 0;
-int Cmdline_debug_window = 0;
 int Cmdline_window = 0;
 int Cmdline_fullscreen_window = 0;
 char *Cmdline_res = 0;
 char *Cmdline_center_res = 0;
 int Cmdline_verify_vps = 0;
-#ifdef SCP_UNIX
-int Cmdline_no_grab = 0;
-#endif
 int Cmdline_reparse_mainhall = 0;
 bool Cmdline_frame_profile = false;
 bool Cmdline_profile_write_file = false;
 bool Cmdline_no_unfocus_pause = false;
 bool Cmdline_benchmark_mode = false;
+bool Cmdline_noninteractive = false;
+bool Cmdline_json_pilot = false;
+bool Cmdline_json_profiling = false;
 
 // Other
 cmdline_parm get_flags_arg("-get_flags", "Output the launcher flags file", AT_NONE);
@@ -525,6 +527,8 @@ cmdline_parm deprecated_normal_arg("-normal", "Deprecated", AT_NONE);
 cmdline_parm deprecated_env_arg("-env", "Deprecated", AT_NONE);
 cmdline_parm deprecated_tbp_arg("-tbp", "Deprecated", AT_NONE);
 cmdline_parm deprecated_jpgtga_arg("-jpgtga", "Deprecated", AT_NONE);
+cmdline_parm deprecated_htl_arg("-nohtl", "Deprecated", AT_NONE);
+cmdline_parm deprecated_brieflighting_arg("-brief_lighting", "Deprecated", AT_NONE);
 
 int Cmdline_deprecated_spec = 0;
 int Cmdline_deprecated_glow = 0;
@@ -532,6 +536,8 @@ int Cmdline_deprecated_normal = 0;
 int Cmdline_deprecated_env = 0;
 int Cmdline_deprecated_tbp = 0;
 int Cmdline_deprecated_jpgtga = 0;
+int Cmdline_deprecated_nohtl = 0;
+bool Cmdline_deprecated_brief_lighting = 0;
 
 #ifndef NDEBUG
 // NOTE: this assumes that os_init() has already been called but isn't a fatal error if it hasn't
@@ -587,6 +593,16 @@ void cmdline_debug_print_cmdline()
 	{
 		mprintf(("Deprecated flag '-jpgtga' found. Please remove from your cmdline.\n"));
 	}
+
+	if(Cmdline_deprecated_nohtl == 1)
+	{
+		mprintf(("Deprecated flag '-nohtl' found. Please remove from your cmdline.\n"));
+	}
+
+	if(Cmdline_deprecated_brief_lighting == 1)
+	{
+		mprintf(("Deprecated flag '-brief_lighting' found. Please remove from your cmdline.\n"));
+	}
 }
 #endif
 
@@ -600,17 +616,20 @@ int is_extra_space(char ch)
 // eliminates all leading and trailing extra chars from a string.  Returns pointer passed in.
 char *drop_extra_chars(char *str)
 {
-	int s, e;
+	size_t s;
+	size_t e;
 
 	s = 0;
 	while (str[s] && is_extra_space(str[s]))
 		s++;
 
-	e = strlen(str) - 1;	// we already account for NULL later on, so the -1 is here to make
-							// sure we do our math without taking it into consideration
+	e = strlen(str);
 
-	if (e < 0)
-		e = 0;
+	if (e > 0) {
+		// we already account for NULL later on, so the -1 is here to make
+		// sure we do our math without taking it into consideration
+		e -= 1;
+	}
 
 	while (e > s) {
 		if (!is_extra_space(str[e])){
@@ -629,125 +648,132 @@ char *drop_extra_chars(char *str)
 }
 
 
-// internal function - copy the value for a parameter agruement into the cmdline_parm arg field
-void parm_stuff_args(cmdline_parm *parm, char *cmdline)
+/*
+ * @brief Processes one argument for the given parameter
+ *
+ * @param param The parameter to check
+ * @param argc The argument count
+ * @param argc The argument values
+ * @param argc The current index
+ * @return @c true when an extra parameter was found, @c false otherwise
+ */
+bool parm_stuff_args(cmdline_parm *parm, int argc, char *argv[], int index)
 {
-	char buffer[1024];
-	memset( buffer, 0, sizeof( buffer ) );
-	char *dest = buffer;
-	char *saved_args = NULL;
+	Assert(index < argc);
 
-	cmdline += strlen(parm->name);
+	if (index + 1 < argc)
+	{
+		char* value = argv[index + 1];
+		if (value[0] == '-')
+		{
+			// Found another argument, just return
+			return false;
+		}
+		else
+		{
+			char* saved_args = NULL;
 
-	while ((*cmdline != '\0') && strncmp(cmdline, " -", 2) && ((size_t)(dest-buffer) < sizeof(buffer))) {
-		*dest++ = *cmdline++;
+			if (parm->args != NULL) {
+				if (parm->stacks) {
+					saved_args = parm->args;
+				}
+				else {
+					delete[] parm->args;
+				}
+
+				parm->args = NULL;
+			}
+
+			size_t argsize = strlen(argv[index + 1]);
+			size_t buffersize = argsize;
+
+			if (saved_args != NULL)
+			{
+				// Add one for the , separating args
+				buffersize += strlen(saved_args) + 1;
+			}
+
+			buffersize += 1; // Null-terminator
+
+			parm->args = new char[buffersize];
+			memset(parm->args, 0, buffersize);
+
+			if (saved_args != NULL)
+			{
+				// saved args go first, then new arg
+				strcpy_s(parm->args, buffersize, saved_args);
+				// add a separator too, so that we can tell the args apart
+				strcat_s(parm->args, buffersize, ",");
+				// now the new arg
+				strcat_s(parm->args, buffersize, argv[index + 1]);
+
+				delete[] saved_args;
+			}
+			else
+			{
+				strcpy_s(parm->args, buffersize, argv[index + 1]);
+			}
+
+			return true;
+		}
 	}
-
-	drop_extra_chars(buffer);
-
-	// mwa 9/14/98 -- made it so that newer command line arguments found will overwrite the old arguments
-	// taylor 7/25/06 -- made it so that you can stack newer arguments if that option should support stacking
-
-	if ( parm->args != NULL ) {
-		if (parm->stacks) {
-			saved_args = parm->args;
-		} else {
-			delete[] parm->args;
-		}
-
-		parm->args = NULL;
-	}
-
-	int size = strlen(buffer);
-
-	if (size > 0) {
-		size++;	// nul char
-
-		if (saved_args != NULL) {
-			size += (strlen(saved_args) + 1);	// an ',' is used as a separator when combining, so be sure to account for it
-		}
-
-		parm->args = new char[size];
-		memset(parm->args, 0, size);
-
-		if (saved_args != NULL) {
-			// saved args go first, then new arg
-			strcpy_s(parm->args, size, saved_args);
-			// add a separator too, so that we can tell the args apart
-			strcat_s(parm->args, size, ",");
-			// now the new arg
-			strcat_s(parm->args, size, buffer);
-
-			delete [] saved_args;
-		} else {
-			strcpy_s(parm->args, size, buffer);
-		}
-	} else {
-		parm->args = saved_args;
+	else
+	{
+		// Last argument, can't have any values
+		return false;
 	}
 }
 
 
 // internal function - parse the command line, extracting parameter arguments if they exist
 // cmdline - command line string passed to the application
-void os_parse_parms(char *cmdline)
+void os_parse_parms(int argc, char *argv[])
 {
 	// locate command line parameters
 	cmdline_parm *parmp;
-	char *cmdline_offset = NULL;
-	size_t get_new_offset = 0;
 
-	for (parmp = GET_FIRST(&Parm_list); parmp != END_OF_LIST(&Parm_list); parmp = GET_NEXT(parmp)) {
-		// continue processing every option on the line to make sure that we account for every listing of each option
-		do {
-			// while going through the cmdline make sure to grab only the option that we are
-			// looking for, but if one similar then keep searching for the exact match
-			while (true) {
-				cmdline_offset = strstr(cmdline + get_new_offset, parmp->name);
+	for (int i = 0; i < argc; i++)
+	{
+		// On OS X this gets passed if the application was launched by double-clicking in the Finder
+		if (i == 1 && strncmp(argv[i], "-psn", 4) == 0)
+		{
+			continue;
+		}
 
-				if ( !cmdline_offset )
-					break;
-
-				int parmp_len = strlen(parmp->name);
-
-				// the new offset should be our currently location + the length of the current option
-				get_new_offset = (strlen(cmdline) - strlen(cmdline_offset) + parmp_len);
-
-				if ( (*(cmdline_offset + parmp_len)) && !is_extra_space(*(cmdline_offset + parmp_len)) ) {
-					// we found a similar, but not exact, match for this option, continue checking for the correct one
-				} else {
-					// we found what we were looking for so break out and process it
-					break;
+		for (parmp = GET_FIRST(&Parm_list); parmp != END_OF_LIST(&Parm_list); parmp = GET_NEXT(parmp)) {
+			if (!stricmp(parmp->name, argv[i]))
+			{
+				parmp->name_found = 1;
+				if (parm_stuff_args(parmp, argc, argv, i))
+				{
+					i++;
 				}
 			}
-
-			if (cmdline_offset) {
-				parmp->name_found = 1;
-				parm_stuff_args(parmp, cmdline_offset);
-			}
-		} while (cmdline_offset);
-
-		// reset the offset for the next param that we will look for
-		get_new_offset = 0;
-		cmdline_offset = NULL;
+		}
 	}
 }
 
 
 // validate the command line parameters.  Display an error if an unrecognized parameter is located.
-void os_validate_parms(char *cmdline)
+void os_validate_parms(int argc, char *argv[])
 {
 	cmdline_parm *parmp;
-	char seps[] = " ,\t\n";
 	char *token;
 	int parm_found;
 
-	token = strtok(cmdline, seps);
-	while(token != NULL) {
-	
+	for (int i = 0; i < argc; i++)
+	{
+		token = argv[i];
+
+		// On OS X this gets passed if the application was launched by double-clicking in the Finder
+		if (i == 1 && strncmp(token, "-psn", 4) == 0) {
+			continue;
+		}
+
 		if (token[0] == '-') {
 			parm_found = 0;
-			for (parmp = GET_FIRST(&Parm_list); parmp !=END_OF_LIST(&Parm_list); parmp = GET_NEXT(parmp) ) {
+
+			for (parmp = GET_FIRST(&Parm_list); parmp != END_OF_LIST(&Parm_list); parmp = GET_NEXT(parmp)) {
 				if (!stricmp(parmp->name, token)) {
 					parm_found = 1;
 					break;
@@ -755,37 +781,12 @@ void os_validate_parms(char *cmdline)
 			}
 
 			if (parm_found == 0) {
-#ifdef _WIN32
-				// Changed this to MessageBox, this is a user error not a developer
-				char buffer[128];
-				sprintf(buffer,"Unrecognized command line parameter %s, continue?",token);
-				if( MessageBox(NULL, buffer, "Warning", MB_OKCANCEL | MB_ICONQUESTION) == IDCANCEL)
-					exit(0);
-#elif defined(APPLE_APP)
-				CFStringRef message;
-				char buffer[128];
-				CFOptionFlags result;
-
-				snprintf(buffer, 128, "Unrecognized command line parameter, \"%s\", continue?", token);
-				message = CFStringCreateWithCString(NULL, buffer, kCFStringEncodingASCII);
-
-				if ( CFUserNotificationDisplayAlert(0, kCFUserNotificationPlainAlertLevel, NULL, NULL, NULL, CFSTR("Unknown Command"), message, NULL, CFSTR("Quit"), NULL, &result) ) {
-                    CFRelease(message);
-					exit(0);
-				}
-
-				if (result != kCFUserNotificationDefaultResponse) {
-                    CFRelease(message);
-					exit(0);
-				}
-
-                CFRelease(message);
-#else
 				// if we got a -help, --help, -h, or -? then show the help text, otherwise show unknown option
-				if ( !stricmp(token, "-help") || !stricmp(token, "--help") || !stricmp(token, "-h") || !stricmp(token, "-?") ) {
-					if (FS_VERSION_REVIS == 0) {
+				if (!stricmp(token, "-help") || !stricmp(token, "--help") || !stricmp(token, "-h") || !stricmp(token, "-?")) {
+					if (FS_VERSION_HAS_REVIS == 0) {
 						printf("FreeSpace 2 Open, version %i.%i.%i\n", FS_VERSION_MAJOR, FS_VERSION_MINOR, FS_VERSION_BUILD);
-					} else {
+					}
+					else {
 						printf("FreeSpace 2 Open, version %i.%i.%i.%i\n", FS_VERSION_MAJOR, FS_VERSION_MINOR, FS_VERSION_BUILD, FS_VERSION_REVIS);
 					}
 					printf("Website: http://scp.indiegames.us\n");
@@ -795,103 +796,210 @@ void os_validate_parms(char *cmdline)
 					// not the prettiest thing but the job gets done
 					static const int STR_SIZE = 25;  // max len of exe_params.name + 5 spaces
 					const int AT_SIZE = 8;  // max len of cmdline_arg_types[] + 2 spaces
-					int sp=0, atp=0;
+					size_t atp = 0;
+					size_t sp = 0;
 					for (parmp = GET_FIRST(&Parm_list); parmp !=END_OF_LIST(&Parm_list); parmp = GET_NEXT(parmp) ) {
 						// don't output deprecated flags
 						if (stricmp("deprecated", parmp->help)) {
 							sp = strlen(parmp->name);
 							if (parmp->arg_type != AT_NONE) {
 								atp = strlen(cmdline_arg_types[parmp->arg_type]);
-								printf("    [ %s ]%*s[ %s ]%*s- %s\n", parmp->name, (STR_SIZE - sp -1), NOX(" "), cmdline_arg_types[parmp->arg_type], AT_SIZE-atp, NOX(" "), parmp->help);
+								printf("    [ %s ]%*s[ %s ]%*s- %s\n", parmp->name, (int)(STR_SIZE - sp -1), NOX(" "), cmdline_arg_types[parmp->arg_type], (int)(AT_SIZE-atp), NOX(" "), parmp->help);
 							} else {
-								printf("    [ %s ]%*s- %s\n", parmp->name, (STR_SIZE - sp -1 +AT_SIZE+4), NOX(" "), parmp->help);
+								printf("    [ %s ]%*s- %s\n", parmp->name, (int)(STR_SIZE - sp -1 +AT_SIZE+4), NOX(" "), parmp->help);
 							}
 						}
 					}
 
 					printf("\n");
 					exit(0);
-				} else {
-					printf("Unrecognized command line parameter \"%s\".  Ignoring...\n", token);
 				}
-#endif
+				else {
+					char buffer[128];
+					sprintf(buffer, "Unrecognized command line parameter %s.", token);
+
+					os::dialogs::Message(os::dialogs::MESSAGEBOX_INFORMATION, buffer);
+				}
 			}
 		}
-
-		token = strtok(NULL, seps);
 	}
 }
 
+int parse_cmdline_string(char* cmdline, char** argv)
+{
+	size_t length = strlen(cmdline);
+
+	bool start_found = false;
+	bool quoted = false;
+
+	size_t argc = 0;
+	char* current_argv = NULL;
+	for (size_t i = 0; i < length; i++)
+	{
+		if (!start_found && !isspace(cmdline[i]))
+		{
+			start_found = true;
+			current_argv = (cmdline + i);
+		}
+		else if (start_found)
+		{
+			if (cmdline[i] == '"')
+			{
+				quoted = !quoted;
+
+				if (!quoted && current_argv != NULL)
+				{
+					if (argv != NULL)
+					{
+						// Terminate string at quote
+						cmdline[i] = '\0';
+						argv[argc] = current_argv;
+						current_argv = NULL;
+					}
+
+					argc++;
+				}
+			}
+			else if (isspace(cmdline[i]) && !quoted)
+			{
+				// Parameter terminated by space
+				if (current_argv != NULL) // == NULL means that we currently don't have a parameter
+				{
+					if (argv != NULL)
+					{
+						// Terminate string at quote
+						cmdline[i] = '\0';
+						argv[argc] = current_argv;
+						current_argv = NULL;
+					}
+
+					argc++;
+				}
+			}
+			else if (current_argv == NULL)
+			{
+				current_argv = cmdline + i;
+			}
+		}
+	}
+
+	if (current_argv != NULL)
+	{
+		if (argv != NULL)
+		{
+			// Terminate string at quote
+			argv[argc] = current_argv;
+			current_argv = NULL;
+		}
+
+		argc++;
+	}
+
+	return (int)argc;
+}
+
+void os_process_cmdline(char* cmdline)
+{
+	int argc = parse_cmdline_string(cmdline, NULL);
+
+	char** argv = new char*[argc];
+
+	argc = parse_cmdline_string(cmdline, argv);
+
+	os_parse_parms(argc, argv);
+	os_validate_parms(argc, argv);
+
+	delete[] argv;
+}
+
+bool has_cmdline_only_flag(int argc, char *argv[])
+{
+	for (int i = 0; i < argc; ++i)
+	{
+		if (!strcmp(argv[i], PARSE_COMMAND_LINE_STRING))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// remove old parms - needed for tests
+static void reset_cmdline_parms()
+{
+	for (cmdline_parm *parmp = GET_FIRST(&Parm_list); parmp != END_OF_LIST(&Parm_list); parmp = GET_NEXT(parmp)) {
+		if (parmp->args != NULL) {
+			delete[] parmp->args;
+			parmp->args = NULL;
+		}
+		parmp->name_found = 0;
+	}
+}
 
 // Call once to initialize the command line system
 //
 // cmdline - command line string passed to the application
-void os_init_cmdline(char *cmdline)
+void os_init_cmdline(int argc, char *argv[])
 {
+	// Tests call this multiple times, so reset the params here.
+	// Otherwise e.g. the modlist just grows and grows...
+	reset_cmdline_parms();
+
 	FILE *fp;
 	
-	if (strstr(cmdline, PARSE_COMMAND_LINE_STRING) == NULL) {
-
-		// read the cmdline_fso.cfg file from the data folder, and pass the command line arguments to
-		// the the parse_parms and validate_parms line.  Read these first so anything actually on
-		// the command line will take precedence
+	if (!has_cmdline_only_flag(argc, argv)) {
+		// Only parse the config file in the current directory if we are in legacy config mode
+		if (os_is_legacy_mode()) {
+			// read the cmdline_fso.cfg file from the data folder, and pass the command line arguments to
+			// the the parse_parms and validate_parms line.  Read these first so anything actually on
+			// the command line will take precedence
 #ifdef _WIN32
-		fp = fopen("data\\cmdline_fso.cfg", "rt");
+			fp = fopen("data\\cmdline_fso.cfg", "rt");
 #elif defined(APPLE_APP)
-		char resolved_path[MAX_PATH], data_path[MAX_PATH_LEN];
-     
-		GetCurrentDirectory(MAX_PATH_LEN-1, data_path);
-		snprintf(resolved_path, MAX_PATH, "%s/data/cmdline_fso.cfg", data_path);
+			char resolved_path[MAX_PATH], data_path[MAX_PATH_LEN];
 
-		fp = fopen(resolved_path, "rt");
+			GetCurrentDirectory(MAX_PATH_LEN - 1, data_path);
+			snprintf(resolved_path, MAX_PATH, "%s/data/cmdline_fso.cfg", data_path);
+
+			fp = fopen(resolved_path, "rt");
 #else
-		fp = fopen("data/cmdline_fso.cfg", "rt");
+			fp = fopen("data/cmdline_fso.cfg", "rt");
 #endif
 
-		// if the file exists, get a single line, and deal with it
-		if ( fp ) {
-			char *buf, *p;
+			// if the file exists, get a single line, and deal with it
+			if (fp) {
+				char *buf, *p;
 
-			size_t len = filelength( fileno(fp) ) + 2;
-			buf = new char [len];
+				auto len = static_cast<int>(filelength(fileno(fp))) + 2;
+				buf = new char[len];
 
-			if (fgets(buf, len-1, fp) != nullptr)
-			{
-				// replace the newline character with a NULL
-				if ( (p = strrchr(buf, '\n')) != NULL ) {
-					*p = '\0';
-				}
+				if (fgets(buf, len - 1, fp) != nullptr)
+				{
+					// replace the newline character with a NULL
+					if ((p = strrchr(buf, '\n')) != NULL) {
+						*p = '\0';
+					}
 
 #ifdef SCP_UNIX
-				// append a space for the os_parse_parms() check
-				strcat_s(buf, len, " ");
+					// append a space for the os_parse_parms() check
+					strcat_s(buf, len, " ");
 #endif
-
-				os_parse_parms(buf);
-				os_validate_parms(buf);
+					os_process_cmdline(buf);
+				}
+				delete[] buf;
+				fclose(fp);
 			}
-			delete [] buf;
-			fclose(fp);
 		}
 
-#ifdef SCP_UNIX
 		// parse user specific cmdline_fso config file (will supersede options in global file)
-		char cmdname[MAX_PATH];
-
-		snprintf(cmdname, MAX_PATH, "%s/%s/data/cmdline_fso.cfg", detect_home(), Osreg_user_dir);
-		fp = fopen(cmdname, "rt");
-
-		if ( !fp ) {
-			// try for non "_fso", for older code versions
-			snprintf(cmdname, MAX_PATH, "%s/%s/data/cmdline.cfg", detect_home(), Osreg_user_dir);
-			fp = fopen(cmdname, "rt");
-		}
+		fp = fopen(os_get_config_path("data/cmdline_fso.cfg").c_str(), "rt");
 
 		// if the file exists, get a single line, and deal with it
 		if ( fp ) {
 			char *buf, *p;
 
-			size_t len = filelength( fileno(fp) ) + 2;
+			auto len = static_cast<int>(filelength( fileno(fp) )) + 2;
 			buf = new char [len];
 
 			if (fgets(buf, len-1, fp) != nullptr)
@@ -903,20 +1011,17 @@ void os_init_cmdline(char *cmdline)
 
 				// append a space for the os_parse_parms() check
 				strcat_s(buf, len, " ");
-
-				os_parse_parms(buf);
-				os_validate_parms(buf);
+			
+				os_process_cmdline(buf);
 			}
-
 			delete [] buf;
 			fclose(fp);
 		}
-#endif
 	} // If cmdline included PARSE_COMMAND_LINE_STRING
     
 	// By parsing cmdline last, anything actually on the command line will take precedence.
-	os_parse_parms(cmdline);
-	os_validate_parms(cmdline);
+	os_parse_parms(argc, argv);
+	os_validate_parms(argc, argv);
 }
 
 
@@ -989,7 +1094,7 @@ int cmdline_parm::get_int()
 	Assertion(arg_type == AT_INT, "Coding error! Cmdline arg (%s) called cmdline_parm::get_int() with invalid arg_type (%s)", name, cmdline_arg_types[arg_type]);
 	check_if_args_is_valid();
 
-	int offset = 0;
+	size_t offset = 0;
 
 	if (stacks) {
 		// first off, DON'T STACK NON-STRINGS!!
@@ -1014,7 +1119,7 @@ float cmdline_parm::get_float()
 	Assertion(arg_type == AT_FLOAT, "Coding error! Cmdline arg (%s) called cmdline_parm::get_float() with invalid arg_type (%s)", name, cmdline_arg_types[arg_type]);
 	check_if_args_is_valid();
 
-	int offset = 0;
+	size_t offset = 0;
 
 	if (stacks) {
 		// first off, DON'T STACK NON-STRINGS!!
@@ -1101,14 +1206,15 @@ static SCP_vector<SCP_string> unix_get_dir_names(SCP_string parent, SCP_string d
 }
 
 // For case sensitive filesystems (e.g. Linux/BSD) perform case-insensitive dir matches.
-static void handle_unix_modlist(char **modlist, int *len)
+static void handle_unix_modlist(char **modlist, size_t *len)
 {
 	// search filesystem for given paths
 	SCP_vector<SCP_string> mod_paths;
 	for (char *cur_mod = strtok(*modlist, ","); cur_mod != NULL; cur_mod = strtok(NULL, ","))
 	{
 		SCP_vector<SCP_string> this_mod_paths = unix_get_dir_names(".", cur_mod);
-		if (this_mod_paths.empty()) {
+		// Ignore non-existing mods for unit tests
+		if (!running_unittests && this_mod_paths.empty()) {
 			ReleaseWarning(LOCATION, "Can't find mod '%s'. Ignoring.", cur_mod);
 		}
 		mod_paths.insert(mod_paths.end(), this_mod_paths.begin(), this_mod_paths.end());
@@ -1148,7 +1254,7 @@ bool SetCmdlineParams()
 		FILE *fp = fopen("flags.lch","w");
 		
 		if (fp == NULL) {
-			MessageBox(NULL,"Error creating flag list for launcher", "Error", MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR, "Error creating flag list for launcher");
 			return false; 
 		}
 		
@@ -1175,9 +1281,10 @@ bool SetCmdlineParams()
 			ubyte build_caps = 0;
 			
 			/* portej05 defined this always */
-			build_caps |= BUILD_CAP_OPENAL;
-			build_caps |= BUILD_CAP_NO_D3D;
-			build_caps |= BUILD_CAP_NEW_SND;
+			build_caps |= BUILD_CAPS_OPENAL;
+			build_caps |= BUILD_CAPS_NO_D3D;
+			build_caps |= BUILD_CAPS_NEW_SND;
+			build_caps |= BUILD_CAPS_SDL;
 			
 			
 			fwrite(&build_caps, 1, 1, fp);
@@ -1363,10 +1470,8 @@ bool SetCmdlineParams()
 
 	if ( fullscreen_window_arg.found( ) )
 	{
-#ifdef WIN32
 		Cmdline_fullscreen_window = 1;
 		Cmdline_window = 0; /* Make sure no-one sets both */
-#endif
 	}
 
 	if(res_arg.found()){
@@ -1412,7 +1517,7 @@ bool SetCmdlineParams()
 		}
 
 		// Ok - mod stacking support
-		int len = strlen(Cmdline_mod);
+		size_t len = strlen(Cmdline_mod);
 		char *modlist = new char[len+2];
 		memset( modlist, 0, len + 2 );
 		strcpy_s(modlist, len+2, Cmdline_mod);
@@ -1423,7 +1528,7 @@ bool SetCmdlineParams()
 #endif
 
 		// null terminate each individual
-		for (int i = 0; i < len; i++)
+		for (size_t i = 0; i < len; i++)
 		{
 			if (modlist[i] == ',')
 				modlist[i] = '\0';
@@ -1511,11 +1616,6 @@ bool SetCmdlineParams()
 		Cmdline_spec = 0;
 	}
 
-	if ( htl_arg.found() ) 
-	{
-		Cmdline_nohtl = 1;
-	}
-
 	if( no_set_gamma_arg.found() )
 	{
 		Cmdline_no_set_gamma = 1;
@@ -1526,13 +1626,6 @@ bool SetCmdlineParams()
 		Cmdline_no_vsync = 1;
 	}
 
-#ifdef SCP_UNIX
-	// no key/mouse grab
-	if(no_grab.found()){
-		Cmdline_no_grab = 1;
-	}
-#endif
-
 	if ( normal_arg.found() ) {
 		Cmdline_normal = 0;
 	}
@@ -1540,11 +1633,7 @@ bool SetCmdlineParams()
 	if ( height_arg.found() ) {
 		Cmdline_height = 0;
 	}
-
-	if ( noglsl_arg.found() ) {
-		Cmdline_noglsl = 1;
-	}
-
+	
 	if (fxaa_arg.found() ) {
 		Cmdline_fxaa = true;
 
@@ -1553,10 +1642,6 @@ bool SetCmdlineParams()
 		}
 
 		Fxaa_preset_last_frame = Cmdline_fxaa_preset;
-	}
-
-	if (no_di_mouse_arg.found() ) {
-		Cmdline_no_di_mouse = 1;
 	}
 
 	if ( glow_arg.found() )
@@ -1568,11 +1653,8 @@ bool SetCmdlineParams()
 	if ( ship_choice_3d_arg.found() )
 		Cmdline_ship_choice_3d = 1;
 
-    if ( weapon_choice_3d_arg.found() )
-        Cmdline_weapon_choice_3d = 1;
-
-	if ( show_mem_usage_arg.found() )
-		Cmdline_show_mem_usage = 1;
+	if ( weapon_choice_3d_arg.found() )
+		Cmdline_weapon_choice_3d = 1;
 
 	if (ingamejoin_arg.found() )
 		Cmdline_ingamejoin = 1;
@@ -1589,11 +1671,6 @@ bool SetCmdlineParams()
 
 	if (output_sexp_arg.found() ) {
 		output_sexps("sexps.html");
-	}
-
-	if ( no_vbo_arg.found() )
-	{
-		Cmdline_novbo = 1;
 	}
 
 	if ( no_pbo_arg.found() )
@@ -1626,6 +1703,21 @@ bool SetCmdlineParams()
 		Cmdline_set_cpu_affinity = true;
 	}
 
+	if (nograb_arg.found())
+	{
+		Cmdline_nograb = true;
+	}
+
+	if (noshadercache_arg.found())
+	{
+		Cmdline_noshadercache = true;
+	}
+
+	if (portable_mode.found())
+	{
+		Cmdline_portable_mode = true;
+	}
+	
 #ifdef WIN32
 	if (fix_registry.found()) {
 		Cmdline_alternate_registry_path = true;
@@ -1680,10 +1772,7 @@ bool SetCmdlineParams()
 
 	if ( save_render_targets_arg.found() )
 		Cmdline_save_render_targets = 1;
-
-	if ( debug_window_arg.found() )
-		Cmdline_debug_window = 1;
-
+	
 	if ( verify_vps_arg.found() )
 		Cmdline_verify_vps = 1;
 
@@ -1710,14 +1799,14 @@ bool SetCmdlineParams()
 		Cmdline_fb_explosions = 1;
 	}
 
+    if (fb_thrusters_arg.found()) 
+    {
+        Cmdline_fb_thrusters = true;
+    }
+
 	if ( no_batching.found() ) 
 	{
 		Cmdline_no_batching = true;
-	}
-
-	if ( brieflighting_arg.found() )
-	{
-		Cmdline_brief_lighting = 1;
 	}
 
 	if ( postprocess_arg.found() )
@@ -1743,10 +1832,11 @@ bool SetCmdlineParams()
 	if( enable_shadows_arg.found() )
 	{
 		Cmdline_shadow_quality = 2;
-		if( shadow_quality_arg.found() )
-		{
-			Cmdline_shadow_quality = shadow_quality_arg.get_int();
-		}
+	}
+
+	if( shadow_quality_arg.found() )
+	{
+		Cmdline_shadow_quality = shadow_quality_arg.get_int();
 	}
 
 	if( no_deferred_lighting_arg.found() )
@@ -1773,6 +1863,21 @@ bool SetCmdlineParams()
 	if (benchmark_mode_arg.found())
 	{
 		Cmdline_benchmark_mode = true;
+	}
+
+	if (noninteractive_arg.found())
+	{
+		Cmdline_noninteractive = true;
+	}
+
+	if (json_pilot.found())
+	{
+		Cmdline_json_pilot = true;
+	}
+
+	if (json_profiling.found())
+	{
+		Cmdline_json_profiling = true;
 	}
 
 	//Deprecated flags - CommanderDJ
@@ -1806,46 +1911,24 @@ bool SetCmdlineParams()
 		Cmdline_deprecated_jpgtga = 1;
 	}
 
+	if ( deprecated_htl_arg.found() ) 
+	{
+		Cmdline_deprecated_nohtl = 1;
+	}
+
+	if ( deprecated_brieflighting_arg.found() )
+	{
+		Cmdline_deprecated_brief_lighting = 1;
+	}
+
 	return true; 
 }
 
-
-int fred2_parse_cmdline(int argc, char *argv[])
-{
-	if (argc > 1) {
-		// kind of silly -- combine arg list into single string for parsing,
-		// but it fits with the win32-centric existing code.
-		char *cmdline = NULL;
-		unsigned int arglen = 0;
-		int i;
-		for (i = 1;  i < argc;  i++)
-			arglen += strlen(argv[i]);
-		if (argc > 2)
-			arglen += argc + 2; // leave room for the separators
-		cmdline = new char [arglen+1];
-		i = 1;
-
-		strcpy_s(cmdline, arglen+1, argv[i]);
-		for (i=2; i < argc;  i++) {
-			strcat_s(cmdline, arglen+1, " ");
-			strcat_s(cmdline, arglen+1, argv[i]);
-		}
-		os_init_cmdline(cmdline);
-		delete [] cmdline;
-	} else {
-		// no cmdline args
-		os_init_cmdline("");
-	}
-
-	return SetCmdlineParams();
-}
-
-
-int parse_cmdline(char *cmdline)
+int parse_cmdline(int argc, char *argv[])
 {
 //	mprintf(("I got to parse_cmdline()!!\n"));
 
-	os_init_cmdline(cmdline);
+	os_init_cmdline(argc, argv);
 
 	// --------------- Kazan -------------
 	// If you're looking for the list of if (someparam.found()) { cmdline_someparam = something; } look above at this function

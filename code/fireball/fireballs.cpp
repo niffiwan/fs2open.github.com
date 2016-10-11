@@ -19,6 +19,7 @@
 #include "object/object.h"
 #include "parse/parselo.h"
 #include "render/3d.h"
+#include "render/batching.h"
 #include "ship/ship.h"
 
 #include <stdlib.h>
@@ -76,10 +77,10 @@ void fireball_play_warphole_open_sound(int ship_class, fireball *fb)
 	if(fb->warp_open_sound_index > -1) {
 		sound_index = fb->warp_open_sound_index;
 	} else if ((ship_class >= 0) && (ship_class < static_cast<int>(Ship_info.size()))) {
-		if ( Ship_info[ship_class].flags & SIF_HUGE_SHIP ) {
+		if ( Ship_info[ship_class].is_huge_ship() ) {
 			sound_index = SND_CAPITAL_WARP_IN;
 			fb->flags |= FBF_WARP_CAPITAL_SIZE;
-		} else if ( Ship_info[ship_class].flags & SIF_BIG_SHIP ) {
+		} else if ( Ship_info[ship_class].is_big_ship() ) {
 			range_multiplier = 6.0f;
 			fb->flags |= FBF_WARP_CRUISER_SIZE;
 		}
@@ -323,7 +324,7 @@ void fireball_load_data()
 			if ( (i == FIREBALL_WARP) && (idx > MAX_WARP_LOD) )
 				continue;
 
-			fd->lod[idx].bitmap_id	= bm_load_animation( fd->lod[idx].filename, &fd->lod[idx].num_frames, &fd->lod[idx].fps, NULL, 1 );
+			fd->lod[idx].bitmap_id	= bm_load_animation( fd->lod[idx].filename, &fd->lod[idx].num_frames, &fd->lod[idx].fps, nullptr, nullptr, true );
 			if ( fd->lod[idx].bitmap_id < 0 ) {
 				Error(LOCATION, "Could not load %s anim file\n", fd->lod[idx].filename);
 			}
@@ -373,83 +374,6 @@ void fireball_init()
 }
 
 MONITOR( NumFireballsRend )
-
-void fireball_render_DEPRECATED(object * obj)
-{
-	int		num;
-	vertex	p;
-	fireball	*fb;
-    
-	MONITOR_INC( NumFireballsRend, 1 );	
-	
-	memset(&p, 0, sizeof(p));
-    
-    num = obj->instance;
-	fb = &Fireballs[num];
-
-	if ( Fireballs[num].current_bitmap < 0 )
-		return;
-
-	// turn off fogging
-	if(The_mission.flags & MISSION_FLAG_FULLNEB){
-		gr_fog_set(GR_FOGMODE_NONE, 0, 0, 0);
-	}
-
-	if(Cmdline_nohtl) {
-		g3_rotate_vertex(&p, &obj->pos );
-	}else{
-		g3_transfer_vertex(&p, &obj->pos);
-	}
-
-	switch( fb->fireball_render_type )	{
-
-		case FIREBALL_MEDIUM_EXPLOSION:
-			batch_add_bitmap (
-				Fireballs[num].current_bitmap, 
-				TMAP_FLAG_TEXTURED | TMAP_HTL_3D_UNLIT | TMAP_FLAG_SOFT_QUAD, 
-				&p, 
-				fb->orient, 
-				obj->radius
-			);
-			break;
-
-		case FIREBALL_LARGE_EXPLOSION:
-			// Make the big explosions rotate with the viewer.
-			batch_add_bitmap_rotated ( 
-				Fireballs[num].current_bitmap, 
-				TMAP_FLAG_TEXTURED | TMAP_HTL_3D_UNLIT | TMAP_FLAG_SOFT_QUAD, 
-				&p, 
-				(i2fl(fb->orient)*PI)/180.0f,
-				obj->radius
-			);
-			break;
-
-		case FIREBALL_WARP_EFFECT: {
-			
-				float percent_life = fb->time_elapsed / fb->total_time;
-
-				float rad;
-
-				// Code to make effect grow/shrink. 
-				float t = fb->time_elapsed;
-			
-				if ( t < WARPHOLE_GROW_TIME )	{
-					rad = (float)pow(t/WARPHOLE_GROW_TIME,0.4f)*obj->radius;
-				} else if ( t < fb->total_time - WARPHOLE_GROW_TIME )	{
-					rad = obj->radius;
-				} else {
-					rad = (float)pow((fb->total_time - t)/WARPHOLE_GROW_TIME,0.4f)*obj->radius;
-				}
-
-				warpin_render(obj, &obj->orient, &obj->pos, Fireballs[num].current_bitmap, rad, percent_life, obj->radius, (Fireballs[num].flags & FBF_WARP_3D) );
-			}
-			break;
-
-			
-		default:
-			Int3();
-	}
-}
 
 /**
  * Delete a fireball.  
@@ -507,13 +431,7 @@ void fireball_set_framenum(int num)
 	}
 
 	if ( fb->fireball_render_type == FIREBALL_WARP_EFFECT )	{
-		float total_time = i2fl(fl->num_frames) / fl->fps;	// in seconds
-
-		framenum = fl2i(fb->time_elapsed * fl->num_frames / total_time + 0.5);
-
-		if ( framenum < 0 ) framenum = 0;
-
-		framenum = framenum % fl->num_frames;
+		framenum = bm_get_anim_frame(fl->bitmap_id, fb->time_elapsed, 0.0f, true);
 
 		if ( fb->orient )	{
 			// warp out effect plays backwards
@@ -523,16 +441,8 @@ void fireball_set_framenum(int num)
 			fb->current_bitmap = fl->bitmap_id + framenum;
 		}
 	} else {
-
-		framenum = fl2i(fb->time_elapsed / fb->total_time * fl->num_frames + 0.5);
-
-		// ensure we don't go past the number of frames of animation
-		if ( framenum > (fl->num_frames-1) ) {
-			framenum = (fl->num_frames-1);
-			Objects[fb->objnum].flags |= OF_SHOULD_BE_DEAD;
-		}
-
-		if ( framenum < 0 ) framenum = 0;
+		// ignore setting of OF_SHOULD_BE_DEAD, see fireball_process_post
+		framenum = bm_get_anim_frame(fl->bitmap_id, fb->time_elapsed, fb->total_time);
 		fb->current_bitmap = fl->bitmap_id + framenum;
 	}
 }
@@ -553,7 +463,7 @@ int fireball_is_perishable(object * obj)
 		return 1;
 
 	if ( !(fb->fireball_render_type == FIREBALL_WARP_EFFECT) )	{
-		if ( !(obj->flags & OF_WAS_RENDERED))	{
+		if ( !(obj->flags[Object::Object_Flags::Was_rendered]))	{
 			return 1;
 		}
 	}
@@ -655,7 +565,7 @@ void fireball_process_post(object * obj, float frame_time)
 
 	fb->time_elapsed += frame_time;
 	if ( fb->time_elapsed > fb->total_time ) {
-		obj->flags |= OF_SHOULD_BE_DEAD;
+        obj->flags.set(Object::Object_Flags::Should_be_dead);
 	}
 
 	fireball_maybe_play_warp_close_sound(fb);
@@ -858,7 +768,9 @@ int fireball_create( vec3d * pos, int fireball_type, int render_type, int parent
 		}
 	}
 	
-	objnum = obj_create(OBJ_FIREBALL, parent_obj, n, &orient, pos, size, OF_RENDERS);
+    flagset<Object::Object_Flags> default_flags;
+    default_flags.set(Object::Object_Flags::Renders);
+	objnum = obj_create(OBJ_FIREBALL, parent_obj, n, &orient, pos, size, default_flags);
 
 	if (objnum < 0) {
 		Int3();				// Get John, we ran out of objects for fireballs
@@ -916,7 +828,7 @@ int fireball_create( vec3d * pos, int fireball_type, int render_type, int parent
 
 	if ( velocity )	{
 		// Make the explosion move at a constant velocity.
-		obj->flags |= OF_PHYSICS;
+        obj->flags.set(Object::Object_Flags::Physics);
 		obj->phys_info.mass = 1.0f;
 		obj->phys_info.side_slip_time_const = 0.0f;
 		obj->phys_info.rotdamp = 0.0f;
@@ -1066,34 +978,18 @@ void fireball_render(object* obj, draw_list *scene)
 	if ( Fireballs[num].current_bitmap < 0 )
 		return;
 	
-	if ( Cmdline_nohtl ) {
-		g3_rotate_vertex(&p, &obj->pos );
-	} else {
-		g3_transfer_vertex(&p, &obj->pos);
-	}
+	g3_transfer_vertex(&p, &obj->pos);
 
 	switch ( fb->fireball_render_type )	{
 
 		case FIREBALL_MEDIUM_EXPLOSION: {
-			batch_add_bitmap (
-				Fireballs[num].current_bitmap, 
-				TMAP_FLAG_TEXTURED | TMAP_HTL_3D_UNLIT | TMAP_FLAG_SOFT_QUAD, 
-				&p, 
-				fb->orient, 
-				obj->radius
-				);
+			batching_add_volume_bitmap(Fireballs[num].current_bitmap, &p, fb->orient, obj->radius);
 		}
 		break;
 
 		case FIREBALL_LARGE_EXPLOSION: {
 			// Make the big explosions rotate with the viewer.
-			batch_add_bitmap_rotated ( 
-				Fireballs[num].current_bitmap, 
-				TMAP_FLAG_TEXTURED | TMAP_HTL_3D_UNLIT | TMAP_FLAG_SOFT_QUAD, 
-				&p, 
-				(i2fl(fb->orient)*PI)/180.0f,
-				obj->radius
-				);
+			batching_add_volume_bitmap_rotated(Fireballs[num].current_bitmap, &p, (i2fl(fb->orient)*PI) / 180.0f, obj->radius);
 		}
 		break;
 

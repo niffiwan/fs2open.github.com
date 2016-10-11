@@ -19,7 +19,7 @@
 #include "mission/missionparse.h"
 #include "mission/missioncampaign.h"
 #include "gamesequence/gamesequence.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "osapi/osapi.h"
 #include "network/stand_gui.h"
 #include "network/multi_xfer.h"
@@ -50,6 +50,11 @@
 #include "pilotfile/pilotfile.h"
 #include "debugconsole/console.h"
 #include "network/psnet2.h"
+
+// Stupid windows workaround...
+#ifdef MessageBox
+#undef MessageBox
+#endif
 
 
 
@@ -842,18 +847,6 @@ void process_packet_normal(ubyte* data, header *header_info)
 			process_reinforcement_avail( data, header_info );
 			break;
 
-		case CHANGE_IFF:
-			process_change_iff_packet(data, header_info);
-			break;
-
-		case CHANGE_IFF_COLOR:
-			process_change_iff_color_packet(data, header_info);
-			break;
-
-		case CHANGE_AI_CLASS:
-			process_change_ai_class_packet(data, header_info);
-			break;
-
 		case PRIMARY_FIRED_NEW:
 			process_NEW_primary_fired_packet(data, header_info);
 			break;
@@ -876,10 +869,6 @@ void process_packet_normal(ubyte* data, header *header_info)
 
 		case VARIABLE_UPDATE:
 			process_variable_update_packet(data, header_info);
-			break;
-
-		case WEAPON_OR_AMMO_CHANGED:
-			process_weapon_or_ammo_changed_packet(data, header_info);
 			break;
 
 		case OBJECT_UPDATE_NEW:			
@@ -1237,7 +1226,7 @@ void multi_do_frame()
 					// send my observer position/object update
 					send_observer_update_packet();
 				}
-			} else if ( !(Player_ship->flags & SF_DEPARTING ) ){				
+			} else if ( !(Player_ship->is_departing() ) ){
 				// if the rate limiting system says its ok
 				if(multi_oo_cirate_can_send()){
 					// use the new method
@@ -1440,10 +1429,10 @@ void standalone_main_init()
 	// if we failed to startup on our desired protocol, fail
 	if ((Multi_options_g.protocol == NET_TCP) && !Tcp_active){
 		if (Tcp_failure_code == WSAEADDRINUSE) {
-			MessageBox((HWND)os_get_window(), XSTR("You have selected TCP/IP for multiplayer FreeSpace, but the TCP socket is already in use.  Check for another instance and/or use the \"-port <port_num>\" command line option to select an available port.", 1620), "Error", MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR, XSTR("You have selected TCP/IP for multiplayer FreeSpace, but the TCP socket is already in use.  Check for another instance and/or use the \"-port <port_num>\" command line option to select an available port.", 1620));
 		}
 		else {
-			MessageBox((HWND)os_get_window(), XSTR("You have selected TCP/IP for multiplayer FreeSpace, but the TCP/IP protocol was not detected on your machine.", 362), "Error", MB_OK);
+			os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR, XSTR("You have selected TCP/IP for multiplayer FreeSpace, but the TCP/IP protocol was not detected on your machine.", 362));
 		}
 
 		exit(1);
@@ -1590,7 +1579,7 @@ void standalone_main_init()
 void standalone_main_do()
 {
  
-   Sleep(10);  // since nothing will really be going on here, we can afford to give some time
+   os_sleep(10);  // since nothing will really be going on here, we can afford to give some time
                // back to the operating system.
 
 	// kind of a do-nothing spin state.

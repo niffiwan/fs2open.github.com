@@ -29,6 +29,7 @@ union bm_extra_info {
 		int first_frame;    //!< used for animations -- points to index of first frame
 		int num_frames;     //!< used for animations -- number of frames in the animation
 		int keyframe;       //!< used for animations -- keyframe info
+		float total_time;   //!< used for animations -- total animation time (not always derived from num_frames/fps)
 		ubyte fps;          //!< used for animations -- frames per second
 
 		struct {
@@ -37,6 +38,10 @@ union bm_extra_info {
 			char  filename[MAX_FILENAME_LEN];   //!< filename for individual images
 			bool	in_subdir;								// Whether frames are in their own subdirectory
 		} eff;
+		struct {
+			bool  is_apng;      //!< Is this animation an APNG?
+			float frame_delay;  //!< cumulative frame delay
+		} apng;
 	} ani;
 
 	struct {
@@ -80,7 +85,7 @@ struct bitmap_entry {
 	// bookeeping
 	ubyte used_last_frame;  // If set, then it was used last frame
 	ubyte used_this_frame;  // If set, then it was used this frame
-	int   data_size;        // How much data this bitmap uses
+	size_t data_size;        // How much data this bitmap uses
 	int   used_count;       // How many times it was accessed
 #endif
 };
@@ -88,13 +93,14 @@ struct bitmap_entry {
 extern bitmap_entry bm_bitmaps[MAX_BITMAPS];
 
 // image specific lock functions
-void bm_lock_ani( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
-void bm_lock_dds( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
-void bm_lock_png( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
-void bm_lock_jpg( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
-void bm_lock_pcx( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
-void bm_lock_tga( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
-void bm_lock_user( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, ubyte bpp, ubyte flags );
+void bm_lock_ani( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, int bpp, ubyte flags );
+void bm_lock_dds( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, int bpp, ubyte flags );
+void bm_lock_png( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, int bpp, ubyte flags );
+void bm_lock_apng( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, int bpp, ubyte flags );
+void bm_lock_jpg( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, int bpp, ubyte flags );
+void bm_lock_pcx( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, int bpp, ubyte flags );
+void bm_lock_tga( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, int bpp, ubyte flags );
+void bm_lock_user( int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, int bpp, ubyte flags );
 
 
 #endif // __BM_INTERNAL_H__

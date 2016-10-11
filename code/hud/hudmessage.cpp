@@ -14,7 +14,7 @@
 
 
 #include "anim/animplay.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamesequence/gamesequence.h"
 #include "gamesnd/gamesnd.h"
 #include "globalincs/alphacolors.h"
@@ -30,7 +30,7 @@
 #include "missionui/missionscreencommon.h"
 #include "network/multi.h"
 #include "parse/parselo.h"
-#include "parse/scripting.h"
+#include "scripting/scripting.h"
 #include "playerman/player.h"
 #include "ship/ship.h"
 #include "sound/audiostr.h"
@@ -318,7 +318,7 @@ void HudGaugeMessages::processMessageBuffer()
 		ptr = strstr(msg, NOX(": ")) + 2;
 
 		if ( ptr ) {
-			gr_get_string_size(&sw, NULL, msg, ptr - msg);
+			gr_get_string_size(&sw, NULL, msg, (int)(ptr - msg));
 			offset = sw;
 		}
 
@@ -415,7 +415,15 @@ void HudGaugeMessages::scrollMessages()
 			*m = active_messages.back();
 			active_messages.pop_back();
 
-			continue;
+			if (active_messages.empty())
+			{
+				// We may not use the iterator any longer
+				break;
+			}
+			else
+			{
+				continue;
+			}
 		}
 
 		++m;
@@ -471,7 +479,7 @@ void HUD_fixed_printf(float duration, color col, const char *format, ...)
 {
 	va_list	args;
 	char		tmp[HUD_MSG_LENGTH_MAX];
-	int		msg_length;
+	size_t		msg_length;
 
 	// make sure we only print these messages if we're in the correct state
 	if((Game_mode & GM_MULTIPLAYER) && (Netgame.game_state != NETGAME_STATE_IN_MISSION)){
@@ -548,7 +556,7 @@ void HUD_ship_sent_printf(int sh, const char *format, ...)
 	va_list args;
 	char tmp[HUD_MSG_LENGTH_MAX];
 	tmp[sizeof(tmp)-1] = '\0';
-	int len;
+	size_t len;
 
 	snprintf(tmp, sizeof(tmp)-1, NOX("%s: "), Ships[sh].ship_name);
 	len = strlen(tmp);
@@ -683,7 +691,8 @@ void hud_add_line_to_scrollback(char *text, int source, int t, int x, int y, int
 void hud_add_msg_to_scrollback(const char *text, int source, int t)
 {
 	char buf[HUD_MSG_LENGTH_MAX], *ptr, *str;
-	int msg_len, w, max_width, x, offset = 0;
+	int w, max_width, x, offset = 0;
+	size_t msg_len;
 
 	max_width = Hud_mission_log_list2_coords[gr_screen.res][2];
 	msg_len = strlen(text);
@@ -695,7 +704,7 @@ void hud_add_msg_to_scrollback(const char *text, int source, int t)
 	strcpy_s(buf, text);
 	ptr = strstr(buf, NOX(": "));
 	if (ptr) {
-		gr_get_string_size(&w, NULL, buf, ptr - buf);
+		gr_get_string_size(&w, NULL, buf, (int)(ptr - buf));
 	}
 
 //	if (ptr) {
@@ -1336,9 +1345,14 @@ bool HudGaugeTalkingHead::canRender()
 	return true;
 }
 
-HudGaugeFixedMessages::HudGaugeFixedMessages():
-HudGauge(HUD_OBJECT_FIXED_MESSAGES, HUD_MESSAGE_LINES, false, true, (VM_WARP_CHASE), 255, 255, 255)
+HudGaugeFixedMessages::HudGaugeFixedMessages()
+	: HudGauge(HUD_OBJECT_FIXED_MESSAGES, HUD_MESSAGE_LINES, false, true, (VM_WARP_CHASE), 255, 255, 255)
+	, center_text(true)
 {
+}
+
+void HudGaugeFixedMessages::initCenterText(bool center) {
+	center_text = center;
 }
 
 void HudGaugeFixedMessages::render(float frametime) {
@@ -1349,7 +1363,13 @@ void HudGaugeFixedMessages::render(float frametime) {
 	if (!timestamp_elapsed(hp->end_time)) {
 		gr_set_color((hp->color >> 16) & 0xff, (hp->color >> 8) & 0xff, hp->color & 0xff);
 		
-		renderString(position[0], position[1], hp->text);
+		if (center_text) {
+			int w = 0;
+			gr_get_string_size(&w, nullptr, hp->text);
+			renderString(position[0] - (w / 2), position[1], hp->text);
+		} else {
+			renderString(position[0], position[1], hp->text);
+		}
 		//renderString(0x8000, MSG_WINDOW_Y_START + MSG_WINDOW_HEIGHT + 8, hp->text);
 	}
 }

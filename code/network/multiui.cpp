@@ -18,7 +18,7 @@
 #endif
 
 #include "network/multiui.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "network/multi.h"
 #include "network/multiutil.h"
 #include "network/multimsgs.h"
@@ -89,6 +89,13 @@ int Multi_common_text_max_display[GR_NUM_RESOLUTIONS] = {
 	8,		// GR_640
 	12,	// GR_1024
 };
+
+// Cutoff values for determining the color of the ping text in server select window
+// Pings below MULTI_PING_MIN_YELLOW are in green
+const int MULTI_PING_MIN_YELLOW = 100;
+const int MULTI_PING_MIN_ORANGE = 150;
+const int MULTI_PING_MIN_RED = 250;
+const int MULTI_PING_MIN_ONE_SECOND = 1000;
 
 #define MULTI_COMMON_TEXT_META_CHAR				'$'
 #define MULTI_COMMON_TEXT_MAX_LINE_LENGTH		200
@@ -426,12 +433,6 @@ void multi_common_set_palette()
 	if(Multi_common_interface_palette == -1){
 		multi_common_load_palette();
 	}
-	
-	if(Multi_common_interface_palette != -1){
-#ifndef HARDWARE_ONLY
-		palette_use_bm_palette(Multi_common_interface_palette);
-#endif
-	}
 }
 
 // unload the bitmap palette
@@ -679,11 +680,6 @@ int Mj_cd_coords[GR_NUM_RESOLUTIONS] = {
 #define IP_CONFIG_FNAME				"tcp.cfg"		// name of the file which contains known TCP addresses
 
 // extents of the entire boundable game info region
-// NOTE : these numbers are completely empirical
-#define MJ_PING_GREEN				160
-#define MJ_PING_YELLOW				300
-#define MJ_PING_RED					700
-#define MJ_PING_ONE_SECOND			1000
 
 int Mj_list_area_coords[GR_NUM_RESOLUTIONS][4] = {
 	{ // GR_640
@@ -1342,19 +1338,21 @@ void multi_join_display_games()
 			} 
 
 			// make sure the string fits in the display area and draw it
-			gr_force_fit_string(str,200,Mj_game_name_coords[gr_screen.res][MJ_W_COORD]);			
+			font::force_fit_string(str,200,Mj_game_name_coords[gr_screen.res][MJ_W_COORD]);			
 			gr_string(Mj_game_name_coords[gr_screen.res][MJ_X_COORD],y_start,str,GR_RESIZE_MENU);
 
 			// display the ping time
 			if(moveup->ping.ping_avg > 0){
-				if(moveup->ping.ping_avg > MJ_PING_ONE_SECOND){
+				if(moveup->ping.ping_avg > MULTI_PING_MIN_ONE_SECOND){
 					gr_set_color_fast(&Color_bright_red);
 					strcpy_s(str,XSTR("> 1 sec",761));
 				} else {
 					// set the appropriate ping time color indicator
-					if(moveup->ping.ping_avg > MJ_PING_RED){
+					if (moveup->ping.ping_avg > MULTI_PING_MIN_RED){
 						gr_set_color_fast(&Color_bright_red);
-					} else if(moveup->ping.ping_avg > MJ_PING_YELLOW){
+					} else if (moveup->ping.ping_avg > MULTI_PING_MIN_ORANGE){
+						gr_set_color_fast(&Color_orange);
+					} else if(moveup->ping.ping_avg > MULTI_PING_MIN_YELLOW){
 						gr_set_color_fast(&Color_bright_yellow);
 					} else {
 						gr_set_color_fast(&Color_bright_green);
@@ -1566,7 +1564,7 @@ void multi_join_eval_pong(net_addr *addr, fix pong_time)
 	if(moveup != NULL){
 		do {				
 			if(psnet_same(&moveup->server_addr,addr)){
-				multi_ping_eval_pong(&moveup->ping);
+				multi_ping_eval_pong(&moveup->ping, pong_time);
 				
 				break;
 			} else {
@@ -3382,13 +3380,7 @@ bool multi_create_sort_func(const multi_create_info &m1, const multi_create_info
 		test = stricmp(m1.name, m2.name);
 	}
 
-	if (test < 0) {
-		return true;
-	} else if (test > 0) {
-		return false;
-	} else {
-		return true;
-	}
+	return test < 0;
 }
 
 void multi_create_list_sort(int mode)
@@ -3726,10 +3718,10 @@ void multi_create_game_do()
 
 			// draw "Loading" on it
 			gr_set_color_fast(&Color_normal);
-			gr_set_font(FONT2);
+			font::set_font(font::FONT2);
 			gr_get_string_size(&str_w, &str_h, loading_str);
 			gr_string((gr_screen.max_w_unscaled - str_w) / 2, (gr_screen.max_h_unscaled - str_h) / 2, loading_str, GR_RESIZE_MENU);
-			gr_set_font(FONT1);
+			font::set_font(font::FONT1);
 
 			gr_flip();
 
@@ -4263,7 +4255,7 @@ void multi_create_plist_blit_normal()
 			if(Net_players[idx].flags & NETINFO_FLAG_OBSERVER){
 				strcat_s(str,XSTR("(O)",787));  // [[ Observer ]]
 			}
-			gr_force_fit_string(str,CALLSIGN_LEN,Mc_players_coords[gr_screen.res][MC_W_COORD] - total_offset);
+			font::force_fit_string(str,CALLSIGN_LEN,Mc_players_coords[gr_screen.res][MC_W_COORD] - total_offset);
 			gr_string(Mc_players_coords[gr_screen.res][MC_X_COORD] + total_offset,y_start,str,GR_RESIZE_MENU);
 
 			y_start += line_height;			
@@ -4337,7 +4329,7 @@ void multi_create_plist_blit_team()
 			if(Net_players[idx].flags & NETINFO_FLAG_OBSERVER){
 				strcat_s(str,XSTR("(O)",787));
 			}
-			gr_force_fit_string(str,CALLSIGN_LEN,Mc_players_coords[gr_screen.res][MC_W_COORD] - total_offset);
+			font::force_fit_string(str,CALLSIGN_LEN,Mc_players_coords[gr_screen.res][MC_W_COORD] - total_offset);
 
 			// display him in the correct half of the list depending on his team
 			gr_string(Mc_players_coords[gr_screen.res][MC_X_COORD] + total_offset,y_start,str,GR_RESIZE_MENU);
@@ -4403,7 +4395,7 @@ void multi_create_plist_blit_team()
 			if(Net_players[idx].flags & NETINFO_FLAG_OBSERVER){
 				strcat_s(str,XSTR("(O)",787));
 			}
-			gr_force_fit_string(str,CALLSIGN_LEN,Mc_players_coords[gr_screen.res][MC_W_COORD] - total_offset);
+			font::force_fit_string(str,CALLSIGN_LEN,Mc_players_coords[gr_screen.res][MC_W_COORD] - total_offset);
 
 			// display him in the correct half of the list depending on his team
 			gr_string(Mc_players_coords[gr_screen.res][MC_X_COORD] + total_offset,y_start,str,GR_RESIZE_MENU);
@@ -4649,7 +4641,7 @@ void multi_create_list_do()
 	int y_start = Mc_list_coords[gr_screen.res][MC_Y_COORD];		
 
 	start_index = multi_create_select_to_index(Multi_create_list_start);
-	stop_index = (Multi_create_list_mode == MULTI_CREATE_SHOW_MISSIONS) ? Multi_create_mission_list.size() : Multi_create_campaign_list.size();
+	stop_index = (int)((Multi_create_list_mode == MULTI_CREATE_SHOW_MISSIONS) ? Multi_create_mission_list.size() : Multi_create_campaign_list.size());
 
 	for (idx = start_index; idx < stop_index; idx++) {
 		multi_create_info *mcip;
@@ -4684,7 +4676,7 @@ void multi_create_list_do()
 		
 		// force fit the mission name string
 		strcpy_s(selected_name, mcip->name);
-		gr_force_fit_string(selected_name, 255, Mc_column1_w[gr_screen.res]);
+		font::force_fit_string(selected_name, 255, Mc_column1_w[gr_screen.res]);
 		gr_string(Mc_mission_name_x[gr_screen.res], y_start, selected_name, GR_RESIZE_MENU);
 
 		// draw the max players if in mission mode		
@@ -4693,7 +4685,7 @@ void multi_create_list_do()
 
 		// force fit the mission filename string
 		strcpy_s(selected_name, mcip->filename);
-		gr_force_fit_string(selected_name, 255, Mc_column3_w[gr_screen.res]);
+		font::force_fit_string(selected_name, 255, Mc_column3_w[gr_screen.res]);
 		gr_string(Mc_mission_fname_x[gr_screen.res], y_start, selected_name, GR_RESIZE_MENU);
 
 		y_start += line_height;
@@ -4866,7 +4858,7 @@ void multi_create_list_blit_icons(int list_index, int y_start)
 	int max_index;
 
 	// get a pointer to the list item
-	max_index = (Multi_create_list_mode == MULTI_CREATE_SHOW_MISSIONS) ? Multi_create_mission_list.size() - 1 : Multi_create_campaign_list.size() - 1;
+	max_index = (int)((Multi_create_list_mode == MULTI_CREATE_SHOW_MISSIONS) ? Multi_create_mission_list.size() - 1 : Multi_create_campaign_list.size() - 1);
 
 	if ( (list_index < 0) || (list_index > max_index) ) {
 		return;
@@ -7023,7 +7015,7 @@ void multi_jw_plist_blit_normal()
 			if(Net_players[idx].flags & NETINFO_FLAG_OBSERVER){
 				strcat_s(str,"(0)");
 			}
-			gr_force_fit_string(str,CALLSIGN_LEN,Mjw_players_coords[gr_screen.res][MJW_W_COORD] - total_offset);
+			font::force_fit_string(str,CALLSIGN_LEN,Mjw_players_coords[gr_screen.res][MJW_W_COORD] - total_offset);
 			gr_string(Mjw_players_coords[gr_screen.res][MJW_X_COORD] + total_offset,y_start,str,GR_RESIZE_MENU);
 
 			y_start += line_height;			
@@ -7095,7 +7087,7 @@ void multi_jw_plist_blit_team()
 
 			// make sure the string will fit
 			strcpy_s(str,Net_players[idx].m_player->callsign);
-			gr_force_fit_string(str,CALLSIGN_LEN,Mjw_players_coords[gr_screen.res][MJW_W_COORD] - total_offset);
+			font::force_fit_string(str,CALLSIGN_LEN,Mjw_players_coords[gr_screen.res][MJW_W_COORD] - total_offset);
 
 			// display him in the correct half of the list depending on his team
 			gr_string(Mjw_players_coords[gr_screen.res][MJW_X_COORD] + total_offset,y_start,str,GR_RESIZE_MENU);
@@ -7155,7 +7147,7 @@ void multi_jw_plist_blit_team()
 			if(Net_players[idx].flags & NETINFO_FLAG_OBSERVER){
 				strcat_s(str,"(0)");
 			}
-			gr_force_fit_string(str,CALLSIGN_LEN,Mjw_players_coords[gr_screen.res][MJW_W_COORD] - total_offset);
+			font::force_fit_string(str,CALLSIGN_LEN,Mjw_players_coords[gr_screen.res][MJW_W_COORD] - total_offset);
 
 			// display him in the correct half of the list depending on his team
 			gr_string(Mjw_players_coords[gr_screen.res][MJW_X_COORD] + total_offset,y_start,str,GR_RESIZE_MENU);
@@ -8342,7 +8334,7 @@ void multi_sync_display_name(const char *name,int index,int np_index)
 
 	// if we're in team vs. team mode
 	if(Netgame.type_flags & NG_TYPE_TEAM){
-		gr_force_fit_string(fit,CALLSIGN_LEN, Ms_status2_coords[gr_screen.res][MS_X_COORD] - Ms_status_coords[gr_screen.res][MS_X_COORD] - 20 - Ms_cd_icon_offset[gr_screen.res] - Ms_team_icon_offset[gr_screen.res]);			
+		font::force_fit_string(fit,CALLSIGN_LEN, Ms_status2_coords[gr_screen.res][MS_X_COORD] - Ms_status_coords[gr_screen.res][MS_X_COORD] - 20 - Ms_cd_icon_offset[gr_screen.res] - Ms_team_icon_offset[gr_screen.res]);			
 
 		// if this is the currently selected player, draw him highlighted
 		if(np_index == Multi_sync_player_select){
@@ -8390,7 +8382,7 @@ void multi_sync_display_name(const char *name,int index,int np_index)
 			}
 		}		
 	} else {
-		gr_force_fit_string(fit, CALLSIGN_LEN, Ms_status2_coords[gr_screen.res][MS_X_COORD] - Ms_status_coords[gr_screen.res][MS_X_COORD] - 20 - Ms_cd_icon_offset[gr_screen.res]);
+		font::force_fit_string(fit, CALLSIGN_LEN, Ms_status2_coords[gr_screen.res][MS_X_COORD] - Ms_status_coords[gr_screen.res][MS_X_COORD] - 20 - Ms_cd_icon_offset[gr_screen.res]);
 
 		// if this is the currently selected player, draw him highlighted
 		if(np_index == Multi_sync_player_select){
@@ -8416,7 +8408,7 @@ void multi_sync_display_status(const char *status,int index)
 
 	// make sure the string actually fits
 	strcpy_s(fit, status);
-	gr_force_fit_string(fit, 250, Ms_status2_coords[gr_screen.res][MS_W_COORD] - 20);
+	font::force_fit_string(fit, 250, Ms_status2_coords[gr_screen.res][MS_W_COORD] - 20);
 	gr_set_color_fast(&Color_bright);	
 	gr_string(Ms_status2_coords[gr_screen.res][MS_X_COORD], Ms_status2_coords[gr_screen.res][MS_Y_COORD] + (index * (gr_get_font_height() + 1)), fit, GR_RESIZE_MENU);		
 }

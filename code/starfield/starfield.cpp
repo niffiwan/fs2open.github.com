@@ -13,7 +13,8 @@
 
 #include "cmdline/cmdline.h"
 #include "debugconsole/console.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
+#include "graphics/paths/PathRenderer.h"
 #include "hud/hud.h"
 #include "hud/hudtarget.h"
 #include "io/timer.h"
@@ -200,7 +201,7 @@ void stars_load_debris_vclips(debris_vclip *vclips)
 	}
 
 	for (i = 0; i < MAX_DEBRIS_VCLIPS; i++) {
-		vclips[i].bm = bm_load_animation( vclips[i].name, &vclips[i].nframes, NULL, NULL, 1 );
+		vclips[i].bm = bm_load_animation( vclips[i].name, &vclips[i].nframes, nullptr, nullptr, nullptr, true );
 
 		if ( vclips[i].bm < 0 ) {
 			// try loading it as a single bitmap
@@ -614,7 +615,7 @@ void stars_load_all_bitmaps()
 
 			// maybe didn't load a static image so try for an animated one
 			if (sb->bitmap_id < 0) {
-				sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, NULL, 1);
+				sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, nullptr, nullptr, true);
 
 				if (sb->bitmap_id < 0) {
 					mprintf(("Unable to load starfield bitmap: '%s'!\n", sb->filename));
@@ -636,7 +637,7 @@ void stars_load_all_bitmaps()
 
 			// maybe didn't load a static image so try for an animated one
 			if (sb->bitmap_id < 0) {
-				sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, NULL, 1);
+				sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, nullptr, nullptr, true);
 
 				if (sb->bitmap_id < 0) {
 					Warning(LOCATION, "Unable to load sun bitmap: '%s'!\n", sb->filename);
@@ -650,7 +651,7 @@ void stars_load_all_bitmaps()
 
 			// maybe didn't load a static image so try for an animated one
 			if (sb->glow_bitmap < 0) {
-				sb->glow_bitmap = bm_load_animation(sb->glow_filename, &sb->glow_n_frames, &sb->glow_fps, NULL, 1);
+				sb->glow_bitmap = bm_load_animation(sb->glow_filename, &sb->glow_n_frames, &sb->glow_fps, nullptr, nullptr, true);
 
 				if (sb->glow_bitmap < 0) {
 					Warning(LOCATION, "Unable to load sun glow bitmap: '%s'!\n", sb->glow_filename);
@@ -790,7 +791,7 @@ void stars_post_level_init()
 	stars_set_background_model(The_mission.skybox_model, NULL, The_mission.skybox_flags);
 	stars_set_background_orientation(&The_mission.skybox_orientation);
 
-	stars_load_debris( ((The_mission.flags & MISSION_FLAG_FULLNEB) || Nebula_sexp_used) );
+	stars_load_debris( ((The_mission.flags[Mission::Mission_Flags::Fullneb]) || Nebula_sexp_used) );
 
 // following code randomly distributes star points within a sphere volume, which
 // avoids there being denser areas along the edges and in corners that we had in the
@@ -1087,16 +1088,36 @@ void stars_draw_sun(int show_sun)
 			local_scale = 1.0f;
 
 		// draw the sun itself, keep track of how many we drew
+		int bitmap_id = -1;
 		if (bm->fps) {
-			gr_set_bitmap(bm->bitmap_id + ((timestamp() / (int)(bm->fps)) % bm->n_frames), GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.999f);
+			//gr_set_bitmap(bm->bitmap_id + ((timestamp() / (int)(bm->fps)) % bm->n_frames), GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.999f);
+			bitmap_id = bm->bitmap_id + ((timestamp() / (int)(bm->fps)) % bm->n_frames);
 		} else {
-			gr_set_bitmap(bm->bitmap_id, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.999f);
+			//gr_set_bitmap(bm->bitmap_id, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.999f);
+			bitmap_id = bm->bitmap_id;
 		}
 
 		g3_rotate_faraway_vertex(&sun_vex, &sun_pos);
 
-		if ( !g3_draw_bitmap(&sun_vex, 0, 0.05f * Suns[idx].scale_x * local_scale, TMAP_FLAG_TEXTURED) )
-			Sun_drew++;
+		if ( sun_vex.codes & (CC_BEHIND|CC_OFF_USER) ) {
+			return;
+		}
+
+		if ( !(sun_vex.flags & PF_PROJECTED) ) {
+			g3_project_vertex(&sun_vex);
+		}
+
+		if ( sun_vex.flags & PF_OVERFLOW ) {
+			return;
+		}
+
+		material mat_params;
+		material_set_unlit(&mat_params, bitmap_id, 0.999f, true, false);
+		g3_render_rect_screen_aligned_2d(&mat_params, &sun_vex, 0, 0.05f * Suns[idx].scale_x * local_scale);
+		Sun_drew++;
+
+// 		if ( !g3_draw_bitmap(&sun_vex, 0, 0.05f * Suns[idx].scale_x * local_scale, TMAP_FLAG_TEXTURED) )
+// 			Sun_drew++;
 	}
 }
 
@@ -1136,15 +1157,17 @@ void stars_draw_lens_flare(vertex *sun_vex, int sun_n)
 		if (bm->flare_bitmaps[j].bitmap_id < 0)
 			continue;
 
-		gr_set_bitmap(bm->flare_bitmaps[j].bitmap_id, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.999f);
+		//gr_set_bitmap(bm->flare_bitmaps[j].bitmap_id, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.999f);
 
 		for (i = 0; i < bm->n_flares; i++) {
 			// draw sorted by texture, to minimize texture changes. not the most efficient way, but better than non-sorted
 			if (bm->flare_infos[i].tex_num == j) {
-//				gr_set_bitmap(bm->flare_bitmaps[bm->flare_infos[i].tex_num], GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.999f);
 				flare_vex.screen.xyw.x = sun_vex->screen.xyw.x + dx * bm->flare_infos[i].pos;
 				flare_vex.screen.xyw.y = sun_vex->screen.xyw.y + dy * bm->flare_infos[i].pos;
-				g3_draw_bitmap(&flare_vex, 0, 0.05f * bm->flare_infos[i].scale, TMAP_FLAG_TEXTURED);
+				//g3_draw_bitmap(&flare_vex, 0, 0.05f * bm->flare_infos[i].scale, TMAP_FLAG_TEXTURED);
+				material mat_params;
+				material_set_unlit(&mat_params, bm->flare_bitmaps[j].bitmap_id, 0.999f, true, false);
+				g3_render_rect_screen_aligned_2d(&mat_params, &flare_vex, 0, 0.05f * bm->flare_infos[i].scale);
 			}
 		}
 	}
@@ -1194,15 +1217,21 @@ void stars_draw_sun_glow(int sun_n)
 		local_scale = 1.0f;
 
 	// draw the sun itself, keep track of how many we drew
+	int bitmap_id = -1;
 	if (bm->glow_fps) {
-		gr_set_bitmap(bm->glow_bitmap + ((timestamp() / (int)(bm->glow_fps)) % bm->glow_n_frames), GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.5f);
+		//gr_set_bitmap(bm->glow_bitmap + ((timestamp() / (int)(bm->glow_fps)) % bm->glow_n_frames), GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.5f);
+		bitmap_id = bm->glow_bitmap + ((timestamp() / (int)(bm->glow_fps)) % bm->glow_n_frames);
 	} else {
-		gr_set_bitmap(bm->glow_bitmap, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.5f);
+		//gr_set_bitmap(bm->glow_bitmap, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.5f);
+		bitmap_id = bm->glow_bitmap;
 	}
 
 	g3_rotate_faraway_vertex(&sun_vex, &sun_pos);
-	int zbuff = gr_zbuffer_set(GR_ZBUFF_NONE);
-	g3_draw_bitmap(&sun_vex, 0, 0.10f * Suns[sun_n].scale_x * local_scale, TMAP_FLAG_TEXTURED);
+	//int zbuff = gr_zbuffer_set(GR_ZBUFF_NONE);
+	//g3_draw_bitmap(&sun_vex, 0, 0.10f * Suns[sun_n].scale_x * local_scale, TMAP_FLAG_TEXTURED);
+	material mat_params;
+	material_set_unlit(&mat_params, bitmap_id, 0.5f, true, false);
+	g3_render_rect_screen_aligned_2d(&mat_params, &sun_vex, 0, 0.10f * Suns[sun_n].scale_x * local_scale);
 
 	if (bm->flare) {
 		vec3d light_dir;
@@ -1214,11 +1243,9 @@ void stars_draw_sun_glow(int sun_n)
 			stars_draw_lens_flare(&sun_vex, sun_n);
 	}
 
-	gr_zbuffer_set(zbuff);
+	//gr_zbuffer_set(zbuff);
 }
 
-
-// draw bitmaps
 void stars_draw_bitmaps(int show_bitmaps)
 {
 	int idx;
@@ -1229,23 +1256,14 @@ void stars_draw_bitmaps(int show_bitmaps)
 		return;
 
 	// if we're in the nebula, don't render any backgrounds
-	if (The_mission.flags & MISSION_FLAG_FULLNEB)
+	if (The_mission.flags[Mission::Mission_Flags::Fullneb])
 		return;
 
 	// detail settings
 	if ( !Detail.planets_suns )
 		return;
 
-	if ( !Cmdline_nohtl ) {
-		gr_start_instance_matrix(&Eye_position, &vmd_identity_matrix);
-	}
-
-	// turn off culling
-	int cull = gr_set_cull(0);
-
-	// turn off zbuffering
-	int saved_zbuffer_mode = gr_zbuffer_get();
-	gr_zbuffer_set(GR_ZBUFF_NONE);
+	gr_start_instance_matrix(&Eye_position, &vmd_identity_matrix);
 
 	int sb_instances = (int)Starfield_bitmap_instances.size();
 
@@ -1262,35 +1280,34 @@ void stars_draw_bitmaps(int show_bitmaps)
 			continue;
 		}
 
-		int tmap_flags = TMAP_FLAG_TEXTURED | TMAP_FLAG_CORRECT | TMAP_FLAG_TRILIST | TMAP_HTL_3D_UNLIT;
+		int bitmap_id;
+		bool blending = false;
+		float alpha = 1.0f;
 
 		if (Starfield_bitmaps[star_index].xparent) {
 			if (Starfield_bitmaps[star_index].fps) {
-				gr_set_bitmap(Starfield_bitmaps[star_index].bitmap_id + ((timestamp() / (int)(Starfield_bitmaps[star_index].fps)) % Starfield_bitmaps[star_index].n_frames));		
+				bitmap_id = Starfield_bitmaps[star_index].bitmap_id + ((timestamp() / (int)(Starfield_bitmaps[star_index].fps)) % Starfield_bitmaps[star_index].n_frames);
 			} else {
-				gr_set_bitmap(Starfield_bitmaps[star_index].bitmap_id);
+				bitmap_id = Starfield_bitmaps[star_index].bitmap_id;
 			}
-
-			tmap_flags |= TMAP_FLAG_XPARENT;
 		} else {
 			if (Starfield_bitmaps[star_index].fps) {
-				gr_set_bitmap(Starfield_bitmaps[star_index].bitmap_id + ((timestamp() / (int)(Starfield_bitmaps[star_index].fps)) % Starfield_bitmaps[star_index].n_frames), GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.9999f);	
+				bitmap_id = Starfield_bitmaps[star_index].bitmap_id + ((timestamp() / (int)(Starfield_bitmaps[star_index].fps)) % Starfield_bitmaps[star_index].n_frames);
+				blending = true;
+				alpha = 0.9999f;
 			} else {
-				gr_set_bitmap(Starfield_bitmaps[star_index].bitmap_id, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.9999f);	
+				bitmap_id = Starfield_bitmaps[star_index].bitmap_id;	
+				blending = true;
+				alpha = 0.9999f;
 			}
 		}
 
-		gr_render(Starfield_bitmap_instances[idx].n_verts, Starfield_bitmap_instances[idx].verts, tmap_flags);
+		material material_params;
+		material_set_unlit(&material_params, bitmap_id, alpha, blending, false);
+		g3_render_primitives_textured(&material_params, Starfield_bitmap_instances[idx].verts, Starfield_bitmap_instances[idx].n_verts, PRIM_TYPE_TRIS, false);
 	}
-
-	// turn on culling
-	gr_set_cull(cull);
-
-	// restore zbuffer
-	gr_zbuffer_set(saved_zbuffer_mode);
-
-	if ( !Cmdline_nohtl )
-		gr_end_instance_matrix();
+	
+	gr_end_instance_matrix();
 }
 
 extern int Interp_subspace;
@@ -1435,13 +1452,11 @@ void subspace_render()
 	render_info.set_alpha(1.0f);
 	render_info.set_flags(render_flags);
 
-	if (!Cmdline_nohtl)
-		gr_set_texture_panning(Interp_subspace_offset_v, Interp_subspace_offset_u, true);
+	gr_set_texture_panning(Interp_subspace_offset_v, Interp_subspace_offset_u, true);
 
 	model_render_immediate( &render_info, Subspace_model_outer, &tmp, &Eye_position);	//MR_NO_CORRECT|MR_SHOW_OUTLINE
 
-	if (!Cmdline_nohtl)
-		gr_set_texture_panning(0, 0, false);
+	gr_set_texture_panning(0, 0, false);
 
 	Interp_subspace = 1;
 	Interp_subspace_offset_u = 1.0f - subspace_offset_u_inner;
@@ -1455,13 +1470,11 @@ void subspace_render()
 	render_info.set_alpha(1.0f);
 	render_info.set_flags(render_flags);
 
-	if (!Cmdline_nohtl)
-		gr_set_texture_panning(Interp_subspace_offset_v, Interp_subspace_offset_u, true);
+	gr_set_texture_panning(Interp_subspace_offset_v, Interp_subspace_offset_u, true);
 
 	model_render_immediate( &render_info, Subspace_model_inner, &tmp, &Eye_position );	//MR_NO_CORRECT|MR_SHOW_OUTLINE
 
-	if (!Cmdline_nohtl)
-		gr_set_texture_panning(0, 0, false);
+	gr_set_texture_panning(0, 0, false);
 
 	//Render subspace glows here and not as thrusters - Valathil 
 	vec3d glow_pos;
@@ -1471,177 +1484,23 @@ void subspace_render()
 	glow_pos.xyz.y = 0.0f;
 	glow_pos.xyz.z = 100.0f;
 
-	gr_set_bitmap(Subspace_glow_bitmap, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 1.0f);
+	//gr_set_bitmap(Subspace_glow_bitmap, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 1.0f);
+	material mat_params;
+	material_set_unlit(&mat_params, Subspace_glow_bitmap, 1.0f, true, false);
+
 	g3_rotate_faraway_vertex(&glow_vex, &glow_pos);
-	g3_draw_bitmap(&glow_vex, 0, 17.0f + 0.5f * Noise[framenum], TMAP_FLAG_TEXTURED);
+	//g3_draw_bitmap(&glow_vex, 0, 17.0f + 0.5f * Noise[framenum], TMAP_FLAG_TEXTURED);
+	g3_render_rect_screen_aligned_2d(&mat_params, &glow_vex, 0, 17.0f + 0.5f * Noise[framenum]);
 
 	glow_pos.xyz.z = -100.0f;
 
 	g3_rotate_faraway_vertex(&glow_vex, &glow_pos);
-	g3_draw_bitmap(&glow_vex, 0, 17.0f + 0.5f * Noise[framenum], TMAP_FLAG_TEXTURED);
+	//g3_draw_bitmap(&glow_vex, 0, 17.0f + 0.5f * Noise[framenum], TMAP_FLAG_TEXTURED);
+	g3_render_rect_screen_aligned_2d(&mat_params, &glow_vex, 0, 17.0f + 0.5f * Noise[framenum]);
 
 	Interp_subspace = 0;
 	gr_zbuffer_set(saved_gr_zbuffering);
 }
-
-
-#ifdef NEW_STARS
-//each star is actualy a line
-//so each star point is actualy two points
-struct star_point {
-	star_point() {
-		memset(p1.color,INT_MAX,4);
-		p2.color[0]=64;
-		p2.color[1]=64;
-		p2.color[2]=64;
-		p2.color[3]=64;
-	}
-	colored_vector p1,p2;
-	void set(vertex* P1,vertex* P2, color*Col) {
-		p1.vec.set_screen_vert(*P1);
-		p2.vec.set_screen_vert(*P2);
-		if(gr_screen.mode == GR_OPENGL)
-			memcpy(p1.color, &Col->red,3);
-		else {
-			memcpy(&p1.color[1], &Col->red,3);
-		}
-	};
-};
-
-class star_point_list {
-	int n_points;
-	star_point *point_list;
-public:
-	star_point_list():n_points(0),point_list(NULL){};
-	~star_point_list(){if(point_list)delete[]point_list;};
-
-	void allocate(int size){
-		if(size<=n_points)return;
-		if(point_list)delete[]point_list;
-		point_list = new star_point[size];
-		n_points = size;
-	}
-	star_point* operator[] (int idx) {
-		return &point_list[idx];
-	}
-	colored_vector* get_buffer(){return &point_list->p1;};
-};
-
-star_point_list star_list;
-
-void new_stars_draw_stars()//don't use me yet, I'm still haveing my API interface figured out-Bobboau
-{
-	star_list.allocate(Num_stars);
-
-	//Num_stars = 1;
-	int i;
-	star *sp;
-	float dist = 0.0f;
-	float ratio;
-	int color;
-	float colorf;
-	vertex p1, p2;
-	int can_draw = 1;
-
-	if ( !last_stars_filled ) {
-		for (sp=Stars,i=0; i<Num_stars; i++, sp++ ) {
-			vertex p2;
-			g3_rotate_faraway_vertex(&p2, &sp->pos);
-			sp->last_star_pos.xyz.x = p2.x;
-			sp->last_star_pos.xyz.y = p2.y;
-			sp->last_star_pos.xyz.z = p2.z;
-		}
-	}
-
-	int tmp_num_stars;
-
-	tmp_num_stars = (Detail.num_stars*Num_stars)/MAX_DETAIL_LEVEL;
-	if (tmp_num_stars < 0 ) {
-		tmp_num_stars = 0;
-	} else if ( tmp_num_stars > Num_stars ) {
-		tmp_num_stars = Num_stars;
-	}
-	
-	int stars_to_draw = 0;
-	for (sp=Stars,i=0; i<tmp_num_stars; i++, sp++ ) {
-		can_draw=1;
-		memset(&p1, 0, sizeof(vertex));
-		memset(&p2, 0, sizeof(vertex));
-
-		// This makes a star look "proper" by not translating the
-		// point around the viewer's eye before rotation.  In other
-		// words, when the ship translates, the stars do not change.
-
-		g3_rotate_faraway_vertex(&p2, &sp->pos);
-		if ( p2.codes ) {
-			can_draw = 0;
-		} else {
-			g3_project_vertex(&p2);
-			if ( p2.flags & PF_OVERFLOW ) {
-				can_draw = 0;
-			}
-		}
-
-		
-
-		if ( can_draw && (Star_flags & (STAR_FLAG_TAIL|STAR_FLAG_DIM)) ) {
-
-			dist = vm_vec_dist_quick( &sp->last_star_pos, (vec3d *)&p2.x );
-
-			if ( dist > Star_max_length ) {
- 				ratio = Star_max_length / dist;
-				dist = Star_max_length;
-			} else {
-				ratio = 1.0f;
-			}
-			
-			ratio *= Star_amount;
-
-			p1.x = p2.x + (sp->last_star_pos.xyz.x-p2.x)*ratio;
-			p1.y = p2.y + (sp->last_star_pos.xyz.y-p2.y)*ratio;
-			p1.z = p2.z + (sp->last_star_pos.xyz.z-p2.z)*ratio;
-
-			p1.flags = 0;	// not projected
-			g3_code_vertex( &p1 );
-
-			if ( p1.codes ) {
-				can_draw = 0;
-			} else {
-				g3_project_vertex(&p1);
-				if ( p1.flags & PF_OVERFLOW ) {
-					can_draw = 0;
-				}
-			}
-		}
-
-		sp->last_star_pos.xyz.x = p2.x;
-		sp->last_star_pos.xyz.y = p2.y;
-		sp->last_star_pos.xyz.z = p2.z;
-
-		if ( !can_draw )	continue;
-
-		if ( Star_flags & STAR_FLAG_DIM )	{
-			colorf = 255.0f - dist*Star_dim;
-			if ( colorf < Star_cap )
-				colorf = Star_cap;
-			color = (fl2i(colorf)*(i&7))/256;
-		} else {
-			color = i & 7;
-		}
-
-		p1.sx-=1.5f;
-		p1.sy-=1.5f;
-		p2.sx+=1.5f;
-		p2.sy+=1.5f;
-		star_list[stars_to_draw++]->set(&p2,&p1,&sp->col);
-	}
-	gr_set_color_fast( &Stars->col );
-	gr_zbuffer_set(GR_ZBUFF_NONE);
-	gr_draw_line_list(star_list.get_buffer(), stars_to_draw);
-	
-}
-#endif	// NEW_STARS
-
 
 void stars_draw_stars()
 {
@@ -1665,6 +1524,12 @@ void stars_draw_stars()
 	tmp_num_stars = (Detail.num_stars * Num_stars) / MAX_DETAIL_LEVEL;
 	CLAMP(tmp_num_stars, 0, Num_stars);
 
+	auto path = graphics::paths::PathRenderer::instance();
+
+	path->saveState();
+	path->resetState();
+
+	path->beginFrame();
 
 	for (i = 0; i < tmp_num_stars; i++) {
 		sp = &Stars[i];
@@ -1721,8 +1586,6 @@ void stars_draw_stars()
 		if ( !can_draw )
 			continue;
 
-		gr_set_color_fast( &sp->col );
-
 		vDst.x = fl2i(p1.screen.xyw.x) - fl2i(p2.screen.xyw.x);
 		vDst.y = fl2i(p1.screen.xyw.y) - fl2i(p2.screen.xyw.y);
 
@@ -1730,9 +1593,17 @@ void stars_draw_stars()
 			p1.screen.xyw.x = p2.screen.xyw.x + 1.0f;
 			p1.screen.xyw.y = p2.screen.xyw.y;
 		}
+		path->beginPath();
 
-		gr_aaline(&p1, &p2);
+		path->moveTo(p1.screen.xyw.x, p1.screen.xyw.y);
+		path->lineTo(p2.screen.xyw.x, p2.screen.xyw.y);
+
+		path->setStrokeColor(&sp->col);
+		path->stroke();
 	}
+	path->endFrame();
+	
+	path->restoreState();
 }
 
 void stars_draw_debris()
@@ -1750,7 +1621,7 @@ void stars_draw_debris()
 	gr_set_color( 0, 0, 0 );
 
 	// turn off fogging
-	if (The_mission.flags & MISSION_FLAG_FULLNEB) {
+	if (The_mission.flags[Mission::Mission_Flags::Fullneb]) {
 		gr_fog_set(GR_FOGMODE_NONE, 0, 0, 0);
 	}
 
@@ -1770,7 +1641,7 @@ void stars_draw_debris()
 			d->vclip = i % MAX_DEBRIS_VCLIPS;	//rand()
 
 			// if we're in full neb mode
-			if((The_mission.flags & MISSION_FLAG_FULLNEB) && (Neb2_render_mode != NEB2_RENDER_NONE)) {
+			if((The_mission.flags[Mission::Mission_Flags::Fullneb]) && (Neb2_render_mode != NEB2_RENDER_NONE)) {
 				d->size = i2fl(myrand() % 4)*BASE_SIZE_NEB;
 			} else {
 				d->size = i2fl(myrand() % 4)*BASE_SIZE;
@@ -1789,14 +1660,19 @@ void stars_draw_debris()
 			int frame = Missiontime / (DEBRIS_ROT_MIN + (i % DEBRIS_ROT_RANGE) * DEBRIS_ROT_RANGE_SCALER);
 			frame %= Debris_vclips[d->vclip].nframes;
 
-			if ( (The_mission.flags & MISSION_FLAG_FULLNEB) && (Neb2_render_mode != NEB2_RENDER_NONE) ) {
-				gr_set_bitmap( Debris_vclips[d->vclip].bm + frame, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.3f);
-			} else {
-				gr_set_bitmap( Debris_vclips[d->vclip].bm + frame, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 1.0f);
-			}
+			float alpha;
 
+			if ( (The_mission.flags[Mission::Mission_Flags::Fullneb]) && (Neb2_render_mode != NEB2_RENDER_NONE) ) {
+				alpha = 0.3f;
+			} else {
+				alpha = 1.0f;
+			}
+			
 			vm_vec_add( &tmp, &d->last_pos, &Eye_position );
-			g3_draw_laser( &d->pos,d->size,&tmp,d->size, TMAP_FLAG_TEXTURED|TMAP_FLAG_XPARENT, 25.0f );
+			//g3_draw_laser( &d->pos,d->size,&tmp,d->size, TMAP_FLAG_TEXTURED|TMAP_FLAG_XPARENT, 25.0f );
+			material mat_params;
+			material_set_unlit(&mat_params, Debris_vclips[d->vclip].bm + frame, alpha, true, true);
+			g3_render_laser_2d(&mat_params, &d->pos, d->size, &tmp, d->size, 25.0f);
 		}
 
 		vm_vec_sub( &d->last_pos, &d->pos, &Eye_position );
@@ -1845,7 +1721,7 @@ void stars_draw(int show_stars, int show_suns, int show_nebulas, int show_subspa
 		stars_draw_background();
 	}
 
-	if ( !env && show_stars && (Nmodel_num < 0) && (Game_detail_flags & DETAIL_FLAG_STARS) && !(The_mission.flags & MISSION_FLAG_FULLNEB) && (supernova_active() < 3) ) {
+	if ( !env && show_stars && (Nmodel_num < 0) && (Game_detail_flags & DETAIL_FLAG_STARS) && !(The_mission.flags[Mission::Mission_Flags::Fullneb]) && (supernova_active() < 3) ) {
 		stars_draw_stars();
 	}
 
@@ -1962,7 +1838,7 @@ void stars_page_in()
 
 				// maybe didn't load a static image so try for an animated one
 				if (sb->bitmap_id < 0) {
-					sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, NULL, 1);
+					sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, nullptr, nullptr, true);
 
 					if (sb->bitmap_id < 0) {
 						Warning(LOCATION, "Unable to load starfield bitmap: '%s'!\n", sb->filename);
@@ -1994,7 +1870,7 @@ void stars_page_in()
 
 				// maybe didn't load a static image so try for an animated one
 				if (sb->bitmap_id < 0) {
-					sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, NULL, 1);
+					sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, nullptr, nullptr, true);
 
 					if (sb->bitmap_id < 0) {
 						Warning(LOCATION, "Unable to load sun bitmap: '%s'!\n", sb->filename);
@@ -2008,7 +1884,7 @@ void stars_page_in()
 
 				// maybe didn't load a static image so try for an animated one
 				if (sb->glow_bitmap < 0) {
-					sb->glow_bitmap = bm_load_animation(sb->glow_filename, &sb->glow_n_frames, &sb->glow_fps, NULL, 1);
+					sb->glow_bitmap = bm_load_animation(sb->glow_filename, &sb->glow_n_frames, &sb->glow_fps, nullptr, nullptr, true);
 
 					if (sb->glow_bitmap < 0) {
 						Warning(LOCATION, "Unable to load sun glow bitmap: '%s'!\n", sb->glow_filename);
@@ -2058,7 +1934,7 @@ void stars_page_in()
 
 			// maybe didn't load a static image so try for an animated one
 			if (sb->bitmap_id < 0) {
-				sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, NULL, 1);
+				sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, nullptr, nullptr, true);
 
 				if (sb->bitmap_id < 0) {
 					Warning(LOCATION, "Unable to load starfield bitmap: '%s'!\n", sb->filename);
@@ -2094,7 +1970,7 @@ void stars_page_in()
 
 			// maybe didn't load a static image so try for an animated one
 			if (sb->bitmap_id < 0) {
-				sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, NULL, 1);
+				sb->bitmap_id = bm_load_animation(sb->filename, &sb->n_frames, &sb->fps, nullptr, nullptr, true);
 
 				if (sb->bitmap_id < 0) {
 					Warning(LOCATION, "Unable to load sun bitmap: '%s'!\n", sb->filename);
@@ -2108,7 +1984,7 @@ void stars_page_in()
 
 			// maybe didn't load a static image so try for an animated one
 			if (sb->glow_bitmap < 0) {
-				sb->glow_bitmap = bm_load_animation(sb->glow_filename, &sb->glow_n_frames, &sb->glow_fps, NULL, 1);
+				sb->glow_bitmap = bm_load_animation(sb->glow_filename, &sb->glow_n_frames, &sb->glow_fps, nullptr, nullptr, true);
 
 				if (sb->glow_bitmap < 0) {
 					Warning(LOCATION, "Unable to load sun glow bitmap: '%s'!\n", sb->glow_filename);
@@ -2285,7 +2161,7 @@ int stars_add_sun_entry(starfield_list_entry *sun_ptr)
 
 			// maybe didn't load a static image so try for an animated one
 		if (Sun_bitmaps[idx].bitmap_id < 0) {
-			Sun_bitmaps[idx].bitmap_id = bm_load_animation(Sun_bitmaps[idx].filename, &Sun_bitmaps[idx].n_frames, &Sun_bitmaps[idx].fps, NULL, 1);
+			Sun_bitmaps[idx].bitmap_id = bm_load_animation(Sun_bitmaps[idx].filename, &Sun_bitmaps[idx].n_frames, &Sun_bitmaps[idx].fps, nullptr, nullptr, true);
 
 			if (Sun_bitmaps[idx].bitmap_id < 0) {
 				// failed
@@ -2299,7 +2175,7 @@ int stars_add_sun_entry(starfield_list_entry *sun_ptr)
 
 			// maybe didn't load a static image so try for an animated one
 			if (Sun_bitmaps[idx].glow_bitmap < 0) {
-				Sun_bitmaps[idx].glow_bitmap = bm_load_animation(Sun_bitmaps[idx].glow_filename, &Sun_bitmaps[idx].glow_n_frames, &Sun_bitmaps[idx].glow_fps, NULL, 1);
+				Sun_bitmaps[idx].glow_bitmap = bm_load_animation(Sun_bitmaps[idx].glow_filename, &Sun_bitmaps[idx].glow_n_frames, &Sun_bitmaps[idx].glow_fps, nullptr, nullptr, true);
 
 				if (Sun_bitmaps[idx].glow_bitmap < 0) {
 					Warning(LOCATION, "Unable to load sun glow bitmap: '%s'!\n", Sun_bitmaps[idx].glow_filename);
@@ -2339,7 +2215,7 @@ int stars_add_sun_entry(starfield_list_entry *sun_ptr)
 	// ... or add a new one 
 	Suns.push_back(sbi);
 
-	return Suns.size() - 1;
+	return (int)(Suns.size() - 1);
 }
 
 // add an instance for a starfield bitmap (something actually used in a mission)
@@ -2375,7 +2251,7 @@ int stars_add_bitmap_entry(starfield_list_entry *sle)
 
 		// maybe didn't load a static image so try for an animated one
 		if (Starfield_bitmaps[idx].bitmap_id < 0) {
-			Starfield_bitmaps[idx].bitmap_id = bm_load_animation(Starfield_bitmaps[idx].filename, &Starfield_bitmaps[idx].n_frames, &Starfield_bitmaps[idx].fps, NULL, 1);
+			Starfield_bitmaps[idx].bitmap_id = bm_load_animation(Starfield_bitmaps[idx].filename, &Starfield_bitmaps[idx].n_frames, &Starfield_bitmaps[idx].fps, nullptr, nullptr, true);
 
 			if (Starfield_bitmaps[idx].bitmap_id < 0) {
 				// failed
@@ -2396,9 +2272,9 @@ int stars_add_bitmap_entry(starfield_list_entry *sle)
 
 	// ... or add a new one
 	Starfield_bitmap_instances.push_back(sbi);
-	starfield_create_bitmap_buffer(Starfield_bitmap_instances.size() - 1);
+	starfield_create_bitmap_buffer((int)(Starfield_bitmap_instances.size() - 1));
 
-	return Starfield_bitmap_instances.size() - 1;
+	return (int)(Starfield_bitmap_instances.size() - 1);
 }
 
 // get the number of entries that each vector contains
@@ -2513,12 +2389,13 @@ const char *stars_get_name_from_instance(int index, bool is_a_sun)
 // WMC/Goober5000
 void stars_set_nebula(bool activate)
 {
-	if (activate)
+    The_mission.flags.set(Mission::Mission_Flags::Fullneb, activate);
+	
+    if (activate)
 	{
-		The_mission.flags |= MISSION_FLAG_FULLNEB;
 		Toggle_text_alpha = TOGGLE_TEXT_NEBULA_ALPHA;
 		HUD_contrast = 1;
-		if(Cmdline_nohtl || Fred_running) {
+		if(Fred_running) {
 			Neb2_render_mode = NEB2_RENDER_POF;
 			stars_set_background_model(BACKGROUND_MODEL_FILENAME, Neb2_texture_name);
 			stars_set_background_orientation();
@@ -2530,7 +2407,6 @@ void stars_set_nebula(bool activate)
 	}
 	else
 	{
-		The_mission.flags &= ~MISSION_FLAG_FULLNEB;
 		Toggle_text_alpha = TOGGLE_TEXT_NORMAL_ALPHA;
 		Neb2_render_mode = NEB2_RENDER_NONE;
 		Debris_vclips = Debris_vclips_normal;
@@ -2743,7 +2619,7 @@ void stars_swap_backgrounds(int idx1, int idx2)
 // Goober5000
 bool stars_background_empty(int idx)
 {
-	return !(Backgrounds[idx].suns.size() > 0 || Backgrounds[idx].bitmaps.size() > 0);
+	return (Backgrounds[idx].suns.empty() && Backgrounds[idx].bitmaps.empty());
 }
 
 // Goober5000

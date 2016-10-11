@@ -13,9 +13,8 @@
 #define FS_CMDLINE_HEADER_FILE
 
 
-int parse_cmdline(char *cmdline);
+int parse_cmdline(int argc, char *argv[]);
 
-int fred2_parse_cmdline(int argc, char *argv[]);
 // COMMAND LINE SETTINGS
 // This section is for reference by all the *_init() functions. For example, the multiplayer init function
 // could check to see if (int Cmdline_multi_stream_chat_to_file) has been set by the command line parser.
@@ -77,9 +76,11 @@ extern int Cmdline_bloom_intensity;
 extern bool Cmdline_fxaa;
 extern int Cmdline_fxaa_preset;
 extern bool Cmdline_fb_explosions;
+extern bool Cmdline_fb_thrusters;
 extern bool Cmdline_no_batching;
 extern int Cmdline_shadow_quality;
 extern int Cmdline_no_deferred_lighting;
+extern int Cmdline_no_emissive;
 
 // Game Speed related
 extern int Cmdline_cache_bitmaps;
@@ -117,24 +118,25 @@ extern char *Cmdline_spew_mission_crcs;
 extern char *Cmdline_spew_table_crcs;
 extern int Cmdline_objupd;
 
+// Launcher related options
+extern bool Cmdline_portable_mode;
+
 // Troubleshooting
 extern int Cmdline_load_all_weapons;
-extern int Cmdline_nohtl;
 extern int Cmdline_nomovies;	// WMC Toggles movie playing support
 extern int Cmdline_no_set_gamma;
-extern int Cmdline_novbo;
 extern int Cmdline_no_fbo;
 extern int Cmdline_no_pbo;
-extern int Cmdline_noglsl;
 extern int Cmdline_mipmap;
 extern int Cmdline_ati_color_swap;
 extern int Cmdline_no_3d_sound;
-extern int Cmdline_no_di_mouse;
 extern int Cmdline_drawelements;
 extern char* Cmdline_keyboard_layout;
 extern bool Cmdline_gl_finish;
 extern bool Cmdline_no_geo_sdr_effects;
 extern bool Cmdline_set_cpu_affinity;
+extern bool Cmdline_nograb;
+extern bool Cmdline_noshadercache;
 #ifdef WIN32
 extern bool Cmdline_alternate_registry_path;
 #endif
@@ -145,23 +147,18 @@ extern int Cmdline_old_collision_sys;
 extern int Cmdline_dis_collisions;
 extern int Cmdline_dis_weapons;
 extern int Cmdline_noparseerrors;
-#ifdef Allow_NoWarn
-extern int Cmdline_nowarn;
-#endif
 extern int Cmdline_extra_warn;
-extern int Cmdline_show_mem_usage;
 extern int Cmdline_show_pos;
 extern int Cmdline_show_stats;
 extern int Cmdline_save_render_targets;
-extern int Cmdline_debug_window;
 extern int Cmdline_verify_vps;
-#ifdef SCP_UNIX
-extern int Cmdline_no_grab;
-#endif
 extern int Cmdline_reparse_mainhall;
 extern bool Cmdline_frame_profile;
 extern bool Cmdline_profile_write_file;
 extern bool Cmdline_no_unfocus_pause;
 extern bool Cmdline_benchmark_mode;
+extern bool Cmdline_noninteractive;
+extern bool Cmdline_json_pilot;
+extern bool Cmdline_json_profiling;
 
 #endif

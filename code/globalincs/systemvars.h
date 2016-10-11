@@ -15,6 +15,8 @@
 #include "globalincs/pstypes.h"
 #include "math.h"
 
+#include <cstdint>
+
 #define	GM_MULTIPLAYER					(1 << 0)
 #define	GM_NORMAL						(1 << 1)
 #define	GM_DEAD_DIED					(1 << 2)				//	Died, waiting to blow up.
@@ -33,7 +35,7 @@
 #define	VM_DEAD_VIEW					(1 << 2)				//	Set if viewer is watching from dead view.
 #define	VM_CHASE							(1 << 3)				//	Chase view.
 #define	VM_OTHER_SHIP					(1 << 4)				//	View from another ship.
-#define	VM_EXTERNAL_CAMERA_LOCKED	(1 << 5)				// External camera is locked in place (ie controls move ship not camera)
+#define	VM_CAMERA_LOCKED			(1 << 5)				// Set if player does not have control of the camera
 #define	VM_WARP_CHASE					(1	<< 6)				// View while warping out (form normal view mode)
 #define	VM_PADLOCK_UP					(1 << 7)
 #define	VM_PADLOCK_REAR				(1 << 8)
@@ -42,6 +44,7 @@
 #define	VM_WARPIN_ANCHOR				(1 << 11)			// special warpin camera mode
 #define VM_TOPDOWN					(1 << 12)				//Camera is looking down on ship
 #define VM_FREECAMERA				(1 << 13)				//Camera is not attached to any particular object, probably under SEXP control
+#define VM_CENTERING				(1 << 14)				// View is springing to center
 
 #define	VM_PADLOCK_ANY (VM_PADLOCK_UP|VM_PADLOCK_REAR|VM_PADLOCK_LEFT|VM_PADLOCK_RIGHT)
 
@@ -146,7 +149,19 @@ extern bool PostProcessing_override;
 extern bool Teamcolor_override;
 extern bool Shadow_override;
 
-// game skill levels
+extern bool Basemap_color_override_set;
+extern float Basemap_color_override[4];
+
+extern bool Glowmap_color_override_set;
+extern float Glowmap_color_override[3];
+
+extern bool Specmap_color_override_set;
+extern float Specmap_color_override[3];
+
+extern bool Gloss_override_set;
+extern float Gloss_override;
+
+// game skill levels 
 #define	NUM_SKILL_LEVELS	5
 
 //====================================================================================
@@ -192,68 +207,6 @@ void detail_level_set(int level);
 
 // Returns the current detail level or -1 if custom.
 int current_detail_level();
-
-//=========================================================
-// Functions to profile frame performance
-
-typedef struct profile_sample {
-	uint profile_instances;
-	int open_profiles;
-	//char name[256];
-	SCP_string name;
-	uint start_time;	// in microseconds
-	uint accumulator;
-	uint children_sample_time;
-	uint num_parents;
-	uint num_children;
-	int parent;
-} profile_sample;
-
-typedef struct profile_sample_history {
-	bool valid;
-	//char name[256];
-	SCP_string name;
-	float avg;
-	float min;
-	float max;
-	uint avg_micro_sec;
-	uint min_micro_sec;
-	uint max_micro_sec;
-} profile_sample_history;
-
-extern SCP_string profile_output;
-
-void profile_init();
-void profile_deinit();
-void profile_begin(const char* name);
-void profile_begin(SCP_string &output_handle, const char* name);
-void profile_end(const char* name);
-void profile_dump_output();
-void store_profile_in_history(SCP_string &name, float percent, uint time);
-void get_profile_from_history(SCP_string &name, float* avg, float* min, float* max, uint *avg_micro_sec, uint *min_micro_sec, uint *max_micro_sec);
-
-class profile_auto
-{
-	SCP_string name;
-public:
-	profile_auto(const char* profile_name): name(profile_name)
-	{
-		profile_begin(profile_name);
-	}
-
-	~profile_auto()
-	{
-		profile_end(name.c_str());
-	}
-};
-
-// Helper macro to encapsulate a single function call in a profile_begin()/profile_end() pair.
-#define PROFILE(name, function) { profile_begin(name); function; profile_end(name); }
-
-//====================================================================================
-// Memory stuff from WinDebug.cpp
-extern int TotalRam;
-void windebug_memwatch_init();
 
 #define MAX_LIGHTS 256
 #define MAX_LIGHT_LEVELS 16

@@ -94,7 +94,6 @@ void shockwave_level_close();
 void shockwave_delete(object *objp);
 void shockwave_move_all(float frametime);
 int  shockwave_create(int parent_objnum, vec3d *pos, shockwave_create_info *sci, int flag, int delay = -1);
-void shockwave_render_DEPRECATED(object *objp);
 void shockwave_render(object *objp, draw_list *scene);
 int shockwave_load(char *s_name, bool shock_3D = false);
 
@@ -103,7 +102,7 @@ float shockwave_get_min_radius(int index);
 float shockwave_get_max_radius(int index);
 float shockwave_get_damage(int index);
 int   shockwave_get_damage_type_idx(int index);
-int   shockwave_get_framenum(int index, int num_frames);
+int   shockwave_get_framenum(const int index, const int ani_id);
 int   shockwave_get_flags(int index);
 
 #endif /* __SHOCKWAVE_H__ */

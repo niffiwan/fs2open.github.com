@@ -1190,7 +1190,7 @@ void psnet_rel_work()
 	int rcode = -1;
 	int max_len = NETBUFFERSIZE;
 	fd_set read_fds;	           
-	TIMEVAL timeout; 
+	struct timeval timeout; 
 	static reliable_header rcv_buff;
 	static SOCKADDR rcv_addr;
 	int bytesin = 0;
@@ -2095,7 +2095,7 @@ void psnet_socket_options( SOCKET sock )
 	// Broadcasting was needed when searching for a game in IPX mode.
 	// Unclear if still needed.
 	broadcast = 1;
-	if(setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (LPSTR)&broadcast, sizeof(broadcast) )){
+	if(setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (const char*)&broadcast, sizeof(broadcast) )){
 		Can_broadcast = 0;
 	} else {
 		Can_broadcast = 1;
@@ -2106,16 +2106,16 @@ void psnet_socket_options( SOCKET sock )
 	
 	// set the current size of the receive buffer
 	cursizesize = sizeof(int);
-	getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (LPSTR)&cursize, &cursizesize);
-	setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (LPSTR)&bufsize, sizeof(bufsize));
-	getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (LPSTR)&cursize, &cursizesize);
+	getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char*)&cursize, &cursizesize);
+	setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char*)&bufsize, sizeof(bufsize));
+	getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char*)&cursize, &cursizesize);
 	ml_printf("Receive buffer set to %d", cursize);
 
 	// set the current size of the send buffer
 	cursizesize = sizeof(int);
-	getsockopt(sock, SOL_SOCKET, SO_SNDBUF, (LPSTR)&cursize, &cursizesize);
-	setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (LPSTR)&bufsize, sizeof(bufsize));
-	getsockopt(sock, SOL_SOCKET, SO_SNDBUF, (LPSTR)&cursize, &cursizesize);
+	getsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char*)&cursize, &cursizesize);
+	setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char*)&bufsize, sizeof(bufsize));
+	getsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char*)&cursize, &cursizesize);
 	ml_printf("Send buffer set to %d", cursize);
 }
 

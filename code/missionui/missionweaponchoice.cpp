@@ -37,6 +37,7 @@
 #include "parse/parselo.h"
 #include "popup/popup.h"
 #include "render/3d.h"
+#include "render/batching.h"
 #include "ship/ship.h"
 #include "weapon/weapon.h"
 
@@ -754,7 +755,12 @@ void wl_render_overhead_view(float frametime)
 		{
 			if (wl_ship->model_num < 0)
 			{
-				wl_ship->model_num = model_load(sip->pof_file, sip->n_subsystems, &sip->subsystems[0]);
+				if (sip->pof_file_tech[0] != '\0') {
+					wl_ship->model_num = model_load(sip->pof_file_tech, sip->n_subsystems, &sip->subsystems[0]);
+				}
+				else {
+					wl_ship->model_num = model_load(sip->pof_file, sip->n_subsystems, &sip->subsystems[0]);
+				}
 				model_page_in_textures(wl_ship->model_num, ship_class);
 			}
 
@@ -779,12 +785,12 @@ void wl_render_overhead_view(float frametime)
 				if (gr_screen.res == GR_640)
 				{
 					// lo-res
-					wl_ship->overhead_bitmap = bm_load_animation(sip->overhead_filename, NULL, NULL, 0, CF_TYPE_INTERFACE);
+					wl_ship->overhead_bitmap = bm_load_animation(sip->overhead_filename, nullptr, nullptr, nullptr, nullptr, false, CF_TYPE_INTERFACE);
 				} else {
 					// high-res
 					char filename[NAME_LENGTH+2] = "2_";
 					strcat_s(filename, sip->overhead_filename);
-					wl_ship->overhead_bitmap = bm_load_animation(sip->overhead_filename, NULL, NULL, 0, CF_TYPE_INTERFACE);
+					wl_ship->overhead_bitmap = bm_load_animation(sip->overhead_filename, nullptr, nullptr, nullptr, nullptr, false, CF_TYPE_INTERFACE);
 				}
 
 				// load the bitmap
@@ -822,13 +828,18 @@ void wl_render_overhead_view(float frametime)
 		// Load the necessary model file, if necessary
 		if (wl_ship->model_num < 0)
 		{
-			wl_ship->model_num = model_load(sip->pof_file, sip->n_subsystems, &sip->subsystems[0]);
+			if (sip->pof_file_tech[0] != '\0') {
+				wl_ship->model_num = model_load(sip->pof_file_tech, sip->n_subsystems, &sip->subsystems[0]);
+			}
+			else {
+				wl_ship->model_num = model_load(sip->pof_file, sip->n_subsystems, &sip->subsystems[0]);
+			}
 			model_page_in_textures(wl_ship->model_num, ship_class);
 		}
 		
 		if (wl_ship->model_num < 0)
 		{
-			mprintf(("Couldn't load model file in missionweaponchoice.cpp\n"));
+			mprintf(("Couldn't load model file '%s' in missionweaponchoice.cpp\n", sip->pof_file));
 		}
 		else
 		{
@@ -848,10 +859,10 @@ void wl_render_overhead_view(float frametime)
 			{
 				float rev_rate;
 				rev_rate = REVOLUTION_RATE;
-				if (sip->flags & SIF_BIG_SHIP) {
+				if (sip->is_big_ship()) {
 					rev_rate *= 1.7f;
 				}
-				if (sip->flags & SIF_HUGE_SHIP) {
+				if (sip->is_huge_ship()) {
 					rev_rate *= 3.0f;
 				}
 
@@ -905,10 +916,8 @@ void wl_render_overhead_view(float frametime)
 				gr_set_clip(Wl_overhead_coords[gr_screen.res][0], Wl_overhead_coords[gr_screen.res][1], gr_screen.res == 0 ? 291 : 467, gr_screen.res == 0 ? 226 : 362, GR_RESIZE_MENU);
 			}
 			
-			if (!Cmdline_nohtl) {
-				gr_set_proj_matrix(Proj_fov, gr_screen.clip_aspect, Min_draw_distance, Max_draw_distance);
-				gr_set_view_matrix(&Eye_position, &Eye_matrix);
-			}
+			gr_set_proj_matrix(Proj_fov, gr_screen.clip_aspect, Min_draw_distance, Max_draw_distance);
+			gr_set_view_matrix(&Eye_position, &Eye_matrix);
 
 			render_info.set_flags(MR_AUTOCENTER | MR_NO_FOGGING);
 
@@ -916,7 +925,7 @@ void wl_render_overhead_view(float frametime)
 
             Glowpoint_use_depth_buffer = true;
             
-			batch_render_all();
+			batching_render_all();
 
 			//NOW render the lines for weapons
 			gr_reset_clip();
@@ -1051,11 +1060,8 @@ void wl_render_overhead_view(float frametime)
 			}
 
 			//Cleanup
-			if (!Cmdline_nohtl) 
-			{
-				gr_end_view_matrix();
-				gr_end_proj_matrix();
-			}
+			gr_end_view_matrix();
+			gr_end_proj_matrix();
 
 			g3_end_frame();
 			
@@ -1124,16 +1130,6 @@ void wl_set_disabled_weapons(int ship_class)
 		//	Determine whether weapon #i is allowed on this ship class in the current type of mission.
 		//	As of 9/6/99, the only difference is dogfight missions have a different list of legal weapons.
 		Wl_icons[i].can_use = eval_weapon_flag_for_game_type(sip->allowed_weapons[i]);
-
-		// Goober5000: ballistic primaries
-		if (Weapon_info[i].wi_flags2 & WIF2_BALLISTIC)
-		{
-			// not allowed if this ship is not ballistic
-			if (!(sip->flags & SIF_BALLISTIC_PRIMARIES))
-			{
-				Wl_icons[i].can_use = 0;
-			}
-		}
 	}
 }
 
@@ -1265,7 +1261,7 @@ void wl_load_icons(int weapon_class)
 
 	if(!Cmdline_weapon_choice_3d || (wip->render_type == WRT_LASER && !strlen(wip->tech_model)))
 	{
-		first_frame = bm_load_animation(Weapon_info[weapon_class].icon_filename, &num_frames, NULL, 0, CF_TYPE_INTERFACE);
+		first_frame = bm_load_animation(Weapon_info[weapon_class].icon_filename, &num_frames, nullptr, nullptr, nullptr, false, CF_TYPE_INTERFACE);
 
 		for ( i = 0; (i < num_frames) && (i < NUM_ICON_FRAMES); i++ ) {
 			icon->icon_bmaps[i] = first_frame+i;
@@ -1507,7 +1503,7 @@ int wl_calc_ballistic_fit(int wi_index, int capacity)
 
 	Assert(Weapon_info[wi_index].subtype == WP_LASER);
 
-	Assert(Weapon_info[wi_index].wi_flags2 & WIF2_BALLISTIC);
+	Assert(Weapon_info[wi_index].wi_flags[Weapon::Info_Flags::Ballistic]);
 
 	return fl2i( capacity / Weapon_info[wi_index].cargo_size + 0.5f );
 }
@@ -2298,7 +2294,7 @@ void wl_render_weapon_desc(float frametime)
 		
 		// draw weapon title (above weapon anim)
 		for (i=0; i<2; i++) {
-			curr_len = strlen(Weapon_desc_lines[i]);
+			curr_len = (int)strlen(Weapon_desc_lines[i]);
 
 			if (bright_char_index < curr_len) {
 				// save bright char and plunk in some nulls to shorten string
@@ -2326,7 +2322,7 @@ void wl_render_weapon_desc(float frametime)
 
 		// draw weapon desc (below weapon anim)
 		for (i=2; i<WEAPON_DESC_MAX_LINES; i++) {
-			curr_len = strlen(Weapon_desc_lines[i]);
+			curr_len = (int)strlen(Weapon_desc_lines[i]);
 
 			if (bright_char_index < curr_len) {
 				// save bright char and plunk in some nulls to shorten string
@@ -2382,7 +2378,7 @@ void wl_weapon_desc_start_wipe()
 {
 	int currchar_src = 0, currline_dest = 2, currchar_dest = 0, i;
 	int w, h;
-	int title_len = strlen(Weapon_info[Selected_wl_class].title);
+	int title_len = (int)strlen(Weapon_info[Selected_wl_class].title);
 
 	// init wipe vars
 	Weapon_desc_wipe_time_elapsed = 0.0f;
@@ -2904,7 +2900,7 @@ void wl_render_icon_count(int num, int x, int y)
 	Assert(number_to_draw >= 0);
 
 	sprintf(buf, "%d", number_to_draw);
-	gr_get_string_size(&num_w, &num_h, buf, strlen(buf));
+	gr_get_string_size(&num_w, &num_h, buf, (int)strlen(buf));
 
 	// render
 	gr_set_color_fast(&Color_white);
@@ -3285,7 +3281,7 @@ void wl_update_parse_object_weapons(p_object *pobjp, wss_unit *slot)
 			ss->primary_banks[j] = slot->wep[i];
 
 			// ballistic primaries - Goober5000
-			if (Weapon_info[slot->wep[i]].wi_flags2 & WIF2_BALLISTIC)
+			if (Weapon_info[slot->wep[i]].wi_flags[Weapon::Info_Flags::Ballistic])
 			{
 				// Important: the primary_ammo[] value is a percentage of max capacity!
 				// which means that it's always 100%, since ballistic primaries are completely
@@ -3408,7 +3404,7 @@ void wl_bash_ship_weapons(ship_weapon *swp, wss_unit *slot)
 			swp->primary_bank_weapons[j] = slot->wep[i];
 
 			// ballistic primaries - Goober5000
-			if (Weapon_info[swp->primary_bank_weapons[j]].wi_flags2 & WIF2_BALLISTIC) {
+			if (Weapon_info[swp->primary_bank_weapons[j]].wi_flags[Weapon::Info_Flags::Ballistic]) {
 				// this is a bit tricky: we must recalculate ammo for full capacity
 				// since wep_count for primaries does not store the ammo; ballistic
 				// primaries always come with a full magazine
@@ -4048,8 +4044,7 @@ void wl_apply_current_loadout_to_all_ships_in_current_wing()
 			}
 
 			// make sure this ship can accept this weapon
-			if (!eval_weapon_flag_for_game_type(sip->allowed_weapons[weapon_type_to_add])
-				|| ((wip->wi_flags2 & WIF2_BALLISTIC) && !(sip->flags & SIF_BALLISTIC_PRIMARIES)))
+			if (!eval_weapon_flag_for_game_type(sip->allowed_weapons[weapon_type_to_add]))
 			{
 				SCP_string temp;
 				sprintf(temp, XSTR("%s is unable to carry %s weaponry", 1629), ship_name, wep_display_name);

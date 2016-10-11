@@ -13,7 +13,7 @@
 #include "network/multi_pinfo.h"
 #include "ui/ui.h"
 #include "gamesnd/gamesnd.h"
-#include "freespace2/freespace.h"
+#include "freespace.h"
 #include "gamesequence/gamesequence.h"
 #include "io/key.h"
 #include "stats/medals.h"
@@ -193,9 +193,6 @@ void multi_pinfo_popup_button_pressed(int n);
 
 // display the medals screen for this player
 void multi_pinfo_do_medals();
-
-// load up and use the proper palette
-void multi_pinfo_set_palette();
 
 // build the stats value strings for this player
 void multi_pinfo_build_stats();
@@ -656,17 +653,6 @@ void multi_pinfo_do_medals()
 
 	// close the medals screen down
 	medal_main_close();
-
-	// restore the proper palette
-	multi_pinfo_set_palette();
-}
-
-// load up and use the proper palette
-void multi_pinfo_set_palette()
-{
-#ifndef HARDWARE_ONLY
-	palette_use_bm_palette(Multi_pinfo_bitmap);
-#endif
 }
 
 // build the stats value strings for this player

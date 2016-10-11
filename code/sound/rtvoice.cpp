@@ -15,6 +15,11 @@
 #include "sound/rtvoice.h"
 #include "sound/sound.h"
 
+#ifdef WIN32
+#define WIN32_LEAN_AN_MEAN
+#include <windows.h>
+#endif
+
 
 typedef struct rtv_format
 {
@@ -80,7 +85,7 @@ static int Rtv_playback_uncompressed_buffer_size;
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef _WIN32
-void CALLBACK TimeProc(unsigned int id, unsigned int msg, unsigned long userdata, unsigned long dw1, unsigned long dw2) 
+void CALLBACK TimeProc(unsigned int id, unsigned int msg, DWORD_PTR userdata, DWORD_PTR dw1, DWORD_PTR dw2)
 {
 	if ( !Rtv_callback ) {
 		return;
@@ -90,11 +95,11 @@ void CALLBACK TimeProc(unsigned int id, unsigned int msg, unsigned long userdata
 	Rtv_callback();
 }
 #else
-Uint32 CALLBACK TimeProc(Uint32 interval, void *param)
+Uint32 TimeProc(Uint32 interval, void *param)
 {
 	if ( !Rtv_callback ) {
 		SDL_RemoveTimer(Rtv_record_timer_id);
-		Rtv_record_timer_id = NULL;
+		Rtv_record_timer_id = 0;
 
 		return 0;
 	}
@@ -106,7 +111,7 @@ Uint32 CALLBACK TimeProc(Uint32 interval, void *param)
 		return interval;
 	} else {
 		SDL_RemoveTimer(Rtv_record_timer_id);
-		Rtv_record_timer_id = NULL;
+		Rtv_record_timer_id = 0;
 
 		return 0;
 	}
@@ -195,11 +200,10 @@ void rtvoice_stop_recording()
 	if ( Rtv_record_timer_id ) {
 #ifndef _WIN32
 		SDL_RemoveTimer(Rtv_record_timer_id);
-		Rtv_record_timer_id = NULL;
 #else
 		timeKillEvent(Rtv_record_timer_id);
-		Rtv_record_timer_id = 0;
 #endif
+		Rtv_record_timer_id = 0;
 	}
 
 	Rtv_recording=0;

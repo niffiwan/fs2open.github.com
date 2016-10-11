@@ -36,7 +36,7 @@ uint lastline = 0;  // Number of lines written to the console since the last com
 // Text Buffer
 uint DBROWS = 80;   // # of buffer rows
 uint DBCOLS = 80;   // # of buffer columns
-uint lastwhite = 0; // Last whitespace character encountered, used by putc for 'true' word wrapping
+size_t lastwhite = 0; // Last whitespace character encountered, used by putc for 'true' word wrapping
 ubyte DTABS = 4;    //!< Tab size in spaces
 
 /**
@@ -66,7 +66,7 @@ uint dc_scroll_x;   // X scroll position (Leftmost character)
 uint dc_scroll_y;   // Y scroll position (Topmost character)
 int row_height;     // Row/Line height, in pixels
 int col_width;      // Col/Character width, in pixels
-int dc_font = FONT1;
+int dc_font = font::FONT1;
 
 SCP_string dc_title;
 
@@ -185,9 +185,12 @@ void dc_do_command(SCP_string *cmd_str)
 void dc_draw(bool show_prompt = FALSE)
 {
 	gr_clear();
-	gr_set_font(dc_font);
+	font::set_font(dc_font);
 	gr_set_color_fast( &Color_bright );
-	gr_string( 0x8000, gr_screen.center_offset_y + 3, dc_title.c_str(), GR_RESIZE_NONE );
+	int w;
+	gr_get_string_size(&w, nullptr, dc_title.c_str());
+
+	gr_string((gr_screen.clip_width - w) / 2, 3, dc_title.c_str(), GR_RESIZE_NONE );
 
 	gr_set_color_fast( &Color_normal );
 
@@ -205,18 +208,19 @@ void dc_draw_cursor( SCP_string &cmd_string, int x, int y )
 	if ( t & 1 ) {
 		gr_get_string_size( &w, &h, cmd_string.c_str() );
 
-		w %= (DCOLS * Current_font->w);
+		w %= (DCOLS * col_width);
 		//gr_string( w, debug_y*16, "_" );
-		gr_rect(gr_screen.center_offset_x + (x + (w + 1)), gr_screen.center_offset_y + (y + (h + 1)), 2, Current_font->h, GR_RESIZE_NONE);
+		gr_rect(gr_screen.center_offset_x + (x + (w + 1)), gr_screen.center_offset_y + (y + (h + 1)), 2,
+			fl2i(font::get_current_font()->getHeight()), GR_RESIZE_NONE);
 	}
 }
 
 void dc_draw_window(bool show_prompt)
 {
-	uint cmd_lines;                 // Number of lines for the command string
-	uint buffer_lines;              // Number of lines from the buffer to draw
-	uint i;                         // The current row we're drawing
-	uint j;                         // The current row of the command string we're drawing
+	size_t cmd_lines;               // Number of lines for the command string
+	size_t buffer_lines;            // Number of lines from the buffer to draw
+	size_t i;                       // The current row we're drawing
+	size_t j;                       // The current row of the command string we're drawing
 	SCP_string out_str;             // The command string + prompt character
 	SCP_string::iterator str_it;    // Iterator to out_str
 
@@ -235,7 +239,7 @@ void dc_draw_window(bool show_prompt)
 	// Ensure we don't scroll too far
 	dc_scroll_x = MIN(dc_scroll_x, (DBCOLS - DCOLS));
 	if (dc_buffer.size() >= buffer_lines) {
-		dc_scroll_y = MIN(dc_scroll_y, (dc_buffer.size() - buffer_lines));
+		dc_scroll_y = MIN(dc_scroll_y, (uint32_t)(dc_buffer.size() - buffer_lines));
 	} else {
 		dc_scroll_y = 0;	// Disallow vscroll until the buffer is larger than the window
 	}
@@ -243,7 +247,7 @@ void dc_draw_window(bool show_prompt)
 	// Draw the buffer strings
 	for (i = 0; i < buffer_lines; ++i) {
 		if ((i + dc_scroll_y) < dc_buffer.size()) {
-			gr_string(gr_screen.center_offset_x, gr_screen.center_offset_y + ((i * row_height) + row_height), dc_buffer[i + dc_scroll_y].substr(dc_scroll_x).c_str(), GR_RESIZE_NONE);
+			gr_string(gr_screen.center_offset_x, gr_screen.center_offset_y + (((int)i * row_height) + row_height), dc_buffer[i + dc_scroll_y].substr(dc_scroll_x).c_str(), GR_RESIZE_NONE);
 		}
 	}
 
@@ -261,9 +265,9 @@ void dc_draw_window(bool show_prompt)
 				++j;
 			}
 		}
-		gr_string(gr_screen.center_offset_x, gr_screen.center_offset_y + ((i * row_height) + row_height), out_str.c_str(), GR_RESIZE_NONE);
+		gr_string(gr_screen.center_offset_x, gr_screen.center_offset_y + (((int)i * row_height) + row_height), out_str.c_str(), GR_RESIZE_NONE);
 
-		dc_draw_cursor(out_str, 0, ((i * row_height)));
+		dc_draw_cursor(out_str, 0, (((int)i * row_height)));
 		gr_set_color_fast(&Color_normal);
 	}
 }
@@ -277,9 +281,12 @@ void dc_init(void)
 	debug_inited = TRUE;
 
 	// Init window settings
-	dc_font = FONT1;
-	row_height = ((Current_font->h) * 3) / 2;	// Row/Line height, in pixels
-	col_width = Current_font->w;			// Col/Character width, in pixels
+	dc_font = font::FONT1;
+	row_height = ((fl2i(font::get_current_font()->getHeight())) * 3) / 2;	// Row/Line height, in pixels
+
+	// This assumes that FONT1 is monospaced!
+	gr_get_string_size(&col_width, nullptr, " "); // Col/Character width, in pixels
+
 	dc_scroll_x = 0;
 	dc_scroll_y = 0;
 	DCOLS = (gr_screen.center_w / col_width) - 1;	// Subtract as needed. Windowed mode has some quirks with the resolution

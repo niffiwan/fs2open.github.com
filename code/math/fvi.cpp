@@ -18,8 +18,6 @@
 #define	UNINITIALIZED_VALUE	-1234567.8f
 #define WARN_DIST	1.0
 
-static void accurate_square_root( float A, float B, float C, float discriminant, float *root1, float *root2 ) __UNUSED;
-
 static float matrix_determinant_from_vectors(const vec3d *v1, const vec3d *v2, const vec3d *v3)
 {
 	float ans;
@@ -221,12 +219,12 @@ int fvi_segment_sphere(vec3d *intp, const vec3d *p0, const vec3d *p1, const vec3
 	dist = vm_vec_dist(&closest_point,sphere_pos);
 
 	if (dist < sphere_rad) {
-		float dist2,rad2,shorten;
+		float dist2,radius2,shorten;
 
 		dist2 = dist*dist;
-		rad2 = sphere_rad*sphere_rad;
+		radius2 = sphere_rad*sphere_rad;
 
-		shorten = fl_sqrt(rad2 - dist2);
+		shorten = fl_sqrt(radius2 - dist2);
 
 		int_dist = w_dist-shorten;
 
@@ -285,12 +283,12 @@ int fvi_ray_sphere(vec3d *intp, const vec3d *p0, const vec3d *p1, const vec3d *s
 	dist = vm_vec_dist(&closest_point,sphere_pos);
 
 	if (dist < sphere_rad) {
-		float dist2,rad2,shorten;
+		float dist2, radius2, shorten;
 
 		dist2 = dist*dist;
-		rad2 = sphere_rad*sphere_rad;
+		radius2 = sphere_rad*sphere_rad;
 
-		shorten = fl_sqrt(rad2 - dist2);
+		shorten = fl_sqrt(radius2 - dist2);
 
 		int_dist = w_dist-shorten;
 
@@ -1076,20 +1074,6 @@ void fvi_closest_line_line(const vec3d *x0, const vec3d *vx, const vec3d *y0, co
 
 	*x_time = vm_vec_dot(&delta_l_cross_vy, &vx_cross_vy) / denominator; 
 	*y_time = vm_vec_dot(&delta_l_cross_vx, &vx_cross_vy) / denominator; 
-}
-
-// --------------------------------------------------------------------------------------------------------------------
-static void accurate_square_root( float A, float B, float C, float discriminant, float *root1, float *root2 )
-{
-	float root = fl_sqrt(discriminant);
-
-	if (B > 0) {
-		*root1 = 2.0f*C / (-B - root);
-		*root2 = (-B - root) / (2.0f*A);
-	} else {	// B < 0
-		*root1 = (-B + root) / (2.0f*A);
-		*root2 = 2.0f*C / (-B + root);
-	}
 }
 
 /**

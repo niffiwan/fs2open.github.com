@@ -12,7 +12,7 @@
 
 #include "cfile/cfile.h"
 #include "controlconfig/controlsconfig.h"
-#include "globalincs/def_files.h"
+#include "def_files/def_files.h"
 #include "globalincs/systemvars.h"
 #include "io/joy.h"
 #include "io/key.h"
@@ -29,6 +29,10 @@ enum CC_tab {
 };
 
 int Failed_key_index;
+
+// Joystick configuration
+int Joy_dead_zone_size = 10;
+int Joy_sensitivity = 9;
 
 // assume control keys are used as modifiers until we find out 
 int Shift_is_modifier;
@@ -813,7 +817,7 @@ void control_config_common_load_overrides()
 	if (cf_exists_full("controlconfigdefaults.tbl", CF_TYPE_TABLES)) {
 		read_file_text("controlconfigdefaults.tbl", CF_TYPE_TABLES);
 	} else {
-		read_file_text_from_array(defaults_get_file("controlconfigdefaults.tbl"));
+		read_file_text_from_default(defaults_get_file("controlconfigdefaults.tbl"));
 	}
 
 	reset_parse();
@@ -926,7 +930,7 @@ void control_config_common_load_overrides()
 	}
 	
 	// Overwrite the control config with the first preset that was found
-	if (Control_config_presets.size() > 0) {
+	if (!Control_config_presets.empty()) {
 		std::copy(Control_config_presets[0], Control_config_presets[0] + CCFG_MAX + 1, Control_config);
 	}
 }
