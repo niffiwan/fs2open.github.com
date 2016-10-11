@@ -313,7 +313,6 @@ flag_def_list_new<Info_Flags> Ship_flags[] = {
     { "auto spread shields",		Info_Flags::Auto_spread_shields,	true, false },
     { "model point shields",		Info_Flags::Model_point_shields,	true, false },
     { "repair disabled subsystems", Info_Flags::Subsys_repair_when_disabled, true, false},
-    { "lock detail boxes",			Info_Flags::Lock_detail_boxes,		true, false },
     // to keep things clean, obsolete options go last
     { "ballistic primaries",		Info_Flags::Ballistic_primaries,	false, false }
 };
@@ -10584,8 +10583,8 @@ bool in_autoaim_fov(ship *shipp, int bank_to_fire, object *obj)
 	int weapon = swp->primary_bank_weapons[bank_to_fire];
 	weapon_info* winfo_p = &Weapon_info[weapon];
 
-	has_converging_autoaim = ((sip->aiming_flags & AIM_FLAG_AUTOAIM_CONVERGENCE || (The_mission.ai_profile->player_autoaim_fov[Game_skill_level] > 0.0f && !( Game_mode & GM_MULTIPLAYER ))) && aip->target_objnum != -1);
-	has_autoaim = ((has_converging_autoaim || (sip->aiming_flags & AIM_FLAG_AUTOAIM)) && aip->target_objnum != -1);
+	has_converging_autoaim = ((sip->aiming_flags[Ship::Aiming_Flags::Autoaim_convergence] || (The_mission.ai_profile->player_autoaim_fov[Game_skill_level] > 0.0f && !( Game_mode & GM_MULTIPLAYER ))) && aip->target_objnum != -1);
+	has_autoaim = ((has_converging_autoaim || (sip->aiming_flags[Ship::Aiming_Flags::Autoaim])) && aip->target_objnum != -1);
 
 	if (!has_autoaim)
 		return FALSE;

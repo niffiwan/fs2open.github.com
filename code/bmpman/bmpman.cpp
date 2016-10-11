@@ -2623,7 +2623,7 @@ bool set_temp_subdir_pathtype(const char *filename) {
 
 	char fullpath[MAX_PATH]; // Absolute path to the given file
 	char fullrootpath[MAX_PATH]; // Absolute root path
-	int size, offset; // Needed for cf_find_file_location, but not used
+	size_t size, offset; // Needed for cf_find_file_location, but not used
 
 	cf_create_default_path_string(fullrootpath, sizeof(fullrootpath) - 1, CF_TYPE_ROOT, NULL);
 	if (!cf_find_file_location(filename, CF_TYPE_ANY, sizeof(fullpath)-1, fullpath, &size, &offset)) {

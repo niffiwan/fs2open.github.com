@@ -1195,14 +1195,6 @@ void moldel_calc_facing_pts( vec3d *top, vec3d *bot, vec3d *fvec, vec3d *pos, fl
 	vm_vec_scale_add( bot, &temp, &uvec, -w/2.0f );	
 }
 
-	ship *shipp = NULL;
-	ship_info *sip = NULL;
-			sip = &Ship_info[shipp->ship_info_index];
-
-	if (shipp != NULL && (sip->flags2 & SIF2_LOCK_DETAIL_BOXES)) {
-		Interp_box_scale = 1.0f;
-	} else {
-	}
 // Fills in an array with points from a model.
 // Only gets up to max_num verts;
 // Returns number of verts found;

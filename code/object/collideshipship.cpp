@@ -1236,7 +1236,7 @@ int collide_ship_ship( obj_pair * pair )
 					hud_shield_quadrant_hit(ship_ship_hit_info.heavy, quadrant_num);
 
 					quadrant_num = get_ship_quadrant_from_global(&world_hit_pos, ship_ship_hit_info.light);
-					if ((ship_ship_hit_info.light->flags & OF_NO_SHIELDS) || !ship_is_shield_up(ship_ship_hit_info.light, quadrant_num) ) {
+					if ((ship_ship_hit_info.light->flags[Object::Object_Flags::No_shields]) || !ship_is_shield_up(ship_ship_hit_info.light, quadrant_num) ) {
 						quadrant_num = -1;
 					}
 

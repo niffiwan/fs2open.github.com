@@ -1010,7 +1010,7 @@ void HudGaugeShieldMini::showMiniShields(object *objp)
 	maybeFlashShield(SHIELD_HIT_TARGET, Shield_hit_data[SHIELD_HIT_TARGET].hull_hit_index);
 	showIntegrity(get_hull_pct(objp));
 
-	if (objp->flags[Object::Object_Flags::No_shields])
+	if (objp->flags[Object::Object_Flags::No_shields]) {
 		return;
 	}
 
