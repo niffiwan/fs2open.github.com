@@ -258,7 +258,6 @@ set (file_root_globalincs
 	globalincs/pstypes.h
 	globalincs/safe_strings.cpp
 	globalincs/safe_strings.h
-	globalincs/safe_strings_test.cpp
 	globalincs/systemvars.cpp
 	globalincs/systemvars.h
 	globalincs/toolchain.h
@@ -903,12 +902,21 @@ set (file_root_render
 set(file_root_scripting
 	scripting/ade.cpp
 	scripting/ade.h
+	scripting/ade_api.cpp
+	scripting/ade_api.h
 	scripting/ade_args.cpp
 	scripting/ade_args.h
 	scripting/lua.cpp
 	scripting/lua.h
 	scripting/scripting.cpp
 	scripting/scripting.h
+)
+
+set(file_root_scripting_api
+	scripting/api/bitops.h
+	scripting/api/bitops.cpp
+	scripting/api/vecmath.h
+	scripting/api/vecmath.cpp
 )
 
 # Ship files
@@ -1020,6 +1028,10 @@ set (file_root_ui
 	ui/uidraw.cpp
 	ui/uimouse.cpp
 	ui/window.cpp
+)
+
+set(file_root_utils
+	utils/strings.h
 )
 
 # Utils files
@@ -1138,6 +1150,7 @@ source_group("Popup"                              FILES ${file_root_popup})
 source_group("Radar"                              FILES ${file_root_radar})
 source_group("Render"                             FILES ${file_root_render})
 source_group("Scripting"                          FILES ${file_root_scripting})
+source_group("Scripting\\Api"                     FILES ${file_root_scripting_api})
 source_group("Ship"                               FILES ${file_root_ship})
 source_group("Sound"                              FILES ${file_root_sound})
 source_group("Sound\\FFmpeg"                      FILES ${file_root_sound_ffmpeg})
@@ -1147,6 +1160,7 @@ source_group("Stats"                              FILES ${file_root_stats})
 source_group("TgaUtils"                           FILES ${file_root_tgautils})
 source_group("Tracing"                            FILES ${file_root_tracing})
 source_group("Ui"                                 FILES ${file_root_ui})
+source_group("Utils"                              FILES ${file_root_utils})
 source_group("Utils\\boost"                       FILES ${file_root_utils_boost})
 source_group("Weapon"                             FILES ${file_root_weapon})
 source_group("Windows Stubs"                      FILES ${file_root_windows_stubs})
@@ -1228,6 +1242,7 @@ set (file_root
 	${file_root_radar}
 	${file_root_render}
 	${file_root_scripting}
+	${file_root_scripting_api}
 	${file_root_ship}
 	${file_root_sound}
 	${file_root_sound_ffmpeg}
@@ -1237,6 +1252,7 @@ set (file_root
 	${file_root_tgautils}
 	${file_root_tracing}
 	${file_root_ui}
+	${file_root_utils}
 	${file_root_utils_boost}
 	${file_root_weapon}
 	${file_root_windows_stubs}

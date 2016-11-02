@@ -11,13 +11,55 @@ extern "C" {
 #include <lualib.h>
 }
 
+/**
+ * @defgroup ade_api ADE API functions
+ *
+ * @brief Functions and macros used in the ADE scripting API
+ *
+ * These functions enable the code to communicate with external scripts and expose an API for them to use
+ */
+
 namespace scripting {
 
 //*************************Lua funcs*************************
 //Used to parse arguments on the stack to C values
+
+/**
+ *
+ * @param L
+ * @param fmt
+ * @return
+ *
+ * @ingroup ade_api
+ */
 int ade_get_args(lua_State* L, const char* fmt, ...);
+
+/**
+ *
+ * @param L
+ * @param fmt
+ * @return
+ *
+ * @ingroup ade_api
+ */
 int ade_set_args(lua_State* L, const char* fmt, ...);
+
+/**
+ *
+ * @param L
+ * @param stackdump
+ *
+ * @ingroup ade_api
+ */
 void ade_stackdump(lua_State* L, char* stackdump);
+
+/**
+ *
+ * @param L
+ * @return
+ *
+ * @ingroup ade_api
+ */
 int ade_friendly_error(lua_State* L);
 
 //*************************Lua types*************************
@@ -33,8 +75,10 @@ const int ADE_SETTING_UPVALUE_INDEX = 2;
 #define ADE_SETTING_VAR lua_toboolean(L,lua_upvalueindex(ADE_SETTING_UPVALUE_INDEX))
 
 /** Used for internal object->lua_set and lua_get->object communication.
-Must remain a struct and only contain POD datatypes because this is passed via
-variable args.
+ * Must remain a struct and only contain POD datatypes because this is passed via
+ * variable args.
+ *
+ * @ingroup ade_api
 */
 struct ade_odata {
 	//ade_id aid;
@@ -69,6 +113,9 @@ struct ade_odata {
 //
 //u - oh wait...
 
+/**
+ * @ingroup ade_api
+ */
 class ade_table_entry {
  public:
 	const char* Name;
@@ -132,6 +179,9 @@ class ade_table_entry {
 	const char* GetName() { if (Name != NULL) { return Name; } else { return ShortName; }}
 };
 
+/**
+ * @ingroup ade_api
+ */
 class ade_manager {
 	SCP_vector<ade_table_entry> _table_entries;
 
@@ -155,19 +205,23 @@ class ade_manager {
 	size_t getNumEntries() const { return _table_entries.size(); }
 };
 
+/**
+ * @ingroup ade_api
+ */
 class ade_lib_handle {
  protected:
 	size_t LibIdx;
  public:
 	ade_lib_handle() {}
 
-	size_t GetIdx() {
+	size_t GetIdx() const {
 		return LibIdx;
 	}
 };
 
-//Object class
-//This is what you define a variable of to make new objects
+/**
+ * @ingroup ade_api
+ */
 template<class StoreType>
 class ade_obj: public ade_lib_handle {
  public:
@@ -189,7 +243,7 @@ class ade_obj: public ade_lib_handle {
 	}
 
 	//WMC - Use this to store object data for return, or for setting as a global
-	ade_odata Set(const StoreType& obj, ODATA_SIG_TYPE n_sig = ODATA_SIG_DEFAULT) {
+	ade_odata Set(const StoreType& obj, ODATA_SIG_TYPE n_sig = ODATA_SIG_DEFAULT) const {
 		ade_odata od;
 		od.idx = LibIdx;
 		od.sig = &n_sig;
@@ -199,7 +253,7 @@ class ade_obj: public ade_lib_handle {
 	}
 
 	//WMC - Use this to copy object data, for modification or whatever
-	ade_odata Get(StoreType* ptr, uint* n_sig = NULL) {
+	ade_odata Get(StoreType* ptr, uint* n_sig = NULL) const {
 		ade_odata od;
 		od.idx = LibIdx;
 		od.sig = n_sig;
@@ -212,7 +266,7 @@ class ade_obj: public ade_lib_handle {
 	//Use >ONLY< when:
 	//1 - You are setting the data of an object (ie 'x' component of vector)
 	//2 - To speed up read-only calcs (ie computing dot product of vectors)
-	ade_odata GetPtr(StoreType** ptr) {
+	ade_odata GetPtr(StoreType** ptr) const {
 		ade_odata od;
 		od.idx = LibIdx;
 		od.sig = NULL;
@@ -221,46 +275,70 @@ class ade_obj: public ade_lib_handle {
 		return od;
 	}
 };
-//Library class
-//This is what you define a variable of to make new libraries
+
+/**
+ * Library class
+ * This is what you define a variable of to make new libraries
+ *
+ * @ingroup ade_api
+ */
 class ade_lib : public ade_lib_handle {
  public:
-	ade_lib(const char *in_name, ade_lib_handle *parent=NULL, const char *in_shortname=NULL, const char *in_desc=NULL);
+	ade_lib(const char *in_name, const ade_lib_handle *parent=NULL, const char *in_shortname=NULL, const char *in_desc=NULL);
 
-	const char *GetName();
+	const char *GetName() const;
 };
 
+/**
+ * @ingroup ade_api
+ */
 class ade_func: public ade_lib_handle {
  public:
 	ade_func(const char* name,
 			 lua_CFunction func,
-			 ade_lib_handle& parent,
+			 const ade_lib_handle& parent,
 			 const char* args = NULL,
 			 const char* desc = NULL,
 			 const char* ret_type = NULL,
 			 const char* ret_desc = NULL);
 };
 
+/**
+ * @ingroup ade_api
+ */
 class ade_virtvar: public ade_lib_handle {
  public:
 	ade_virtvar(const char* name,
 				lua_CFunction func,
-				ade_lib_handle& parent,
+				const ade_lib_handle& parent,
 				const char* args = NULL,
 				const char* desc = NULL,
 				const char* ret_type = NULL,
 				const char* ret_desc = NULL);
 };
 
+/**
+ * @ingroup ade_api
+ */
 class ade_indexer: public ade_lib_handle {
  public:
-	ade_indexer(lua_CFunction func, ade_lib_handle& parent, const char* args = NULL, const char* desc = NULL,
+	ade_indexer(lua_CFunction func, const ade_lib_handle& parent, const char* args = NULL, const char* desc = NULL,
 				const char* ret_type = NULL, const char* ret_desc = NULL);
 };
 
+/**
+ * @ingroup ade_api
+ */
 void ade_stackdump(lua_State *L, char *stackdump);
+
+/**
+ * @ingroup ade_api
+ */
 int ade_friendly_error(lua_State *L);
 
+/**
+ * @ingroup ade_api
+ */
 const char *ade_get_type_string(lua_State *L, int argnum);
 }
 

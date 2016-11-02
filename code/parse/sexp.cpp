@@ -5804,7 +5804,7 @@ void sexp_set_energy_pct (int node, int op_num)
 					continue;
 				}	
 
-				shield_set_strength(&Objects[shipp->objnum], (shipp->ship_max_shield_strength * new_pct));
+				shield_set_strength(&Objects[shipp->objnum], (shield_get_max_strength(&Objects[shipp->objnum]) * new_pct));
 				break;
 		}
 
@@ -5842,7 +5842,7 @@ void multi_sexp_set_energy_pct()
 				break; 
 
 			case OP_SET_SHIELD_ENERGY:
-				shield_set_strength(&Objects[shipp->objnum], (shipp->ship_max_shield_strength * new_pct));
+				shield_set_strength(&Objects[shipp->objnum], (shield_get_max_strength(&Objects[shipp->objnum]) * new_pct));
 				break;
 		}
 	}
@@ -13993,7 +13993,7 @@ int sexp_goal_incomplete(int n)
  */
 void sexp_protect_ships(int n, bool flag)
 {
-	sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Protected, 0, flag);
+	sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Protected, flag);
 }
 
 /**
@@ -14004,7 +14004,7 @@ void sexp_protect_ships(int n, bool flag)
  */
 void sexp_beam_protect_ships(int n, bool flag)
 {
-	sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Beam_protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Beam_protected, 0, flag);
+	sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Beam_protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Beam_protected, flag);
 }
 
 /**
@@ -14019,13 +14019,13 @@ void sexp_turret_protect_ships(int n, bool flag)
 	n = CDR(n);
 
 	if (!stricmp(turret_type, "beam"))
-		sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Beam_protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Beam_protected, 0, flag);
+		sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Beam_protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Beam_protected, flag);
 	else if (!stricmp(turret_type, "flak"))
-		sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Flak_protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Flak_protected, 0, flag);
+		sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Flak_protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Flak_protected, flag);
 	else if (!stricmp(turret_type, "laser"))
-		sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Laser_protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Laser_protected, 0, flag);
+		sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Laser_protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Laser_protected, flag);
 	else if (!stricmp(turret_type, "missile"))
-		sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Missile_protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Missile_protected, 0, flag);
+		sexp_deal_with_ship_flag(n, true, Object::Object_Flags::Missile_protected, Ship::Ship_Flags::NUM_VALUES, Mission::Parse_Object_Flags::OF_Missile_protected, flag);
 	else
 		Warning(LOCATION, "Invalid turret type '%s'!", turret_type);
 }
@@ -16247,21 +16247,21 @@ void multi_sexp_set_countermeasures()
 void sexp_deal_with_afterburner_lock (int node, bool lock)
 {
 	Assert (node != -1);
-	sexp_deal_with_ship_flag(node, true, Object::Object_Flags::NUM_VALUES, Ship::Ship_Flags::Afterburner_locked, Mission::Parse_Object_Flags::NUM_VALUES, (lock ? 1:0), true);
+	sexp_deal_with_ship_flag(node, true, Object::Object_Flags::NUM_VALUES, Ship::Ship_Flags::Afterburner_locked, Mission::Parse_Object_Flags::NUM_VALUES, lock, true);
 }
 
 // Karajorma - locks or unlocks primary weapons on the requested ship
 void sexp_deal_with_primary_lock (int node, bool lock)
 {
 	Assert (node != -1);	
-	sexp_deal_with_ship_flag(node, true, Object::Object_Flags::NUM_VALUES, Ship::Ship_Flags::Primaries_locked, Mission::Parse_Object_Flags::SF_Primaries_locked, (lock ? 1:0), true);
+	sexp_deal_with_ship_flag(node, true, Object::Object_Flags::NUM_VALUES, Ship::Ship_Flags::Primaries_locked, Mission::Parse_Object_Flags::SF_Primaries_locked, lock, true);
 
 }
 
 void sexp_deal_with_secondary_lock (int node, bool lock)
 {
 	Assert (node != -1);	
-	sexp_deal_with_ship_flag(node, true, Object::Object_Flags::NUM_VALUES, Ship::Ship_Flags::Secondaries_locked, Mission::Parse_Object_Flags::SF_Secondaries_locked, (lock ? 1:0), true);
+	sexp_deal_with_ship_flag(node, true, Object::Object_Flags::NUM_VALUES, Ship::Ship_Flags::Secondaries_locked, Mission::Parse_Object_Flags::SF_Secondaries_locked, lock, true);
 
 }
 
@@ -18219,7 +18219,7 @@ void set_turret_secondary_ammo(ship_subsys *turret, int requested_bank, int requ
 }
 
 // Goober5000
-void sexp_set_subsys_rotation_lock_free(int node, int locked)
+void sexp_set_subsys_rotation_lock_free(int node, bool locked)
 {
 	int ship_num;		
 	ship_subsys *rotate;
@@ -18243,7 +18243,7 @@ void sexp_set_subsys_rotation_lock_free(int node, int locked)
 			continue;
 
 		// set rotate or not, depending on flag
-        rotate->flags.set(Ship::Subsystem_Flags::Rotates, locked != 0);
+        rotate->flags.set(Ship::Subsystem_Flags::Rotates, !locked);
 		if (locked)
 		{   
             if (rotate->subsys_snd_flags[Ship::Subsys_Sound_Flags::Rotate])

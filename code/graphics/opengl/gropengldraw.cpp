@@ -52,6 +52,12 @@ namespace
         float h = 1.0f;
         bool do_resize = gr_resize_screen_posf(&x, &y, &w, &h, resize_mode);
 
+		if (GL_rendering_to_texture) {
+			// Flip the Y-axis when rendering to texture
+			path->translate(0.f, i2fl(gr_screen.max_h));
+			path->scale(1.f, -1.f);
+		}
+
         path->translate(x, y);
         path->scale(w, h);
 
@@ -744,7 +750,7 @@ void gr_opengl_string(float sx, float sy, const char *s, int resize_mode, int in
 				bool doRender = true;
 				bool specialChar = false;
 				if (tokenLength == 1) {
-					// We may have encoutered a special character
+					// We may have encountered a special character
 					switch (*text) {
 						case '\n':
 							doRender = false;
@@ -756,6 +762,10 @@ void gr_opengl_string(float sx, float sy, const char *s, int resize_mode, int in
 							doRender = false;
 
 							x += nvgFont->getTabWidth();
+							break;
+						case '\r':
+							// Ignore Carriage return chars
+							doRender = false;
 							break;
 						default:
 							if (*text >= Lcl_special_chars || *text < 0) {
