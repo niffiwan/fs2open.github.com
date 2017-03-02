@@ -2114,7 +2114,6 @@ void gr_set_bitmap(int bitmap_num, int alphablend_mode, int bitblt_mode, float a
 void gr_flip(bool execute_scripting)
 {
 	// m!m avoid running CHA_ONFRAME when the "Quit mission" popup is shown. See mantis 2446 for reference
-	if (!quit_mission_popup_shown)
 	if (execute_scripting && !quit_mission_popup_shown && !popup_active())
 	{
 		TRACE_SCOPE(tracing::LuaOnFrame);

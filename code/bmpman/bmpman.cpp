@@ -2654,7 +2654,7 @@ bool set_temp_subdir_pathtype(const char *filename) {
 
 	// Free the old string first, if it's not the const initial empty string
 	if (Pathtypes[CF_TYPE_TEMP_SUBDIR_LOOKUP].path[0] != '\0') {
-		vm_free(Pathtypes[CF_TYPE_TEMP_SUBDIR_LOOKUP].path);
+		vm_free(&Pathtypes[CF_TYPE_TEMP_SUBDIR_LOOKUP].path);
 	}
 
 	Pathtypes[CF_TYPE_TEMP_SUBDIR_LOOKUP].path = vm_strdup(basepath);
