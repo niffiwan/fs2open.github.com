@@ -46,6 +46,7 @@
 #include "asteroid/asteroid.h"
 #include "network/multi_pmsg.h"
 #include "object/object.h"
+#include "object/objectshield.h"
 #include "ship/ship.h"
 #include "weapon/weapon.h"
 #include "hud/hudreticle.h"
@@ -3393,7 +3394,7 @@ void process_mission_log_packet( ubyte *data, header *hinfo )
 }
 
 // send a mission message packet
-void send_mission_message_packet( int id, char *who_from, int priority, int timing, int source, int builtin_type, int multi_target, int multi_team_filter, int delay)
+void send_mission_message_packet( int id, const char *who_from, int priority, int timing, int source, int builtin_type, int multi_target, int multi_team_filter, int delay)
 {
 	int packet_size;
 	ubyte data[MAX_PACKET_SIZE], up, us, utime;
@@ -4810,7 +4811,7 @@ void process_jump_into_mission_packet(ubyte *data, header *hinfo)
 
 //XSTR:OFF
 
-char *repair_text[] = {
+const char *repair_text[] = {
 	"unknown",
 	"REPAIR_INFO_BEGIN",
 	"REPAIR_INFO_END",
@@ -6812,7 +6813,7 @@ void process_asteroid_info( ubyte *data, header *hinfo )
 	PACKET_SET_SIZE();
 }
 
-void send_host_restr_packet(char *callsign,int code,int mode)
+void send_host_restr_packet(const char *callsign,int code,int mode)
 {
 	ubyte data[MAX_PACKET_SIZE],val;
 	int packet_size = 0;
@@ -7010,7 +7011,7 @@ void send_client_update_packet(net_player *pl)
 		n_quadrants = (ubyte)objp->n_quadrants;
 		ADD_DATA( n_quadrants );
 		for (i = 0; i < n_quadrants; i++ ) {
-			percent = (ubyte)(objp->shield_quadrant[i] / get_max_shield_quad(objp) * 100.0f);
+			percent = (ubyte)(objp->shield_quadrant[i] / shield_get_max_quad(objp) * 100.0f);
 
 			ADD_DATA( percent );
 		}
@@ -7134,7 +7135,7 @@ void process_client_update_packet(ubyte *data, header *hinfo)
 
 			for ( i = 0; i < n_quadrants; i++ ) {
 				if (i < objp->n_quadrants) {
-					fl_val = (shield_percent[i] * get_max_shield_quad(objp) / 100.0f);
+					fl_val = (shield_percent[i] * shield_get_max_quad(objp) / 100.0f);
 					objp->shield_quadrant[i] = fl_val;
 				}
 			}

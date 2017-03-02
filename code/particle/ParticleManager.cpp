@@ -12,6 +12,7 @@
 
 #include "bmpman/bmpman.h"
 #include "globalincs/systemvars.h"
+#include "tracing/tracing.h"
 
 /**
  * @defgroup particleSystems Particle System
@@ -89,22 +90,29 @@ EffectType parseEffectType() {
 void parseCallback(const char* fileName) {
 	using namespace particle;
 
-	read_file_text(fileName, CF_TYPE_TABLES);
+	try {
+		read_file_text(fileName, CF_TYPE_TABLES);
 
-	reset_parse();
+		reset_parse();
 
-	required_string("#Particle Effects");
+		required_string("#Particle Effects");
 
-	while (optional_string("$Effect:")) {
-		SCP_string name;
-		stuff_string(name, F_NAME);
+		while (optional_string("$Effect:")) {
+			SCP_string name;
+			stuff_string(name, F_NAME);
 
-		auto type = parseEffectType();
+			auto type = parseEffectType();
 
-		ParticleManager::get()->addEffect(constructEffect(name, type));
+			ParticleManager::get()->addEffect(constructEffect(name, type));
+		}
+
+		required_string("#End");
 	}
-
-	required_string("#End");
+	catch (const parse::ParseException& e)
+	{
+		mprintf(("TABLES: Unable to parse '%s'!  Error message = %s.\n", fileName, e.what()));
+		return;
+	}
 }
 
 void parseConfigFiles() {
@@ -171,6 +179,8 @@ void ParticleManager::doFrame(float) {
 		m_sources.clear(); // Always clear the vector to free memory
 	}
 	else {
+		TRACE_SCOPE(tracing::ProcessParticleEffects);
+
 		m_processingSources = true;
 
 		for (auto source = std::begin(m_sources); source != std::end(m_sources);) {

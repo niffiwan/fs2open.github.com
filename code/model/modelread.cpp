@@ -92,7 +92,7 @@ void model_set_bay_path_nums(polymodel *pm);
 
 // Goober5000 - see SUBSYSTEM_X in model.h
 // NOTE: Each subsystem must match up with its #define, or there will be problems
-char *Subsystem_types[SUBSYSTEM_MAX] =
+const char *Subsystem_types[SUBSYSTEM_MAX] =
 {
 	"None",
 	"Engines",
@@ -814,7 +814,7 @@ void do_new_subsystem( int n_subsystems, model_subsystem *slist, int subobj_num,
 
 }
 
-void print_family_tree( polymodel *obj, int modelnum, char * ident, int islast )	
+void print_family_tree( polymodel *obj, int modelnum, const char * ident, int islast )
 {
 	char temp[50];
 
@@ -893,7 +893,7 @@ void create_vertex_buffer(polymodel *pm)
 
 	bool use_batched_rendering = true;
 
-	if ( GLSL_version >= 150 && !Cmdline_no_batching ) {
+	if ( !Cmdline_no_batching ) {
 		size_t stride = 0;
 
 		// figure out if the vertex stride of this entire model matches. if not, turn off batched rendering for this model
@@ -1043,7 +1043,7 @@ void parse_triggers(int &n_trig, queued_animation **triggers, char *props);
 
 
 //reads a binary file containing a 3d model
-int read_model_file(polymodel * pm, char *filename, int n_subsystems, model_subsystem *subsystems, int ferror)
+int read_model_file(polymodel * pm, const char *filename, int n_subsystems, model_subsystem *subsystems, int ferror)
 {
 	CFILE *fp;
 	int version;
@@ -2444,14 +2444,12 @@ void model_load_texture(polymodel *pm, int i, char *file)
 
 	// base maps ---------------------------------------------------------------
 	texture_info *tbase = &tmap->textures[TM_BASE_TYPE];
-	texture_info *tunlit = &tmap->textures[TM_UNLIT_TYPE];
 
 	if (strstr(tmp_name, "thruster") || strstr(tmp_name, "invisible") || strstr(tmp_name, "warpmap"))
 	{
 		// Don't load textures for thruster animations or invisible textures
 		// or warp models!-Bobboau
 		tbase->clear();
-		tunlit->clear();
 	}
 	else
 	{
@@ -2469,13 +2467,6 @@ void model_load_texture(polymodel *pm, int i, char *file)
 		if ( tbase->GetTexture() < 0 ) {
 			Warning(LOCATION, "Couldn't open texture '%s'\nreferenced by model '%s'\n", tmp_name, pm->filename);
 		}
-
-		// look for unlit map as well in case this texture needs a different diffuse response when rendered in no lighting
-		strcpy_s(tmp_name, file);
-		strcat_s(tmp_name, "-unlit");
-		strlwr(tmp_name);
-
-		tunlit->LoadTexture(tmp_name, pm->filename);
 	}
 	// -------------------------------------------------------------------------
 
@@ -2598,7 +2589,7 @@ void model_load_texture(polymodel *pm, int i, char *file)
 	gr_maybe_create_shader(SDR_TYPE_MODEL, shader_flags | SDR_FLAG_MODEL_LIGHT);
 	gr_maybe_create_shader(SDR_TYPE_MODEL, shader_flags | SDR_FLAG_MODEL_LIGHT | SDR_FLAG_MODEL_FOG);
 	
-	if( !Cmdline_no_batching && GLSL_version >= 150 ) {
+	if( !Cmdline_no_batching ) {
 		shader_flags &= ~SDR_FLAG_MODEL_DEFERRED;
 		shader_flags |= SDR_FLAG_MODEL_TRANSFORM;
 
@@ -2619,7 +2610,7 @@ void model_load_texture(polymodel *pm, int i, char *file)
 }
 
 //returns the number of this model
-int model_load(char *filename, int n_subsystems, model_subsystem *subsystems, int ferror, int duplicate)
+int model_load(const  char *filename, int n_subsystems, model_subsystem *subsystems, int ferror, int duplicate)
 {
 	int i, num, arc_idx;
 	polymodel *pm = NULL;
@@ -4769,9 +4760,9 @@ void model_set_instance(int model_num, int sub_model_num, submodel_instance_info
 
     flagset<Ship::Subsystem_Flags> instance_flags;
 
-    if (flags != NULL)
-        instance_flags = *flags;
-
+    if (flags != NULL) {
+		instance_flags = *flags;
+	}
 
 	pm = model_get(model_num);
 

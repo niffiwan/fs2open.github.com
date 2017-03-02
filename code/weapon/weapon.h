@@ -29,7 +29,7 @@ class ship_subsys;
 #define	WP_LASER			0		// PLEASE NOTE that this flag specifies ballistic primaries as well - Goober5000
 #define	WP_MISSILE			1
 #define	WP_BEAM				2
-extern char *Weapon_subtype_names[];
+extern const char *Weapon_subtype_names[];
 extern int Num_weapon_subtypes;
 
 #define WRT_NONE	-1
@@ -529,7 +529,7 @@ int weapon_info_lookup(const char *name = NULL);
 void weapon_init();					// called at game startup
 void weapon_close();				// called at game shutdown
 void weapon_level_init();			// called before the start of each level
-void weapon_render(object* obj, draw_list *scene);
+void weapon_render(object* obj, model_draw_list *scene);
 void weapon_delete( object * obj );
 void weapon_process_pre( object *obj, float frame_time);
 void weapon_process_post( object *obj, float frame_time);

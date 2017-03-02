@@ -28,6 +28,7 @@
 #include "starfield/nebula.h"
 #include "starfield/starfield.h"
 #include "starfield/supernova.h"
+#include "tracing/tracing.h"
 
 #define MAX_DEBRIS_VCLIPS			4
 #define DEBRIS_ROT_MIN				10000
@@ -1038,6 +1039,9 @@ void stars_get_sun_pos(int sun_n, vec3d *pos)
 // draw sun
 void stars_draw_sun(int show_sun)
 {	
+	GR_DEBUG_SCOPE("Draw Suns");
+	TRACE_SCOPE(tracing::DrawSuns);
+
 	int idx;
 	vec3d sun_pos;
 	vec3d sun_dir;
@@ -1100,7 +1104,7 @@ void stars_draw_sun(int show_sun)
 		g3_rotate_faraway_vertex(&sun_vex, &sun_pos);
 
 		if ( sun_vex.codes & (CC_BEHIND|CC_OFF_USER) ) {
-			return;
+			continue;
 		}
 
 		if ( !(sun_vex.flags & PF_PROJECTED) ) {
@@ -1108,7 +1112,7 @@ void stars_draw_sun(int show_sun)
 		}
 
 		if ( sun_vex.flags & PF_OVERFLOW ) {
-			return;
+			continue;
 		}
 
 		material mat_params;
@@ -1248,6 +1252,9 @@ void stars_draw_sun_glow(int sun_n)
 
 void stars_draw_bitmaps(int show_bitmaps)
 {
+	GR_DEBUG_SCOPE("Draw Bitmaps");
+	TRACE_SCOPE(tracing::DrawBitmaps);
+
 	int idx;
 	int star_index;
 
@@ -1504,6 +1511,9 @@ void subspace_render()
 
 void stars_draw_stars()
 {
+	GR_DEBUG_SCOPE("Draw Starfield");
+	TRACE_SCOPE(tracing::DrawStarfield);
+
 	int i;
 	star *sp;
 	float dist = 0.0f;
@@ -1608,6 +1618,9 @@ void stars_draw_stars()
 
 void stars_draw_debris()
 {
+	GR_DEBUG_SCOPE("Draw motion debris");
+	TRACE_SCOPE(tracing::DrawMotionDebris);
+
 	int i;
 	float vdist;
 	vec3d tmp;
@@ -1688,6 +1701,9 @@ void stars_draw_debris()
 
 void stars_draw(int show_stars, int show_suns, int show_nebulas, int show_subspace, int env)
 {
+	GR_DEBUG_SCOPE("Draw Stars");
+	TRACE_SCOPE(tracing::DrawStars);
+
 	int gr_zbuffering_save = gr_zbuffer_get();
 	gr_zbuffer_set(GR_ZBUFF_NONE);
 
@@ -1703,13 +1719,9 @@ void stars_draw(int show_stars, int show_suns, int show_nebulas, int show_subspa
 	fix xt1, xt2;
 	xt1 = timer_get_fixed_seconds();
 #endif
-
-	if ( show_nebulas && (Game_detail_flags & DETAIL_FLAG_NEBULAS) && (Neb2_render_mode != NEB2_RENDER_POF) && (Neb2_render_mode != NEB2_RENDER_LAME))	{
-		nebula_render();
-	}
-
+	
 	// draw background stuff
-	if ( (Neb2_render_mode != NEB2_RENDER_POLY) && (Neb2_render_mode != NEB2_RENDER_LAME) && show_stars ) {
+	if ( show_stars ) {
 		// semi-hack, do we don't fog the background
 		int neb_save = Neb2_render_mode;
 		Neb2_render_mode = NEB2_RENDER_NONE;
@@ -2028,6 +2040,9 @@ void stars_page_in()
 // background nebula models and planets
 void stars_draw_background()
 {	
+	GR_DEBUG_SCOPE("Draw Background");
+	TRACE_SCOPE(tracing::DrawBackground);
+
 	if (Nmodel_num < 0)
 		return;
 
@@ -2045,7 +2060,7 @@ void stars_draw_background()
 }
 
 // call this to set a specific model as the background model
-void stars_set_background_model(char *model_name, char *texture_name, int flags)
+void stars_set_background_model(const char *model_name, const char *texture_name, int flags)
 {
 	if (Nmodel_bitmap >= 0) {
 		bm_unload(Nmodel_bitmap);

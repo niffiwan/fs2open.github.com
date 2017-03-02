@@ -126,7 +126,7 @@ public:
 	~ClassInfoEntry();
 
 	//--SET FUNCTIONS
-	void Parse(char* tag, int in_type);
+	void Parse(const char* tag, int in_type);
 
 	//--GET FUNCTIONS
 	int GetImageHandle(int ID=CIE_HANDLE_N){return Handles[ID].Image;}
@@ -364,7 +364,7 @@ public:
 	//-----
 
 	//Set stuff
-	void ParseClassInfo(char* section);
+	void ParseClassInfo(const char* section);
 	void SetActiveObject(GUIObject *cgp);
 	void SetGraspedObject(GUIObject *cgp, int button);
 	void SetFocusObject(GUIObject *cgp);

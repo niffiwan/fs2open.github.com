@@ -29,12 +29,12 @@
 #include "io/timer.h"
 #include "jpgutils/jpgutils.h"
 #include "network/multiutil.h"
-#include "palman/palman.h"
 #include "parse/parselo.h"
 #include "pcxutils/pcxutils.h"
 #include "pngutils/pngutils.h"
 #include "ship/ship.h"
 #include "tgautils/tgautils.h"
+#include "tracing/Monitor.h"
 #include "cfile/cfilesystem.h"
 
 #include <ctype.h>
@@ -69,7 +69,6 @@ MONITOR(SizeBitmapPage)
 
 // --------------------------------------------------------------------------------------------------------------------
 // Definition of public variables (declared as extern in bmpman.h).
-int UNLITMAP = -1;
 int GLOWMAP = -1;
 int SPECMAP = -1;
 int SPECGLOSSMAP = -1;
@@ -541,6 +540,7 @@ int bm_create(int bpp, int w, int h, void *data, int flags) {
 	bm_bitmaps[n].bm.h = (short)h;
 	bm_bitmaps[n].bm.rowsize = (short)w;
 	bm_bitmaps[n].bm.bpp = (ubyte)bpp;
+	bm_bitmaps[n].bm.true_bpp = (ubyte)bpp;
 	bm_bitmaps[n].bm.flags = (ubyte)flags;
 	bm_bitmaps[n].bm.data = 0;
 	bm_bitmaps[n].bm.palette = NULL;
@@ -2312,7 +2312,7 @@ void bm_lock_pcx(int handle, int bitmapnum, bitmap_entry *be, bitmap *bmp, int b
 	data = (ubyte *)bm_malloc(bitmapnum, be->mem_taken);
 	bmp->bpp = bpp;
 	bmp->data = (ptr_u)data;
-	bmp->palette = (bpp == 8) ? gr_palette : NULL;
+	bmp->palette = NULL;
 	memset(data, 0, be->mem_taken);
 
 	Assert(&be->bm == bmp);
@@ -3170,6 +3170,10 @@ bool bm_set_render_target(int handle, int face) {
 int bm_unload(int handle, int clear_render_targets, bool nodebug) {
 	bitmap_entry *be;
 	bitmap *bmp;
+
+	if (handle == -1) {
+		return -1;
+	}
 
 	int n = handle % MAX_BITMAPS;
 

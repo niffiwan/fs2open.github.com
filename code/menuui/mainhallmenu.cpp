@@ -32,7 +32,6 @@
 #include "network/multi_voice.h"
 #include "network/multiui.h"
 #include "network/multiutil.h"
-#include "palman/palman.h"
 #include "parse/parselo.h"
 #include "scripting/scripting.h"
 #include "playerman/player.h"
@@ -175,7 +174,7 @@ void main_hall_render_door_anims(float frametime);
 
 struct main_hall_region_info {
 	int mask;
-	char *name;
+	const char *name;
 };
 
 main_hall_region_info Main_hall_region_map[] = {
@@ -2187,9 +2186,10 @@ void parse_main_hall_table(const char* filename)
 				stuff_string(temp_string, F_NAME, MAX_FILENAME_LEN);
 				m->mask = temp_string;
 
-				required_string("+Music:");
-				stuff_string(temp_string, F_NAME, MAX_FILENAME_LEN);
-				m->music_name = temp_string;
+				if (optional_string("+Music:")) {	// Demo doesn't have these lines.
+					stuff_string(temp_string, F_NAME, MAX_FILENAME_LEN);
+					m->music_name = temp_string;
+				}
 
 				// Goober5000
 				if (optional_string("+Substitute Music:")) {

@@ -33,14 +33,14 @@ GLuint Framebuffer_fallback_texture_id = 0;
 
 opengl_vert_attrib GL_vertex_attrib_info[] =
 	{
-		{ opengl_vert_attrib::POSITION,		"vertPosition",		{ 0.0f, 0.0f, 0.0f, 1.0f } },
-		{ opengl_vert_attrib::COLOR,		"vertColor",		{ 1.0f, 1.0f, 1.0f, 1.0f } },
-		{ opengl_vert_attrib::TEXCOORD,		"vertTexCoord",		{ 1.0f, 1.0f, 1.0f, 1.0f } },
-		{ opengl_vert_attrib::NORMAL,		"vertNormal",		{ 0.0f, 0.0f, 1.0f, 0.0f } },
-		{ opengl_vert_attrib::TANGENT,		"vertTangent",		{ 1.0f, 0.0f, 0.0f, 0.0f } },
-		{ opengl_vert_attrib::MODEL_ID,		"vertModelID",		{ 0.0f, 0.0f, 0.0f, 0.0f } },
-		{ opengl_vert_attrib::RADIUS,		"vertRadius",		{ 1.0f, 0.0f, 0.0f, 0.0f } },
-		{ opengl_vert_attrib::UVEC,			"vertUvec",			{ 0.0f, 1.0f, 0.0f, 0.0f } }
+		{ opengl_vert_attrib::POSITION,		"vertPosition",		{{{ 0.0f, 0.0f, 0.0f, 1.0f }}} },
+		{ opengl_vert_attrib::COLOR,		"vertColor",		{{{ 1.0f, 1.0f, 1.0f, 1.0f }}} },
+		{ opengl_vert_attrib::TEXCOORD,		"vertTexCoord",		{{{ 1.0f, 1.0f, 1.0f, 1.0f }}} },
+		{ opengl_vert_attrib::NORMAL,		"vertNormal",		{{{ 0.0f, 0.0f, 1.0f, 0.0f }}} },
+		{ opengl_vert_attrib::TANGENT,		"vertTangent",		{{{ 1.0f, 0.0f, 0.0f, 0.0f }}} },
+		{ opengl_vert_attrib::MODEL_ID,		"vertModelID",		{{{ 0.0f, 0.0f, 0.0f, 0.0f }}} },
+		{ opengl_vert_attrib::RADIUS,		"vertRadius",		{{{ 1.0f, 0.0f, 0.0f, 0.0f }}} },
+		{ opengl_vert_attrib::UVEC,			"vertUvec",			{{{ 0.0f, 1.0f, 0.0f, 0.0f }}} }
 	};
 
 /**
@@ -227,6 +227,8 @@ opengl_shader_t *Current_shader = NULL;
 void opengl_shader_set_current(opengl_shader_t *shader_obj)
 {
 	if (Current_shader != shader_obj) {
+		GR_DEBUG_SCOPE("Set shader");
+
 		GL_state.Array.ResetVertexAttribs();
 
 		if(shader_obj) {
@@ -564,15 +566,15 @@ int opengl_compile_shader(shader_type sdr, uint flags)
 	}
 
 	auto shader_hash = get_shader_hash(vert_content, geom_content, frag_content);
-	std::unique_ptr<opengl::ShaderProgram> program(new opengl::ShaderProgram());
+	std::unique_ptr<opengl::ShaderProgram> program(new opengl::ShaderProgram(sdr_info->description));
 
 	if (!load_cached_shader_binary(program.get(), shader_hash)) {
 		GR_DEBUG_SCOPE("Compiling shader code");
 		try {
-			program->addShaderCode(opengl::STAGE_VERTEX, vert_content);
-			program->addShaderCode(opengl::STAGE_FRAGMENT, frag_content);
+			program->addShaderCode(opengl::STAGE_VERTEX, sdr_info->vert, vert_content);
+			program->addShaderCode(opengl::STAGE_FRAGMENT, sdr_info->frag, frag_content);
 			if (use_geo_sdr) {
-				program->addShaderCode(opengl::STAGE_GEOMETRY, geom_content);
+				program->addShaderCode(opengl::STAGE_GEOMETRY, sdr_info->geo, geom_content);
 			}
 
 			for (int i = 0; i < opengl_vert_attrib::NUM_ATTRIBS; ++i) {
@@ -601,13 +603,11 @@ int opengl_compile_shader(shader_type sdr, uint flags)
 	opengl_shader_set_current(&new_shader);
 
 	// bind fragment data locations
-	if ( GL_version >= 32 && GLSL_version >= 150 ) {
-		glBindFragDataLocation(new_shader.program->getShaderHandle(), 0, "fragOut0");
-		glBindFragDataLocation(new_shader.program->getShaderHandle(), 1, "fragOut1");
-		glBindFragDataLocation(new_shader.program->getShaderHandle(), 2, "fragOut2");
-		glBindFragDataLocation(new_shader.program->getShaderHandle(), 3, "fragOut3");
-		glBindFragDataLocation(new_shader.program->getShaderHandle(), 4, "fragOut4");
-	}
+	glBindFragDataLocation(new_shader.program->getShaderHandle(), 0, "fragOut0");
+	glBindFragDataLocation(new_shader.program->getShaderHandle(), 1, "fragOut1");
+	glBindFragDataLocation(new_shader.program->getShaderHandle(), 2, "fragOut2");
+	glBindFragDataLocation(new_shader.program->getShaderHandle(), 3, "fragOut3");
+	glBindFragDataLocation(new_shader.program->getShaderHandle(), 4, "fragOut4");
 
 	// initialize uniforms and attributes
 	for (auto& unif : sdr_info->uniforms) {
@@ -826,7 +826,10 @@ void opengl_shader_set_passthrough(bool textured, bool alpha, vec4 *clr, float c
 
 void opengl_shader_set_passthrough(bool textured, bool alpha, color *clr)
 {
-	vec4 normalized_clr = { i2fl(clr->red) / 255.0f, i2fl(clr->green) / 255.0f, i2fl(clr->blue) / 255.0f, clr->is_alphacolor ? i2fl(clr->alpha) / 255.0f : 1.0f };
+	vec4 normalized_clr = {{{ i2fl(clr->red) / 255.0f,
+		i2fl(clr->green) / 255.0f,
+		i2fl(clr->blue) / 255.0f,
+		clr->is_alphacolor ? i2fl(clr->alpha) / 255.0f : 1.0f }}};
 
 	opengl_shader_set_passthrough(textured, alpha, &normalized_clr, 1.0f);
 }

@@ -16,7 +16,10 @@ if(NOT COMPILER_FLAGS)
 	set(COMPILER_FLAGS "-march=native -pipe")
 endif()
 
-globally_enable_extra_compiler_warnings()
+# This is a slight hack since our flag setup is a bit more complicated
+_enable_extra_compiler_warnings_flags()
+set(COMPILER_FLAGS "${COMPILER_FLAGS} ${_flags}")
+
 set(COMPILER_FLAGS "${COMPILER_FLAGS} -funroll-loops -fsigned-char -Wno-unknown-pragmas")
 
 # Omit "argument unused during compilation" when clang is used with ccache.
@@ -55,12 +58,12 @@ endif()
 
 set(COMPILER_FLAGS "${COMPILER_FLAGS} ${SANITIZE_FLAGS}")
 
-# Omit "deprecated conversion from string constant to 'char*'" warnings.
-set(COMPILER_FLAGS "${COMPILER_FLAGS} -Wno-write-strings")
-
 set(COMPILER_FLAGS "${COMPILER_FLAGS} -Wno-unused-function")
 
-set(COMPILER_FLAGS "${COMPILER_FLAGS} -Wno-deprecated -Wno-char-subscripts")
+# Dear Clang, please tell us if a function does not return a value since that part of the standard is stupid!
+set(COMPILER_FLAGS "${COMPILER_FLAGS} -Wreturn-type")
+
+set(COMPILER_FLAGS "${COMPILER_FLAGS} -Wno-char-subscripts")
 
 set(COMPILER_FLAGS "${COMPILER_FLAGS} -Wno-unused-parameter")
 
@@ -96,3 +99,6 @@ if (FSO_FATAL_WARNINGS)
 	# Make warnings fatal if the right variable is set
 	target_compile_options(compiler INTERFACE "-Werror")
 endif()
+
+# Always define this to make sure that the fixed width format macros are available
+target_compile_definitions(compiler INTERFACE __STDC_FORMAT_MACROS)

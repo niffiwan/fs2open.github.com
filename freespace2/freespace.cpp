@@ -129,7 +129,6 @@
 #include "osapi/osregistry.h"
 #include "parse/encrypt.h"
 #include "parse/generic_log.h"
-#include "scripting/lua.h"
 #include "parse/parselo.h"
 #include "scripting/scripting.h"
 #include "parse/sexp.h"
@@ -166,6 +165,7 @@
 #include "weapon/muzzleflash.h"
 #include "weapon/shockwave.h"
 #include "weapon/weapon.h"
+#include "tracing/Monitor.h"
 
 #include "SDLGraphicsOperations.h"
 
@@ -208,7 +208,7 @@ extern "C" {
 //  This function is defined in code\network\multiutil.cpp so will be linked from multiutil.obj
 //  it's required fro the -missioncrcs command line option - Kazan
 void multi_spew_pxo_checksums(int max_files, const char *outfile);
-void fs2netd_spew_table_checksums(char *outfile);
+void fs2netd_spew_table_checksums(const char *outfile);
 
 extern bool frame_rate_display;
 
@@ -483,23 +483,23 @@ void game_title_screen_display();
 void game_title_screen_close();
 
 // loading background filenames
-static char *Game_loading_bground_fname[GR_NUM_RESOLUTIONS] = {
+static const char *Game_loading_bground_fname[GR_NUM_RESOLUTIONS] = {
 	"LoadingBG",		// GR_640
 	"2_LoadingBG"		// GR_1024
 };
 
 
-static char *Game_loading_ani_fname[GR_NUM_RESOLUTIONS] = {
+static const char *Game_loading_ani_fname[GR_NUM_RESOLUTIONS] = {
 	"Loading",		// GR_640
 	"2_Loading"		// GR_1024
 };
 
-static char *Game_title_screen_fname[GR_NUM_RESOLUTIONS] = {
+static const char *Game_title_screen_fname[GR_NUM_RESOLUTIONS] = {
 	"PreLoad",
 	"2_PreLoad"
 };
 
-static char *Game_logo_screen_fname[GR_NUM_RESOLUTIONS] = {
+static const char *Game_logo_screen_fname[GR_NUM_RESOLUTIONS] = {
 	"PreLoadLogo",
 	"2_PreLoadLogo"
 };
@@ -527,8 +527,6 @@ float Game_shudder_intensity = 0.0f;			// should be between 0.0 and 100.0
 sound_env Game_sound_env;
 sound_env Game_default_sound_env = { EAX_ENVIRONMENT_BATHROOM, 0.2f, 0.2f, 1.0f };
 int Game_sound_env_update_timestamp;
-
-static std::unique_ptr<SDLGraphicsOperations> sdlGraphicsOperations;
 
 fs_builtin_mission *game_find_builtin_mission(char *filename)
 {
@@ -1700,11 +1698,7 @@ void game_init()
 	}
 
 #ifndef NDEBUG
-	#if FS_VERSION_HAS_REVIS == 0
-		mprintf(("FreeSpace 2 Open version: %i.%i.%i\n", FS_VERSION_MAJOR, FS_VERSION_MINOR, FS_VERSION_BUILD));
-	#else
-		mprintf(("FreeSpace 2 Open version: %i.%i.%i.%i\n", FS_VERSION_MAJOR, FS_VERSION_MINOR, FS_VERSION_BUILD, FS_VERSION_REVIS));
-	#endif
+	mprintf(("FreeSpace 2 Open version: %s\n", FS_VERSION_FULL));
 
 	extern void cmdline_debug_print_cmdline();
 	cmdline_debug_print_cmdline();
@@ -1717,7 +1711,6 @@ void game_init()
 	strcat_s(whee, DIR_SEPARATOR_STR);
 	strcat_s(whee, EXE_FNAME);
 
-	profile_init();
 	//Initialize the libraries
 	s1 = timer_get_milliseconds();
 
@@ -1797,15 +1790,25 @@ void game_init()
 // SOUND INIT END
 /////////////////////////////
 
+	std::unique_ptr<SDLGraphicsOperations> sdlGraphicsOperations;
 	if (!Is_standalone) {
 		// Standalone mode doesn't require graphics operations
 		sdlGraphicsOperations.reset(new SDLGraphicsOperations());
 	}
-	if ( gr_init(sdlGraphicsOperations.get()) == false ) {
+	if ( gr_init(std::move(sdlGraphicsOperations)) == false ) {
 		os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR, "Error intializing graphics!");
 		exit(1);
 		return;
 	}
+
+#ifndef NDEBUG
+	if (Cmdline_debug_window) {
+		outwnd_debug_window_init();
+	}
+#endif
+
+	// This needs to happen after graphics initialization
+	tracing::init();
 
 // Karajorma - Moved here from the sound init code cause otherwise windows complains
 #ifdef FS2_VOICER
@@ -1895,10 +1898,7 @@ void game_init()
 	//as long as it's not being used.
 	//Otherwise, it just keeps the parsed interface.tbl in memory.
 	GUI_system.ParseClassInfo("interface.tbl");
-
-	// load non-darkening pixel defs
-	palman_load_pixels();
-
+	
 	particle::ParticleManager::init();
 
 	iff_init();						// Goober5000 - this must be done even before species_defs :p
@@ -1993,7 +1993,6 @@ void game_init()
 	Viewer_mode = 0;
 	Game_paused = 0;
 
-	Script_system.RunBytecode(Script_gameinithook);
 	Script_system.RunCondition(CHA_GAMEINIT);
 
 	game_title_screen_close();
@@ -2006,8 +2005,8 @@ void game_init()
 	nprintf(("General", "Ships.tbl is : %s\n", Game_ships_tbl_valid ? "VALID" : "INVALID!!!!"));
 	nprintf(("General", "Weapons.tbl is : %s\n", Game_weapons_tbl_valid ? "VALID" : "INVALID!!!!"));
 
-	mprintf(("cfile_init() took %d\n", e1 - s1));	
-	Script_system.RunBytecode(Script_gameinithook);
+	mprintf(("cfile_init() took %d\n", e1 - s1));
+
 	// if we are done initializing, start showing the cursor
 	io::mouse::CursorManager::get()->showCursor(true);
 
@@ -2099,11 +2098,12 @@ void game_show_framerate()
 #endif
 
 
-	if (Show_framerate || Cmdline_frame_profile)	{
+	if (Show_framerate || Cmdline_frame_profile) {
 		gr_set_color_fast(&HUD_color_debug);
 
 		if (Cmdline_frame_profile) {
-			gr_string(gr_screen.center_offset_x + 20, gr_screen.center_offset_y + 100 + line_height, profile_output.c_str(), GR_RESIZE_NONE);
+			gr_string(gr_screen.center_offset_x + 20, gr_screen.center_offset_y + 100 + line_height,
+					  tracing::get_frame_profile_output().c_str(), GR_RESIZE_NONE);
 		}
 
 		if (Show_framerate) {
@@ -3051,6 +3051,9 @@ inline void render_environment(int i, vec3d *eye_pos, matrix *new_orient, float 
 
 void setup_environment_mapping(camid cid)
 {
+	GR_DEBUG_SCOPE("Environment Mapping");
+	TRACE_SCOPE(tracing::EnvironmentMapping);
+
 	matrix new_orient = IDENTITY_MATRIX;
 	float old_zoom = View_zoom, new_zoom = 1.0f;//0.925f;
 	int i = 0;
@@ -3531,6 +3534,8 @@ extern SCP_vector<object*> transparent_objects;
 void game_render_frame( camid cid )
 {
 	GR_DEBUG_SCOPE("Main Frame");
+	TRACE_SCOPE(tracing::RenderMainFrame);
+
 	g3_start_frame(game_zbuffer);
 
 	camera *cam = cid.getCamera();
@@ -3576,9 +3581,7 @@ void game_render_frame( camid cid )
 	// Note: environment mapping gets disabled when rendering to texture; if you change
 	// this, make sure that the current render target gets restored right afterwards!
 	if ( Cmdline_env && !Env_cubemap_drawn && gr_screen.rendering_to_texture == -1 ) {
-		GR_DEBUG_SCOPE("Environment Mapping");
-
-		PROFILE("Environment Mapping", setup_environment_mapping(cid));
+		setup_environment_mapping(cid);
 
 		if ( !Dynamic_environment ) {
 			Env_cubemap_drawn = true;
@@ -3601,13 +3604,13 @@ void game_render_frame( camid cid )
 		stars_draw(1,1,1,0,0);
 	}
 
-	PROFILE("Build Shadow Map", shadows_render_all(Proj_fov, &Eye_matrix, &Eye_position));
-	PROFILE("Render Scene", obj_render_queue_all());
+	shadows_render_all(Proj_fov, &Eye_matrix, &Eye_position);
+	obj_render_queue_all();
 
 	render_shields();
 
-	PROFILE("Trails", trail_render_all());						// render missilie trails after everything else.
-	PROFILE("Particles", particle::render_all());					// render particles after everything else.	
+	trail_render_all();						// render missilie trails after everything else.
+	particle::render_all();					// render particles after everything else.
 	
 #ifdef DYN_CLIP_DIST
 	gr_end_proj_matrix();
@@ -3743,7 +3746,10 @@ extern int Player_dead_state;
 
 //	Flip the page and time how long it took.
 void game_flip_page_and_time_it()
-{	
+{
+	tracing::async::end(tracing::MainFrame, tracing::MainFrameScope);
+	tracing::async::begin(tracing::MainFrame, tracing::MainFrameScope);
+
 	fix t1, t2,d;
 	int t;
 	t1 = timer_get_fixed_seconds();
@@ -3756,6 +3762,8 @@ void game_flip_page_and_time_it()
 
 void game_simulation_frame()
 {
+	TRACE_SCOPE(tracing::Simulation);
+
 	//Do camera stuff
 	//This is for the warpout cam
 	if ( Player->control_mode != PCM_NORMAL )
@@ -3866,7 +3874,7 @@ void game_simulation_frame()
 		}
 		
 		// move all the objects now
-		PROFILE("Move Objects - Master", obj_move_all(flFrametime));
+		obj_move_all(flFrametime);
 
 		mission_eval_goals();
 	}
@@ -3885,7 +3893,7 @@ void game_simulation_frame()
 		}
 
 		// move all objects - does interpolation now as well
-		PROFILE("Move Objects - Client", obj_move_all(flFrametime));
+		obj_move_all(flFrametime);
 
 
 	}
@@ -3908,11 +3916,11 @@ void game_simulation_frame()
 
 		if (!physics_paused)	{
 			// Move particle system
-			PROFILE("Move Particles", particle::move_all(flFrametime));
-			PROFILE("Process Particle Effects", particle::ParticleManager::get()->doFrame(flFrametime));
+			particle::move_all(flFrametime);
+			particle::ParticleManager::get()->doFrame(flFrametime);
 
 			// Move missile trails
-			PROFILE("Move Trails", trail_move_all(flFrametime));		
+			trail_move_all(flFrametime);
 
 			// Flash the gun flashes
 			shipfx_flash_do_frame(flFrametime);			
@@ -3936,7 +3944,7 @@ void game_simulation_frame()
 #endif
 	}
 
-	Script_system.RunBytecode(Script_simulationhook);
+	Script_system.RunCondition(CHA_SIMULATION);
 }
 
 // Maybe render and process the dead-popup
@@ -4200,7 +4208,12 @@ void game_frame(bool paused)
 	}
 #endif
 	// start timing frame
-	profile_begin("Main Frame");
+	TRACE_SCOPE(tracing::MainFrame);
+
+	if(Player_obj)
+		Script_system.SetHookObject("Player", Player_obj);
+	else
+		Script_system.RemHookVar("Player");
 
 	DEBUG_GET_TIME( total_time1 )
 
@@ -4259,7 +4272,7 @@ void game_frame(bool paused)
 			return;
 		}
 		
-		PROFILE("Simulation", game_simulation_frame()); 
+		game_simulation_frame();
 		
 		// if not actually in a game play state, then return.  This condition could only be true in 
 		// a multiplayer game.
@@ -4279,17 +4292,12 @@ void game_frame(bool paused)
 				gr_clear();
 			}
 
-			if(Player_obj)
-				Script_system.SetHookObject("Player", Player_obj);
-			else
-				Script_system.RemHookVar("Player");
-
 			DEBUG_GET_TIME( clear_time2 )
 			DEBUG_GET_TIME( render3_time1 )
 			
 			camid cid = game_render_frame_setup();
 
-			PROFILE("Render", game_render_frame( cid ));
+			game_render_frame( cid );
 			
 			//Cutscene bars
 			clip_frame_view();
@@ -4301,9 +4309,9 @@ void game_frame(bool paused)
 
 			Scripting_didnt_draw_hud = 1;
 			Script_system.SetHookObject("Self", Viewer_obj);
-			if(Script_system.IsOverride(Script_hudhook) || Script_system.IsConditionOverride(CHA_HUDDRAW, Viewer_obj))
+			if(Script_system.IsConditionOverride(CHA_HUDDRAW, Viewer_obj)) {
 				Scripting_didnt_draw_hud = 0;
-			Script_system.RemHookVar("Self");
+			}
 
 			if(Scripting_didnt_draw_hud) {
 				GR_DEBUG_SCOPE("Render HUD");
@@ -4316,10 +4324,8 @@ void game_frame(bool paused)
 				anim_render_all(0, flFrametime);
 			}
 
-			Script_system.SetHookObject("Self", Viewer_obj);
 			if (!(Viewer_mode & (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY))) 
 			{
-				Script_system.RunBytecode(Script_hudhook);
 				Script_system.RunCondition(CHA_HUDDRAW, '\0', NULL, Viewer_obj);
 			}
 			Script_system.RemHookVar("Self");
@@ -4370,7 +4376,7 @@ void game_frame(bool paused)
 			// If a regular popup is active, don't flip (popup code flips)
 			if( !popup_running_state() ){
 				DEBUG_GET_TIME( flip_time1 )
-				PROFILE("Page Flip", game_flip_page_and_time_it());
+				game_flip_page_and_time_it();
 				DEBUG_GET_TIME( flip_time2 )
 			}
 
@@ -4385,9 +4391,9 @@ void game_frame(bool paused)
 	// process lightning (nebula only)
 	nebl_process();
 
-	profile_end("Main Frame");
-	profile_dump_output();
-	profile_dump_json_output();
+	if (Cmdline_frame_profile) {
+		tracing::frame_profile_process_frame();
+	}
 
 	DEBUG_GET_TIME( total_time2 )
 
@@ -4669,8 +4675,6 @@ void game_do_frame()
 	last_single_step = game_single_step;
 
 	game_frame();
-
-	monitor_update();			// Update monitor variables
 }
 
 void multi_maybe_do_frame()
@@ -5488,6 +5492,8 @@ void game_leave_state( int old_state, int new_state )
 			break;
 
 		case GS_STATE_GAME_PLAY:
+			tracing::async::end(tracing::MainFrame, tracing::MainFrameScope);
+
 			if ( !(Game_mode & GM_STANDALONE_SERVER) ) {
 				player_save_target_and_weapon_link_prefs();
 				game_stop_looped_sounds();
@@ -6068,6 +6074,8 @@ void mouse_force_pos(int x, int y);
 			memset(&Multi_ship_status_bi, 0, sizeof(button_info));
 			
 			io::mouse::CursorManager::get()->showCursor(false, true);
+
+			tracing::async::begin(tracing::MainFrame, tracing::MainFrameScope);
 			break;
 
 		case GS_STATE_HUD_CONFIG:
@@ -6596,6 +6604,13 @@ void game_do_state(int state)
 			break;
 
    } // end switch(gs_current_state)
+
+#ifndef NDEBUG
+	if (Cmdline_debug_window) {
+		// Do a frame for the debug window here since this code is always executed
+		outwnd_debug_window_do_frame(flFrametime);
+	}
+#endif
 }
 
 
@@ -6776,11 +6791,8 @@ void game_spew_pof_info()
 				}				
 				cfputs("------------------------------------------------------------------------\n\n", out);				
 			}
-		}
-
-		if(counted >= MAX_POLYGON_MODELS - 5){
-			model_free_all();
-			counted = 0;
+			// Free memory of this model again
+			model_unload(model_num);
 		}
 	}
 
@@ -6905,6 +6917,9 @@ int game_main(int argc, char *argv[])
 		if ( state == GS_STATE_QUIT_GAME ) {
 			break;
 		}
+
+		// Since tracing is always active this needs to happen in the main loop
+		tracing::process_events();
 	} 
 
 	game_shutdown();
@@ -6957,8 +6972,6 @@ void game_launch_launcher_on_exit()
 void game_shutdown(void)
 {
 	headtracking::shutdown();
-
-	profile_deinit();
 
 	fsspeech_deinit();
 #ifdef FS2_VOICER
@@ -7033,8 +7046,14 @@ void game_shutdown(void)
 	model_free_all();
 	bm_unload_all();			// unload/free bitmaps, has to be called *after* model_free_all()!
 
-	gr_close(sdlGraphicsOperations.get());
-	sdlGraphicsOperations.reset();
+	tracing::shutdown();
+
+#ifndef NDEBUG
+	outwnd_debug_window_deinit();
+#endif
+
+	gr_close();
+
 	os_cleanup();
 
 	cfile_close();
@@ -7531,11 +7550,7 @@ void get_version_string(char *str, int max_size)
 //XSTR:OFF
 	Assert( max_size > 6 );
 
-	#if FS_VERSION_HAS_REVIS == 0
-		sprintf(str, "FreeSpace 2 Open v%i.%i.%i", FS_VERSION_MAJOR, FS_VERSION_MINOR, FS_VERSION_BUILD);
-	#else
-		sprintf(str, "FreeSpace 2 Open v%i.%i.%i.%i", FS_VERSION_MAJOR, FS_VERSION_MINOR, FS_VERSION_BUILD, FS_VERSION_REVIS);
-	#endif
+	sprintf(str, "FreeSpace 2 Open v%s", FS_VERSION_FULL);
 
 #ifndef NDEBUG
 	strcat_s( str, max_size, " Debug" );
@@ -7548,18 +7563,6 @@ void get_version_string(char *str, int max_size)
 			strcat_s( str, max_size, " OpenGL" );
 			break;
 	}
-
-	// if a custom identifier exists, put it at the very end
-	#ifdef FS_VERSION_IDENT
-		strcat_s( str, max_size, " (" );
-		strcat_s( str, max_size, FS_VERSION_IDENT );
-		strcat_s( str, max_size, ")" );
-	#endif
-}
-
-void get_version_string_short(char *str)
-{
-	sprintf(str,"v%d.%d", FS_VERSION_MAJOR, FS_VERSION_MINOR);
 }
 
 // ----------------------------------------------------------------
@@ -7861,10 +7864,9 @@ void game_title_screen_display()
 	}
 	*/
 
-	bool globalhook_override = Script_system.IsOverride(Script_splashhook);
 	bool condhook_override = Script_system.IsConditionOverride(CHA_SPLASHSCREEN);
 	mprintf(("SCRIPTING: Splash screen overrides checked\n"));
-	if(!globalhook_override && !condhook_override)
+	if(!condhook_override)
 	{
 		Game_title_logo = bm_load(Game_logo_screen_fname[gr_screen.res]);
 		Game_title_bitmap = bm_load(Game_title_screen_fname[gr_screen.res]);
@@ -7896,14 +7898,8 @@ void game_title_screen_display()
 		}
 	}
 
-	if(!condhook_override)
-		Script_system.RunBytecode(Script_splashhook);
-	
-	mprintf(("SCRIPTING: Splash hook has been run\n"));
+	Script_system.RunCondition(CHA_SPLASHSCREEN);
 
-	if(!globalhook_override || condhook_override)
-		Script_system.RunCondition(CHA_SPLASHSCREEN);
-		
 	mprintf(("SCRIPTING: Splash screen conditional hook has been run\n"));
 
 	// flip
@@ -8093,7 +8089,7 @@ int actual_main(int argc, char *argv[])
 	// Finder sets the working directory to the root of the drive so we have to get a little creative
 	// to find out where on the disk we should be running from for CFILE's sake.
 	char *path_name = SDL_GetBasePath();
-	SetCurrentDirectory(path_name);
+	chdir(path_name);
 	SDL_free(path_name);
 #endif
 
