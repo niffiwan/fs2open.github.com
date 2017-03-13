@@ -6656,17 +6656,17 @@ int subsys_set(int objnum, int ignore_subsys_info)
 
 		if ((ship_system->system_info->flags[Model::Subsystem_Flags::Turret_salvo]) && (number_of_weapons > 1))
 		{
-			Warning (LOCATION, "\"salvo mode\" flag used with turret which has more than one weapon defined for it\nsubsystem '%s' on ship type '%s'.\nonly single weapon will be used\n", model_system->subobj_name, sinfo->name );
+			mprintf(("\"salvo mode\" flag used with turret which has more than one weapon defined for it\nsubsystem '%s' on ship type '%s'.\nonly single weapon will be used\n", model_system->subobj_name, sinfo->name));
 		}
 
 		if ((ship_system->system_info->flags[Model::Subsystem_Flags::Turret_fixed_fp]) && (number_of_weapons > model_system->turret_num_firing_points))
 		{
-			Warning (LOCATION, "\"fixed firingpoint\" flag used with turret which has more weapons defined for it than it has firingpoints\nsubsystem '%s' on ship type '%s'.\nweapons will share firingpoints\n", model_system->subobj_name, sinfo->name );
+			mprintf(("\"fixed firingpoint\" flag used with turret which has more weapons defined for it than it has firingpoints\nsubsystem '%s' on ship type '%s'.\nweapons will share firingpoints\n", model_system->subobj_name, sinfo->name));
 		}
 
 		if ((ship_system->system_info->flags[Model::Subsystem_Flags::Turret_fixed_fp]) && (number_of_weapons < model_system->turret_num_firing_points))
 		{
-			Warning (LOCATION, "\"fixed firingpoint\" flag used with turret which has less weapons defined for it than it has firingpoints\nsubsystem '%s' on ship type '%s'.\nsome of the firingpoints will be left unused\n", model_system->subobj_name, sinfo->name );
+			mprintf(("\"fixed firingpoint\" flag used with turret which has less weapons defined for it than it has firingpoints\nsubsystem '%s' on ship type '%s'.\nsome of the firingpoints will be left unused\n", model_system->subobj_name, sinfo->name));
 		}
 
 		if ((ship_system->system_info->flags[Model::Subsystem_Flags::Share_fire_direction]) && (!(ship_system->system_info->flags[Model::Subsystem_Flags::Turret_salvo]) || !(ship_system->system_info->flags[Model::Subsystem_Flags::Use_multiple_guns])))
@@ -9719,8 +9719,7 @@ void change_ship_type(int n, int ship_type, int by_sexp)
 		}
 
 		// extra check
-		Assert(hull_pct > 0.0f && hull_pct <= 1.0f);
-		CLAMP(hull_pct, 0.1f, 1.0f);
+		CLAMP(hull_pct, 0.01f, 1.0f);
 
 		// shield
 		if (sp->special_shield > 0) {

@@ -1223,6 +1223,7 @@ void opengl_setup_function_pointers()
 	gr_screen.gf_post_process_begin		= gr_opengl_post_process_begin;
 	gr_screen.gf_post_process_end		= gr_opengl_post_process_end;
 	gr_screen.gf_post_process_save_zbuffer	= gr_opengl_post_process_save_zbuffer;
+	gr_screen.gf_post_process_restore_zbuffer	= gr_opengl_post_process_restore_zbuffer;
 
 	gr_screen.gf_scene_texture_begin = gr_opengl_scene_texture_begin;
 	gr_screen.gf_scene_texture_end = gr_opengl_scene_texture_end;
@@ -1461,7 +1462,10 @@ bool gr_opengl_init(std::unique_ptr<os::GraphicsOperations>&& graphicsOps)
 	graphic_operations = std::move(graphicsOps);
 
 	if ( opengl_init_display_device() ) {
-		Error(LOCATION, "Unable to initialize display device!\n");
+		Error(LOCATION, "Unable to initialize display device!\n"
+		      "This most likely means that your graphics drivers do not support the minimum required OpenGL version which is %d.%d.\n",
+			  (MIN_REQUIRED_GL_VERSION / 10),
+			  (MIN_REQUIRED_GL_VERSION % 10));
 	}
 
 	// Initialize function pointers
