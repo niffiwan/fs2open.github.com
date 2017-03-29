@@ -184,7 +184,7 @@ static opengl_shader_variant_t GL_shader_variants[] = {
 		"Submodel Transforms" },
 	
 	{ SDR_TYPE_MODEL, false, SDR_FLAG_MODEL_CLIP, "FLAG_CLIP", 
-		{ "use_clip_plane", "clip_normal", "clip_position" }, {  },
+		{ "use_clip_plane", "clip_equation" }, {  },
 		"Clip Plane" },
 
 	{ SDR_TYPE_MODEL, false, SDR_FLAG_MODEL_HDR, "FLAG_HDR",
@@ -582,6 +582,13 @@ int opengl_compile_shader(shader_type sdr, uint flags)
 				glBindAttribLocation(program->getShaderHandle(), i, GL_vertex_attrib_info[i].name.c_str());
 			}
 
+			// bind fragment data locations before we link the shader
+			glBindFragDataLocation(program->getShaderHandle(), 0, "fragOut0");
+			glBindFragDataLocation(program->getShaderHandle(), 1, "fragOut1");
+			glBindFragDataLocation(program->getShaderHandle(), 2, "fragOut2");
+			glBindFragDataLocation(program->getShaderHandle(), 3, "fragOut3");
+			glBindFragDataLocation(program->getShaderHandle(), 4, "fragOut4");
+
 			if (do_shader_caching()) {
 				// Enable shader caching
 				glProgramParameteri(program->getShaderHandle(), GL_PROGRAM_BINARY_RETRIEVABLE_HINT, GL_TRUE);
@@ -601,13 +608,6 @@ int opengl_compile_shader(shader_type sdr, uint flags)
 	new_shader.program = std::move(program);
 
 	opengl_shader_set_current(&new_shader);
-
-	// bind fragment data locations
-	glBindFragDataLocation(new_shader.program->getShaderHandle(), 0, "fragOut0");
-	glBindFragDataLocation(new_shader.program->getShaderHandle(), 1, "fragOut1");
-	glBindFragDataLocation(new_shader.program->getShaderHandle(), 2, "fragOut2");
-	glBindFragDataLocation(new_shader.program->getShaderHandle(), 3, "fragOut3");
-	glBindFragDataLocation(new_shader.program->getShaderHandle(), 4, "fragOut4");
 
 	// initialize uniforms and attributes
 	for (auto& unif : sdr_info->uniforms) {
