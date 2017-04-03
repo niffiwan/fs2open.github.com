@@ -468,11 +468,6 @@ void bm_get_frame_usage(int *ntotal, int *nnew);
 int bm_reload(int bitmap_handle, const char* filename);
 
 /**
- * @brief Stuffs Pathtypes with an additional path leading to a subdir of the same name as the given file (minus file extension)
-*/
-bool set_temp_subdir_pathtype(const char *filename);
-
-/**
  * @brief Tells bmpman to start keeping track of what bitmaps are used where
  */
 void bm_page_in_start();
@@ -681,16 +676,15 @@ bool bm_set_render_target(int handle, int face = -1);
  *
  * @param[in]  filename The filename of the .EFF
  * @param[in]  dir_type
- * @param[out] nframes   (optional) If given, is set to the number of frames this .EFF has
- * @param[out] nfps      (optional) If given, is set to the fps of this .EFF
- * @param[out] key       (optional) If given, is set to the keyframe index of this .EFF
- * @param[out] type      (optional) If given, is set to the BM_TYPE of the .EFF
- * @param[out] in_subdir (optional) If given, is set to true if the frames of this .EFF are in a subdir
+ * @param[out] nframes (optional) If given, is set to the number of frames this .EFF has
+ * @param[out] nfps    (optional) If given, is set to the fps of this .EFF
+ * @param[out] key     (optional) If given, is set to the keyframe index of this .EFF
+ * @param[out] type    (optional) If given, is set to the BM_TYPE of the .EFF
  *
  * @returns true If successful
  * @returns false If not successful
  */
-bool bm_load_and_parse_eff(const char *filename, int dir_type, int *nframes, int *nfps, int *key, BM_TYPE *type, bool *in_subdir);
+bool bm_load_and_parse_eff(const char *filename, int dir_type, int *nframes, int *nfps, int *key, BM_TYPE *type);
 
 /**
  * @brief Calculates & returns the current frame of an animation

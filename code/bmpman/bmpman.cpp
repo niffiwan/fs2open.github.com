@@ -35,7 +35,6 @@
 #include "ship/ship.h"
 #include "tgautils/tgautils.h"
 #include "tracing/Monitor.h"
-#include "cfile/cfilesystem.h"
 
 #include <ctype.h>
 #include <limits.h>
@@ -48,20 +47,7 @@
 /**
  * @todo upgrade this to an inline funciton, taking bitmap_entry and const char* as arguments
  */
-#define EFF_FILENAME_CHECK \
-{ \
-	if ( be->type == BM_TYPE_EFF ) { \
-		strcpy_s( filename, be->info.ani.eff.filename ); \
-		if (be->info.ani.eff.in_subdir) { \
-			if (!set_temp_subdir_pathtype(bm_bitmaps[be->info.ani.first_frame].filename)) { \
-				mprintf(("BMPMAN: Failed to set temporary pathtype for %s: EFF_FILENAME_CHECK failed!\n", be->filename)); \
-			} \
-		} \
-	} \
-	else { \
-		strcpy_s( filename, be->filename ); \
-	} \
-}
+#define EFF_FILENAME_CHECK { if ( be->type == BM_TYPE_EFF ) strcpy_s( filename, be->info.ani.eff.filename ); else strcpy_s( filename, be->filename ); }
 // --------------------------------------------------------------------------------------------------------------------
 // Monitor variables
 MONITOR(NumBitmapPage)
@@ -95,8 +81,6 @@ const int BM_ANI_NUM_TYPES = sizeof(bm_ani_type_list) / sizeof(bm_ani_type_list[
 
 void(*bm_set_components)(ubyte *pixel, ubyte *r, ubyte *g, ubyte *b, ubyte *a) = NULL;
 void(*bm_set_components_32)(ubyte *pixel, ubyte *r, ubyte *g, ubyte *b, ubyte *a) = NULL;
-
-extern cf_pathtype Pathtypes[CF_MAX_PATH_TYPES];
 
 // --------------------------------------------------------------------------------------------------------------------
 // Declaration of protected variables (defined in cmdline.cpp).
@@ -1327,9 +1311,8 @@ int bm_load(const SCP_string& filename) {
 	return bm_load(filename.c_str());
 }
 
-bool bm_load_and_parse_eff(const char *filename, int dir_type, int *nframes, int *nfps, int *key, BM_TYPE *type, bool *in_subdir) {
+bool bm_load_and_parse_eff(const char *filename, int dir_type, int *nframes, int *nfps, int *key, BM_TYPE *type) {
 	int frames = 0, fps = 30, keyframe = 0;
-	bool subdir = false;
 	char ext[8];
 	BM_TYPE c_type = BM_TYPE_NONE;
 	char file_text[1024];
@@ -1367,10 +1350,6 @@ bool bm_load_and_parse_eff(const char *filename, int dir_type, int *nframes, int
 		return false;
 	}
 
-	if (optional_string( "$Subdir:" )) {
-		stuff_boolean(&subdir);}
-
-
 	// done with EFF so unpause parsing so whatever can continue
 	unpause_parse();
 
@@ -1406,8 +1385,6 @@ bool bm_load_and_parse_eff(const char *filename, int dir_type, int *nframes, int
 
 	if (key)
 		*key = keyframe;
-
-	*in_subdir = subdir;
 
 	return true;
 }
@@ -1525,7 +1502,6 @@ int bm_load_animation(const char *real_filename, int *nframes, int *fps, int *ke
 	int reduced = 0;
 	int anim_fps = 0, anim_frames = 0, key = 0;
 	float anim_total_time = 0.0f;
-	bool in_subdir = false;
 	int anim_width = 0, anim_height = 0;
 	BM_TYPE type = BM_TYPE_NONE, eff_type = BM_TYPE_NONE, c_type = BM_TYPE_NONE;
 	int bpp = 0, mm_lvl = 0;
@@ -1621,7 +1597,7 @@ int bm_load_animation(const char *real_filename, int *nframes, int *fps, int *ke
 
 	// it's an effect file, any readable image type with eff being txt
 	if (type == BM_TYPE_EFF) {
-		if (!bm_load_and_parse_eff(filename, dir_type, &anim_frames, &anim_fps, &key, &eff_type, &in_subdir)) {
+		if (!bm_load_and_parse_eff(filename, dir_type, &anim_frames, &anim_fps, &key, &eff_type)) {
 			mprintf(("BMPMAN: Error reading EFF\n"));
 			if (img_cfp != nullptr)
 				cfclose(img_cfp);
@@ -1719,10 +1695,6 @@ int bm_load_animation(const char *real_filename, int *nframes, int *fps, int *ke
 		return -1;
 	}
 
-	if (in_subdir) {
-		set_temp_subdir_pathtype(filename);
-	}
-
 	int first_handle = bm_get_next_handle();
 
 	for (i = 0; i < anim_frames; i++) {
@@ -1788,11 +1760,6 @@ int bm_load_animation(const char *real_filename, int *nframes, int *fps, int *ke
 		bm_bitmaps[n + i].num_mipmaps = mm_lvl;
 		bm_bitmaps[n + i].mem_taken = (size_t)img_size;
 		bm_bitmaps[n + i].dir_type = dir_type;
-		bm_bitmaps[n + i].info.ani.eff.in_subdir = in_subdir;
-		if (in_subdir)
-			bm_bitmaps[n + i].dir_type = CF_TYPE_TEMP_SUBDIR_LOOKUP;
-		else
-			bm_bitmaps[n + i].dir_type = dir_type;
 
 		bm_bitmaps[n + i].load_count++;
 
@@ -2609,61 +2576,6 @@ void bm_page_in_start() {
 	gr_bm_page_in_start();
 }
 
-/**
- * Stuffs Pathtypes with an additional path leading to a subdir of the same name as the given file (minus file extension).
- * Used for allowing frames of .eff animations to be found in their own subdirectories.
- *
- * Example: if called with "debris.eff" and that file is in data/maps, then Pathtypes[CF_TYPE_TEMP_SUBDIR_LOOKUP].path
- * will be stuffed with data/maps/debris, allowing data/maps/debris/debris_0000.dds (etc) to be found
- */
-bool set_temp_subdir_pathtype(const char *filename) {
-	// Gets the absolute path of the file, removes the part that is identical with the
-	// absolute root path and appends the filename to it (without extension), giving us
-	// a relative path that can be temporarily stuffed into Pathtypes so the frames can be found
-
-	char fullpath[MAX_PATH]; // Absolute path to the given file
-	char fullrootpath[MAX_PATH]; // Absolute root path
-	size_t size, offset; // Needed for cf_find_file_location, but not used
-
-	cf_create_default_path_string(fullrootpath, sizeof(fullrootpath) - 1, CF_TYPE_ROOT, NULL);
-	if (!cf_find_file_location(filename, CF_TYPE_ANY, sizeof(fullpath)-1, fullpath, &size, &offset)) {
-		mprintf(("BMPMAN: Failed to set temporary pathtype for %s: file not found!\n", filename));
-		return false;
-	}
-
-#ifndef NDEBUG
-	if (strlen(fullpath) < strlen(fullrootpath)) {
-		mprintf(("BMPMAN: Path to %s was shorter than the root path, programmer thought it could never happen!\n%s\n%s\n", filename, fullpath, fullrootpath));
-		return false;
-	}
-#endif
-
-	mprintf(("BMPMAN: Setting temporary pathtype for %s... ", filename));
-
-	char *trimmed_path; // The differing portion of fullpath and fullrootpath
-	trimmed_path = &fullpath[strlen(fullrootpath)];
-
-	char *extpos = strstr(trimmed_path, "."); // Where the file extension begins
-	char basepath[MAX_PATH]; // This will hold the final, relative path
-
-	// Copy the relative path of the given file to basepath, excluding the extension
-	strncpy(basepath, trimmed_path, extpos-trimmed_path);
-
-	// Make sure it's null-terminated right
-	basepath[(int)(extpos-trimmed_path)] = '\0';
-
-	// Free the old string first, if it's not the const initial empty string
-	if (Pathtypes[CF_TYPE_TEMP_SUBDIR_LOOKUP].path[0] != '\0') {
-		vm_free(&Pathtypes[CF_TYPE_TEMP_SUBDIR_LOOKUP].path);
-	}
-
-	Pathtypes[CF_TYPE_TEMP_SUBDIR_LOOKUP].path = vm_strdup(basepath);
-
-	mprintf(("OK. Temporary pathtype is now %s.\n", Pathtypes[CF_TYPE_TEMP_SUBDIR_LOOKUP].path));
-
-	return true;
-}
-
 void bm_page_in_stop() {
 	int i;
 
@@ -2682,10 +2594,6 @@ void bm_page_in_stop() {
 		if ((bm_bitmaps[i].type != BM_TYPE_NONE) && (bm_bitmaps[i].type != BM_TYPE_RENDER_TARGET_DYNAMIC) && (bm_bitmaps[i].type != BM_TYPE_RENDER_TARGET_STATIC)) {
 			if (bm_bitmaps[i].preloaded) {
 				if (bm_preloading) {
-					if (bm_bitmaps[i].type == BM_TYPE_EFF && bm_bitmaps[i].info.ani.eff.in_subdir) {
-						set_temp_subdir_pathtype(bm_bitmaps[i].filename);
-					}
-
 					if (!gr_preload(bm_bitmaps[i].handle, (bm_bitmaps[i].preloaded == 2))) {
 						mprintf(("Out of VRAM.  Done preloading.\n"));
 						bm_preloading = 0;

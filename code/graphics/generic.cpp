@@ -242,19 +242,13 @@ int generic_anim_stream(generic_anim *ga, const bool cache)
 		ga->bitmap_id = bm_create(ga->png.anim->bpp, ga->width, ga->height, ga->buffer, 0);
 	}
 	else {
-		bool in_subdir;
 		bpp = 32;
 		if(ga->use_hud_color)
 			bpp = 8;
-		bm_load_and_parse_eff(ga->filename, CF_TYPE_ANY, &ga->num_frames, &anim_fps, &ga->keyframe, 0, &in_subdir);
+		bm_load_and_parse_eff(ga->filename, CF_TYPE_ANY, &ga->num_frames, &anim_fps, &ga->keyframe, 0);
 		char *p = strrchr( ga->filename, '.' );
 		if ( p )
 			*p = 0;
-
-		if (in_subdir) {
-			set_temp_subdir_pathtype(ga->filename);
-		}
-
 		char frame_name[MAX_FILENAME_LEN];
 		snprintf(frame_name, MAX_FILENAME_LEN, "%s_0000", ga->filename);
 		ga->bitmap_id = bm_load(frame_name);
