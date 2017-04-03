@@ -85,6 +85,7 @@
 #include "weapon/swarm.h"
 #include "weapon/weapon.h"
 #include "tracing/Monitor.h"
+#include "tracing/tracing.h"
 
 using namespace Ship;
 
@@ -16187,6 +16188,8 @@ int get_max_ammo_count_for_turret_bank(ship_weapon *swp, int bank, int ammo_type
  */
 void ship_page_in()
 {
+	TRACE_SCOPE(tracing::ShipPageIn);
+
 	int i, j, k;
 	int num_subsystems_needed = 0;
 
