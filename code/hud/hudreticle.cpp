@@ -988,7 +988,6 @@ void HudGaugeWeaponLinking::render(float frametime)
 
 	switch( num_banks ) {
 		case 0:
-			Int3();
 			gauge_index = -1;
 			break;
 
