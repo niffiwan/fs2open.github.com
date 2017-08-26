@@ -687,7 +687,7 @@ void set_current_hud()
 		num_gauges = Ship_info[Player_ship->ship_info_index].hud_gauges.size();
 
 		for(i = 0; i < num_gauges; i++) {
-			HudGauge* hgp = Ship_info[Player_ship->ship_info_index].hud_gauges[i];
+			HudGauge* hgp = Ship_info[Player_ship->ship_info_index].hud_gauges[i].get();
 			config_type = hgp->getConfigType();
 
 			if ( ( (!hgp->isOffbyDefault() || hgp->isActive()) && hud_config_show_flag_is_set(config_type)) )
@@ -1152,7 +1152,7 @@ void adjust_for_multimonitor(int *base_res, bool set_position, int *coords)
 }
 
 template<class T>
-T* gauge_load_common(gauge_settings* settings, T* preAllocated = NULL)
+std::unique_ptr<T> gauge_load_common(gauge_settings* settings, T* preAllocated = NULL)
 {
 	int colors[3] = {255, 255, 255};
 	bool lock_color = false;
@@ -1273,11 +1273,11 @@ T* gauge_load_common(gauge_settings* settings, T* preAllocated = NULL)
 		}
 	}
 
-	T* instance = preAllocated;
+	std::unique_ptr<T> instance(preAllocated);
 
 	if (instance == NULL)
 	{
-		instance = new T();
+		instance.reset(new T());
 	}
 
 	instance->initBaseResolution(settings->base_res[0], settings->base_res[1]);
@@ -1293,6 +1293,20 @@ T* gauge_load_common(gauge_settings* settings, T* preAllocated = NULL)
 	}
 
 	return instance;
+}
+
+template<typename T>
+void gauge_assign_common(const gauge_settings* settings, std::unique_ptr<T>&& hud_gauge) {
+	if(settings->ship_idx->at(0) >= 0) {
+		for (auto ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
+			std::unique_ptr<T> instance(new T());
+			*instance = *hud_gauge;
+			Ship_info[*ship_index].hud_gauges.push_back(move(instance));
+		}
+		// Previous instance goes out of scope here and is destructed
+	} else {
+		default_hud_gauges.push_back(move(hud_gauge));
+	}
 }
 
 void load_gauge_custom(gauge_settings* settings)
@@ -1435,7 +1449,7 @@ void load_gauge_custom(gauge_settings* settings)
 		}
 	}
 
-	HudGauge* hud_gauge = new HudGauge(gauge_type, settings->slew, r, g, b, name, text, filename, txtoffset_x, txtoffset_y);
+	std::unique_ptr<HudGauge> hud_gauge(new HudGauge(gauge_type, settings->slew, r, g, b, name, text, filename, txtoffset_x, txtoffset_y));
 	hud_gauge->initBaseResolution(settings->base_res[0], settings->base_res[1]);
 	hud_gauge->initPosition(settings->coords[0], settings->coords[1]);
 	hud_gauge->initFont(settings->font_num);
@@ -1444,16 +1458,7 @@ void load_gauge_custom(gauge_settings* settings)
 	hud_gauge->lockConfigColor(lock_color);
 	hud_gauge->initCockpitTarget(display_name, display_offset[0], display_offset[1], display_size[0], display_size[1], canvas_size[0], canvas_size[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGauge* instance = new HudGauge();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_lag(gauge_settings* settings)
@@ -1471,7 +1476,7 @@ void load_gauge_lag(gauge_settings* settings)
 		settings->offset[1] = 145;
 	}
 
-	HudGaugeLag* hud_gauge = gauge_load_common<HudGaugeLag>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeLag>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -1479,18 +1484,8 @@ void load_gauge_lag(gauge_settings* settings)
 
 	hud_gauge->initBitmaps(fname);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeLag* instance = new HudGaugeLag();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
-
 void load_gauge_mini_shields(gauge_settings* settings)
 {
 	int Mini_3digit_offsets[2];
@@ -1525,7 +1520,7 @@ void load_gauge_mini_shields(gauge_settings* settings)
 		Mini_2digit_offsets[1] = 7;
 	}
 
-	HudGaugeShieldMini* hud_gauge = gauge_load_common<HudGaugeShieldMini>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeShieldMini>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -1549,16 +1544,7 @@ void load_gauge_mini_shields(gauge_settings* settings)
 	hud_gauge->init3DigitOffsets(Mini_3digit_offsets[0], Mini_3digit_offsets[1]);
 	hud_gauge->initBitmaps(fname);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeShieldMini* instance = new HudGaugeShieldMini();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_weapon_energy(gauge_settings* settings)
@@ -1611,7 +1597,7 @@ void load_gauge_weapon_energy(gauge_settings* settings)
 		Wenergy_h = 96;
 	}
 
-	HudGaugeWeaponEnergy* hud_gauge = gauge_load_common<HudGaugeWeaponEnergy>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeWeaponEnergy>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -1661,16 +1647,7 @@ void load_gauge_weapon_energy(gauge_settings* settings)
 	hud_gauge->initShowBallistics(show_ballistic);
 	hud_gauge->initArmedOffsets(armed_weapon_offsets[0], armed_weapon_offsets[1], armed_weapon_h, show_weapons);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeWeaponEnergy* instance = new HudGaugeWeaponEnergy();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_target_shields(gauge_settings* settings)
@@ -1686,18 +1663,9 @@ void load_gauge_target_shields(gauge_settings* settings)
 		settings->offset[1] = -98;
 	}
 
-	HudGaugeShieldTarget* hud_gauge = gauge_load_common<HudGaugeShieldTarget>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeShieldTarget>(settings);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeShieldTarget* instance = new HudGaugeShieldTarget();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_player_shields(gauge_settings* settings)
@@ -1713,18 +1681,9 @@ void load_gauge_player_shields(gauge_settings* settings)
 		settings->offset[1] = -98;
 	}
 
-	HudGaugeShieldPlayer* hud_gauge = gauge_load_common<HudGaugeShieldPlayer>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeShieldPlayer>(settings);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeShieldPlayer* instance = new HudGaugeShieldPlayer();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_escort_view(gauge_settings* settings)
@@ -1781,7 +1740,7 @@ void load_gauge_escort_view(gauge_settings* settings)
 		ship_status_offsets[1] = 0;
 	}
 
-	HudGaugeEscort* hud_gauge = gauge_load_common<HudGaugeEscort>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeEscort>(settings);
 
 	if(optional_string("Top Background Filename:")) {
 		stuff_string(fname_top, F_NAME, MAX_FILENAME_LEN);
@@ -1845,16 +1804,7 @@ void load_gauge_escort_view(gauge_settings* settings)
 	hud_gauge->initShipNameMaxWidth(ship_name_max_w);
 	hud_gauge->initRightAlignNames(right_align_names);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeEscort* instance = new HudGaugeEscort();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_afterburner(gauge_settings* settings)
@@ -1892,7 +1842,7 @@ void load_gauge_afterburner(gauge_settings* settings)
 		energy_h = 96;
 	}
 
-	HudGaugeAfterburner *hud_gauge = gauge_load_common<HudGaugeAfterburner>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeAfterburner>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -1904,16 +1854,7 @@ void load_gauge_afterburner(gauge_settings* settings)
 	hud_gauge->initEnergyHeight(energy_h);
 	hud_gauge->initBitmaps(fname);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeAfterburner* instance = new HudGaugeAfterburner();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 
@@ -1939,7 +1880,7 @@ void load_gauge_mission_time(gauge_settings* settings)
 	time_val_offsets[0] = 26;
 	time_val_offsets[1] = 12;
 
-	HudGaugeMissionTime* hud_gauge = gauge_load_common<HudGaugeMissionTime>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeMissionTime>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -1955,16 +1896,7 @@ void load_gauge_mission_time(gauge_settings* settings)
 	hud_gauge->initValueOffsets(time_val_offsets[0], time_val_offsets[1]);
 	hud_gauge->initBitmaps(fname);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeMissionTime* instance = new HudGaugeMissionTime();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_threat_indicator(gauge_settings* settings)
@@ -2037,7 +1969,7 @@ void load_gauge_threat_indicator(gauge_settings* settings)
 		}
 	}
 
-	HudGaugeThreatIndicator* hud_gauge = gauge_load_common<HudGaugeThreatIndicator>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeThreatIndicator>(settings);
 
 	if(optional_string("Arc Filename:")) {
 		stuff_string(fname_arc, F_NAME, MAX_FILENAME_LEN);
@@ -2059,16 +1991,7 @@ void load_gauge_threat_indicator(gauge_settings* settings)
 	hud_gauge->initLaserWarnOffsets(Laser_warn_offsets[0], Laser_warn_offsets[1]);
 	hud_gauge->initLockWarnOffsets(Lock_warn_offsets[0], Lock_warn_offsets[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeThreatIndicator* instance = new HudGaugeThreatIndicator();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_center_reticle(gauge_settings* settings)
@@ -2110,7 +2033,7 @@ void load_gauge_center_reticle(gauge_settings* settings)
 		}
 	}
 
-	HudGaugeReticle* hud_gauge = gauge_load_common<HudGaugeReticle>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeReticle>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -2135,16 +2058,7 @@ void load_gauge_center_reticle(gauge_settings* settings)
 	hud_gauge->initFirepointDisplay(firepoints, scaleX, scaleY, size);
 	hud_gauge->setAutoaimFrame(autoaim_frame);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeReticle* instance = new HudGaugeReticle();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_throttle(gauge_settings* settings)
@@ -2245,7 +2159,7 @@ void load_gauge_throttle(gauge_settings* settings)
 		}
 	}
 
-	HudGaugeThrottle* hud_gauge = gauge_load_common<HudGaugeThrottle>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeThrottle>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -2316,16 +2230,7 @@ void load_gauge_throttle(gauge_settings* settings)
 	hud_gauge->initBitmaps(fname);
 	hud_gauge->showBackground(show_background);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeThrottle* instance = new HudGaugeThrottle();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 /**
@@ -2375,7 +2280,7 @@ void load_gauge_ets_retail(gauge_settings* settings)
 	bottom_offsets[0] = 0;
 	bottom_offsets[1] = 50;
 
-	HudGaugeEtsRetail* hud_gauge = gauge_load_common<HudGaugeEtsRetail>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeEtsRetail>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -2409,16 +2314,7 @@ void load_gauge_ets_retail(gauge_settings* settings)
 	hud_gauge->initBitmaps(fname);
 	hud_gauge->initGaugePositions(gauge_positions);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeEtsRetail* instance = new HudGaugeEtsRetail();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_ets_weapons(gauge_settings* settings)
@@ -2459,7 +2355,7 @@ void load_gauge_ets_weapons(gauge_settings* settings)
 	bottom_offsets[0] = 0;
 	bottom_offsets[1] = 50;
 
-	HudGaugeEtsWeapons* hud_gauge = gauge_load_common<HudGaugeEtsWeapons>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeEtsWeapons>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -2484,16 +2380,7 @@ void load_gauge_ets_weapons(gauge_settings* settings)
 	hud_gauge->initBarHeight(bar_h);
 	hud_gauge->initBitmaps(fname);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeEtsWeapons* instance = new HudGaugeEtsWeapons();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_ets_shields(gauge_settings* settings)
@@ -2535,7 +2422,7 @@ void load_gauge_ets_shields(gauge_settings* settings)
 	bottom_offsets[0] = 0;
 	bottom_offsets[1] = 50;
 
-	HudGaugeEtsShields* hud_gauge = gauge_load_common<HudGaugeEtsShields>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeEtsShields>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -2560,16 +2447,7 @@ void load_gauge_ets_shields(gauge_settings* settings)
 	hud_gauge->initLetterOffsets(letter_offsets[0], letter_offsets[1]);
 	hud_gauge->initTopOffsets(top_offsets[0], top_offsets[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeEtsShields* instance = new HudGaugeEtsShields();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_ets_engines(gauge_settings* settings)
@@ -2612,7 +2490,7 @@ void load_gauge_ets_engines(gauge_settings* settings)
 	bottom_offsets[0] = 0;
 	bottom_offsets[1] = 50;
 
-	HudGaugeEtsEngines* hud_gauge = gauge_load_common<HudGaugeEtsEngines>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeEtsEngines>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -2637,16 +2515,7 @@ void load_gauge_ets_engines(gauge_settings* settings)
 	hud_gauge->initLetterOffsets(letter_offsets[0], letter_offsets[1]);
 	hud_gauge->initTopOffsets(top_offsets[0], top_offsets[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeEtsEngines* instance = new HudGaugeEtsEngines();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_extra_target_data(gauge_settings* settings)
@@ -2691,7 +2560,7 @@ void load_gauge_extra_target_data(gauge_settings* settings)
 	dock_max_w = 173;
 	order_max_w = 162;
 
-	HudGaugeExtraTargetData* hud_gauge = gauge_load_common<HudGaugeExtraTargetData>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeExtraTargetData>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -2723,16 +2592,7 @@ void load_gauge_extra_target_data(gauge_settings* settings)
 	hud_gauge->initOrderMaxWidth(order_max_w);
 	hud_gauge->initTimeOffsets(time_offsets[0], time_offsets[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeExtraTargetData* instance = new HudGaugeExtraTargetData();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_radar_std(gauge_settings* settings)
@@ -2795,7 +2655,7 @@ void load_gauge_radar_std(gauge_settings* settings)
 		strcpy_s(fname, "2_radar1");
 	}
 
-	HudGaugeRadarStd* hud_gauge = gauge_load_common<HudGaugeRadarStd>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeRadarStd>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -2827,21 +2687,7 @@ void load_gauge_radar_std(gauge_settings* settings)
 		hud_gauge->initRadius(Radar_radius[0], Radar_radius[1]);
 		hud_gauge->initInfinityIcon();
 
-		if(settings->ship_idx->at(0) >= 0) {
-			for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-				HudGaugeRadarStd* instance = new HudGaugeRadarStd();
-				*instance = *hud_gauge;
-				Ship_info[*ship_index].hud_gauges.push_back(instance);
-			}
-			delete hud_gauge;
-		} else {
-			default_hud_gauges.push_back(hud_gauge);
-		}
-	}
-	else
-	{
-		// cleanup
-		delete hud_gauge;
+		gauge_assign_common(settings, std::move(hud_gauge));
 	}
 }
 
@@ -2905,7 +2751,7 @@ void load_gauge_radar_orb(gauge_settings* settings)
 		strcpy_s(fname, "2_radar1");
 	}
 
-	HudGaugeRadarOrb* hud_gauge = gauge_load_common<HudGaugeRadarOrb>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeRadarOrb>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -2937,21 +2783,7 @@ void load_gauge_radar_orb(gauge_settings* settings)
 		hud_gauge->initRadius(Radar_radius[0], Radar_radius[1]);
 		hud_gauge->initInfinityIcon();
 
-		if(settings->ship_idx->at(0) >= 0) {
-			for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-				HudGaugeRadarOrb* instance = new HudGaugeRadarOrb();
-				*instance = *hud_gauge;
-				Ship_info[*ship_index].hud_gauges.push_back(instance);
-			}
-			delete hud_gauge;
-		} else {
-			default_hud_gauges.push_back(hud_gauge);
-		}
-	}
-	else
-	{
-		// cleanup
-		delete hud_gauge;
+		gauge_assign_common(settings, std::move(hud_gauge));
 	}
 }
 
@@ -3134,7 +2966,7 @@ void load_gauge_radar_dradis(gauge_settings* settings)
 		}
 	}
 
-	HudGaugeRadarDradis* hud_gauge = new HudGaugeRadarDradis();
+	std::unique_ptr<HudGaugeRadarDradis> hud_gauge(new HudGaugeRadarDradis());
 	hud_gauge->initBaseResolution(settings->base_res[0], settings->base_res[1]);
 	hud_gauge->initPosition(settings->coords[0], settings->coords[1]);
 	hud_gauge->initRadius(Radar_radius[0], Radar_radius[1]);
@@ -3143,16 +2975,7 @@ void load_gauge_radar_dradis(gauge_settings* settings)
 	hud_gauge->initFont(settings->font_num);
 	hud_gauge->initSound(loop_snd, loop_snd_volume, arrival_beep_snd, departure_beep_snd, stealth_arrival_snd, stealth_departure_snd, arrival_beep_delay, departure_beep_delay);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeRadarDradis* instance = new HudGaugeRadarDradis();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_text_warnings(gauge_settings* settings)
@@ -3169,18 +2992,9 @@ void load_gauge_text_warnings(gauge_settings* settings)
 		settings->offset[1] = -109;
 	}
 
-	HudGaugeTextWarnings* hud_gauge = gauge_load_common<HudGaugeTextWarnings>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeTextWarnings>(settings);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeTextWarnings* instance = new HudGaugeTextWarnings();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_target_monitor(gauge_settings* settings)
@@ -3257,7 +3071,7 @@ void load_gauge_target_monitor(gauge_settings* settings)
 	Cargo_scan_size[0] = 130;
 	Cargo_scan_size[1] = 109;
 
-	HudGaugeTargetBox* hud_gauge = gauge_load_common<HudGaugeTargetBox>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeTargetBox>(settings);
 
 	if(optional_string("Monitor Filename:")) {
 		stuff_string(fname_monitor, F_NAME, MAX_FILENAME_LEN);
@@ -3342,16 +3156,7 @@ void load_gauge_target_monitor(gauge_settings* settings)
 	hud_gauge->initDesaturate(desaturate);
 	hud_gauge->initBitmaps(fname_monitor, fname_monitor_mask, fname_integrity, fname_static);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeTargetBox* instance = new HudGaugeTargetBox();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_squad_message(gauge_settings* settings)
@@ -3397,7 +3202,7 @@ void load_gauge_squad_message(gauge_settings* settings)
 	Item_h = 10;
 	Item_offset_x = 17;
 
-	HudGaugeSquadMessage* hud_gauge = gauge_load_common<HudGaugeSquadMessage>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeSquadMessage>(settings);
 
 	if(optional_string("Top Background Filename:")) {
 		stuff_string(fname_top, F_NAME, MAX_FILENAME_LEN);
@@ -3443,16 +3248,7 @@ void load_gauge_squad_message(gauge_settings* settings)
 	hud_gauge->initPgUpOffsets(Pgup_offsets[0], Pgup_offsets[1]);
 	hud_gauge->initPgDnOffsets(Pgdn_offsets[0], Pgdn_offsets[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeSquadMessage* instance = new HudGaugeSquadMessage();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_objective_notify(gauge_settings* settings)
@@ -3490,7 +3286,7 @@ void load_gauge_objective_notify(gauge_settings* settings)
 		Red_text_val_offset_y = 10;
 	}
 
-	HudGaugeObjectiveNotify* hud_gauge = gauge_load_common<HudGaugeObjectiveNotify>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeObjectiveNotify>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -3522,16 +3318,7 @@ void load_gauge_objective_notify(gauge_settings* settings)
 	hud_gauge->initRedAlertTextOffsetY(Red_text_offset_y);
 	hud_gauge->initRedAlertValueOffsetY(Red_text_val_offset_y);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeObjectiveNotify* instance = new HudGaugeObjectiveNotify();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_weapons(gauge_settings* settings)
@@ -3608,7 +3395,7 @@ void load_gauge_weapons(gauge_settings* settings)
 	primary_text_h = 12;
 	secondary_text_h = 9;
 
-	HudGaugeWeapons* hud_gauge = gauge_load_common<HudGaugeWeapons>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeWeapons>(settings);
 
 	if(optional_string("Primary List Top Background Filename:")) {
 		stuff_string(fname_p_top, F_NAME, MAX_FILENAME_LEN);
@@ -3724,16 +3511,7 @@ void load_gauge_weapons(gauge_settings* settings)
 	hud_gauge->initSecondaryHeights(top_secondary_h, secondary_text_h);
 	hud_gauge->initLinkIcon();
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeWeapons* instance = new HudGaugeWeapons();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_directives(gauge_settings* settings)
@@ -3766,7 +3544,7 @@ void load_gauge_directives(gauge_settings* settings)
 	text_start_offsets[1] = 14;
 	text_h = 9;
 
-	HudGaugeDirectives* hud_gauge = gauge_load_common<HudGaugeDirectives>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeDirectives>(settings);
 
 	if(optional_string("Top Background Filename:")) {
 		stuff_string(fname_top, F_NAME, MAX_FILENAME_LEN);
@@ -3803,17 +3581,8 @@ void load_gauge_directives(gauge_settings* settings)
 	hud_gauge->initTextStartOffsets(text_start_offsets[0], text_start_offsets[1]);
 	hud_gauge->initHeaderOffsets(header_offsets[0], header_offsets[1]);
 	hud_gauge->initMaxLineWidth(max_line_width);
-	
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeDirectives* instance = new HudGaugeDirectives();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_talking_head(gauge_settings* settings)
@@ -3841,7 +3610,7 @@ void load_gauge_talking_head(gauge_settings* settings)
 	Anim_size[0] = 160;
 	Anim_size[1] = 120;
 
-	HudGaugeTalkingHead* hud_gauge = gauge_load_common<HudGaugeTalkingHead>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeTalkingHead>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -3865,16 +3634,7 @@ void load_gauge_talking_head(gauge_settings* settings)
 	hud_gauge->initBitmaps(fname);
 	hud_gauge->initHeaderOffsets(Header_offsets[0], Header_offsets[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeTalkingHead* instance = new HudGaugeTalkingHead();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_countermeasures(gauge_settings* settings)
@@ -3898,7 +3658,7 @@ void load_gauge_countermeasures(gauge_settings* settings)
 	cm_text_val_offset[0] = 9;
 	cm_text_val_offset[1] = 4;
 
-	HudGaugeCmeasures* hud_gauge = gauge_load_common<HudGaugeCmeasures>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeCmeasures>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -3914,16 +3674,7 @@ void load_gauge_countermeasures(gauge_settings* settings)
 	hud_gauge->initCountTextOffsets(cm_text_offset[0], cm_text_offset[1]);
 	hud_gauge->initCountValueOffsets(cm_text_val_offset[0], cm_text_val_offset[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeCmeasures* instance = new HudGaugeCmeasures();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_auto_target(gauge_settings* settings)
@@ -3956,7 +3707,7 @@ void load_gauge_auto_target(gauge_settings* settings)
 		target_text_offset[1] = 10;
 	}
 	
-	HudGaugeAutoTarget* hud_gauge = gauge_load_common<HudGaugeAutoTarget>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeAutoTarget>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -3982,16 +3733,7 @@ void load_gauge_auto_target(gauge_settings* settings)
 	hud_gauge->initOnColor(on_color[0], on_color[1], on_color[2], on_color[3]);
 	hud_gauge->initOffColor(off_color[0], off_color[1], off_color[2], off_color[3]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeAutoTarget* instance = new HudGaugeAutoTarget();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_auto_speed(gauge_settings* settings)
@@ -4023,7 +3765,7 @@ void load_gauge_auto_speed(gauge_settings* settings)
 		speed_text_offset[1] = 10;
 	}
 	
-	HudGaugeAutoSpeed* hud_gauge = gauge_load_common<HudGaugeAutoSpeed>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeAutoSpeed>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -4049,16 +3791,7 @@ void load_gauge_auto_speed(gauge_settings* settings)
 	hud_gauge->initOnColor(on_color[0], on_color[1], on_color[2], on_color[3]);
 	hud_gauge->initOffColor(off_color[0], off_color[1], off_color[2], off_color[3]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeAutoSpeed* instance = new HudGaugeAutoSpeed();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_wingman_status(gauge_settings* settings)
@@ -4117,7 +3850,7 @@ void load_gauge_wingman_status(gauge_settings* settings)
 	wingmate_offsets[5][0] = 22;
 	wingmate_offsets[5][1] = 16;
 
-	HudGaugeWingmanStatus* hud_gauge = gauge_load_common<HudGaugeWingmanStatus>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeWingmanStatus>(settings);
 
 	if(optional_string("Left Background Filename:")) {
 		stuff_string(fname_left, F_NAME, MAX_FILENAME_LEN);
@@ -4199,16 +3932,7 @@ void load_gauge_wingman_status(gauge_settings* settings)
 	hud_gauge->initRightBgOffset(right_bg_offset);
 	hud_gauge->initGrowMode(grow_mode);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeWingmanStatus* instance = new HudGaugeWingmanStatus();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_damage(gauge_settings* settings)
@@ -4246,7 +3970,7 @@ void load_gauge_damage(gauge_settings* settings)
 	subsys_integ_val_offset_x = 142;
 	line_h = 9;
 
-	HudGaugeDamage* hud_gauge = gauge_load_common<HudGaugeDamage>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeDamage>(settings);
 
 	if(optional_string("Top Background Filename:")) {
 		stuff_string(fname_top, F_NAME, MAX_FILENAME_LEN);
@@ -4292,16 +4016,7 @@ void load_gauge_damage(gauge_settings* settings)
 	hud_gauge->initBottomBgOffset(bottom_bg_offset);
 	hud_gauge->initHeaderOffsets(header_offsets[0], header_offsets[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeDamage* instance = new HudGaugeDamage();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_support(gauge_settings* settings)
@@ -4335,7 +4050,7 @@ void load_gauge_support(gauge_settings* settings)
 		text_dock_val_offset_x = 65;
 	}
 
-	HudGaugeSupport* hud_gauge = gauge_load_common<HudGaugeSupport>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeSupport>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -4359,16 +4074,7 @@ void load_gauge_support(gauge_settings* settings)
 	hud_gauge->initTextDockValueOffsetX(text_dock_val_offset_x);
 	hud_gauge->initTextValueOffsetY(text_val_offset_y);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeSupport* instance = new HudGaugeSupport();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_training_messages(gauge_settings* settings)
@@ -4384,18 +4090,9 @@ void load_gauge_training_messages(gauge_settings* settings)
 		settings->offset[1] = -259;
 	}
 
-	HudGaugeTrainingMessages* hud_gauge = gauge_load_common<HudGaugeTrainingMessages>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeTrainingMessages>(settings);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeTrainingMessages* instance = new HudGaugeTrainingMessages();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_messages(gauge_settings* settings)
@@ -4419,7 +4116,7 @@ void load_gauge_messages(gauge_settings* settings)
 		max_width = 1004;
 	}
 
-	HudGaugeMessages* hud_gauge = gauge_load_common<HudGaugeMessages>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeMessages>(settings);
 
 	if ( optional_string("Max Lines:") ) {
 		stuff_int(&max_lines);
@@ -4451,16 +4148,7 @@ void load_gauge_messages(gauge_settings* settings)
 	hud_gauge->initLineHeight(line_height);
 	hud_gauge->initHiddenByCommsMenu(hidden_by_comms_menu);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeMessages* instance = new HudGaugeMessages();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_fixed_messages(gauge_settings* settings)
@@ -4477,7 +4165,7 @@ void load_gauge_fixed_messages(gauge_settings* settings)
 	settings->coords[0] = INT_MIN;
 	settings->coords[1] = INT_MIN;
 
-	HudGaugeFixedMessages* hud_gauge = gauge_load_common<HudGaugeFixedMessages>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeFixedMessages>(settings);
 
 	if(settings->coords[0] == INT_MIN && settings->coords[1] == INT_MIN) {
 		// coords have almost certainly not been overridden; set them to their true defaults and set center_text to true
@@ -4496,16 +4184,7 @@ void load_gauge_fixed_messages(gauge_settings* settings)
 
 	hud_gauge->initCenterText(center_text);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeFixedMessages* instance = new HudGaugeFixedMessages();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_weapon_linking(gauge_settings* settings)
@@ -4566,7 +4245,7 @@ void load_gauge_weapon_linking(gauge_settings* settings)
 		strcpy_s(fname_secondary_link_3, "2_rightarc6_fs1");
 	}
 
-	HudGaugeWeaponLinking* hud_gauge = gauge_load_common<HudGaugeWeaponLinking>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeWeaponLinking>(settings);
 
 	if(optional_string("Arc Filename:")) {
 		stuff_string(fname_arc, F_NAME, MAX_FILENAME_LEN);
@@ -4609,16 +4288,7 @@ void load_gauge_weapon_linking(gauge_settings* settings)
 	hud_gauge->init3SecondaryOffsets(Weapon_link_offsets[LINK_THREE_SECONDARY][0], Weapon_link_offsets[LINK_THREE_SECONDARY][1]);
 	hud_gauge->initBitmaps(fname_arc, fname_primary_link_1, fname_primary_link_2, fname_secondary_link_1, fname_secondary_link_2, fname_secondary_link_3);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeWeaponLinking* instance = new HudGaugeWeaponLinking();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_multi_msg(gauge_settings* settings)
@@ -4634,18 +4304,9 @@ void load_gauge_multi_msg(gauge_settings* settings)
 		settings->offset[1] = -144;
 	}
 
-	HudGaugeMultiMsg* hud_gauge = gauge_load_common<HudGaugeMultiMsg>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeMultiMsg>(settings);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeMultiMsg* instance = new HudGaugeMultiMsg();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_voice_status(gauge_settings* settings)
@@ -4661,18 +4322,9 @@ void load_gauge_voice_status(gauge_settings* settings)
 		settings->offset[1] = -129;
 	}
 
-	HudGaugeVoiceStatus* hud_gauge = gauge_load_common<HudGaugeVoiceStatus>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeVoiceStatus>(settings);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeVoiceStatus* instance = new HudGaugeVoiceStatus();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_ping(gauge_settings* settings)
@@ -4688,18 +4340,9 @@ void load_gauge_ping(gauge_settings* settings)
 		settings->offset[1] = 5;
 	}
 
-	HudGaugePing* hud_gauge = gauge_load_common<HudGaugePing>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugePing>(settings);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugePing* instance = new HudGaugePing();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_supernova(gauge_settings* settings)
@@ -4715,18 +4358,9 @@ void load_gauge_supernova(gauge_settings* settings)
 		settings->offset[1] = -214;
 	}
 
-	HudGaugeSupernova* hud_gauge = gauge_load_common<HudGaugeSupernova>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeSupernova>(settings);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeSupernova* instance = new HudGaugeSupernova();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_lock(gauge_settings* settings)
@@ -4804,7 +4438,7 @@ void load_gauge_lock(gauge_settings* settings)
 		}
 	}
 
-	HudGaugeLock* hud_gauge = gauge_load_common<HudGaugeLock>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeLock>(settings);
 
 	if(optional_string("Lock Filename:")) {
 		stuff_string(fname_lock, F_NAME, MAX_FILENAME_LEN);
@@ -4837,16 +4471,7 @@ void load_gauge_lock(gauge_settings* settings)
 	hud_gauge->initTriBase(Lock_triangle_base);
 	hud_gauge->initTargetBoxSize(Lock_target_box_width,	Lock_target_box_height);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeLock* instance = new HudGaugeLock();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_offscreen(gauge_settings* settings)
@@ -4871,23 +4496,14 @@ void load_gauge_offscreen(gauge_settings* settings)
 		Offscreen_tri_height = 11.0f;
 	}
 
-	HudGaugeOffscreen* hud_gauge = gauge_load_common<HudGaugeOffscreen>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeOffscreen>(settings);
 
 	hud_gauge->initMaxTriSeperation(Max_offscreen_tri_seperation);
 	hud_gauge->initMaxFrontSeperation(Max_front_seperation);
 	hud_gauge->initTriBase(Offscreen_tri_base);
 	hud_gauge->initTriHeight(Offscreen_tri_height);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeOffscreen* instance = new HudGaugeOffscreen();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_brackets(gauge_settings* settings)
@@ -4911,7 +4527,7 @@ void load_gauge_brackets(gauge_settings* settings)
 		min_subtarget_box[1] = 24;
 	}
 
-	HudGaugeBrackets* hud_gauge = gauge_load_common<HudGaugeBrackets>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeBrackets>(settings);
 
 	if(optional_string("Dot Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -4921,16 +4537,7 @@ void load_gauge_brackets(gauge_settings* settings)
 	hud_gauge->initMinSubTargetBoxSizes(min_subtarget_box[0], min_subtarget_box[1]);
 	hud_gauge->initMinTargetBoxSizes(min_target_box[0], min_target_box[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeBrackets* instance = new HudGaugeBrackets();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_hostile_tri(gauge_settings* settings)
@@ -4959,7 +4566,7 @@ void load_gauge_hostile_tri(gauge_settings* settings)
 		Radius = 166;
 	}
 
-	HudGaugeHostileTriangle* hud_gauge = gauge_load_common<HudGaugeHostileTriangle>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeHostileTriangle>(settings);
 
 	if(optional_string("Radius:")) {
 		stuff_int(&Radius);
@@ -4975,16 +4582,7 @@ void load_gauge_hostile_tri(gauge_settings* settings)
 	hud_gauge->initTriBase(Target_triangle_base);
 	hud_gauge->initTriHeight(Target_triangle_height);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeHostileTriangle* instance = new HudGaugeHostileTriangle();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_target_tri(gauge_settings* settings)
@@ -5013,7 +4611,7 @@ void load_gauge_target_tri(gauge_settings* settings)
 		Radius = 166;
 	}
 
-	HudGaugeTargetTriangle* hud_gauge = gauge_load_common<HudGaugeTargetTriangle>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeTargetTriangle>(settings);
 
 	if(optional_string("Radius:")) {
 		stuff_int(&Radius);
@@ -5029,16 +4627,7 @@ void load_gauge_target_tri(gauge_settings* settings)
 	hud_gauge->initTriBase(Target_triangle_base);
 	hud_gauge->initTriHeight(Target_triangle_height);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeTargetTriangle* instance = new HudGaugeTargetTriangle();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_missile_tri(gauge_settings* settings)
@@ -5067,7 +4656,7 @@ void load_gauge_missile_tri(gauge_settings* settings)
 		Radius = 166;
 	}
 
-	HudGaugeMissileTriangles* hud_gauge = gauge_load_common<HudGaugeMissileTriangles>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeMissileTriangles>(settings);
 
 	if(optional_string("Radius:")) {
 		stuff_int(&Radius);
@@ -5083,16 +4672,7 @@ void load_gauge_missile_tri(gauge_settings* settings)
 	hud_gauge->initTriBase(Target_triangle_base);
 	hud_gauge->initTriHeight(Target_triangle_height);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeMissileTriangles* instance = new HudGaugeMissileTriangles();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_lead(gauge_settings* settings)
@@ -5129,7 +4709,7 @@ void load_gauge_lead(gauge_settings* settings)
 		}
 	}
 
-	HudGaugeLeadIndicator* hud_gauge = gauge_load_common<HudGaugeLeadIndicator>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeLeadIndicator>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -5146,16 +4726,7 @@ void load_gauge_lead(gauge_settings* settings)
 	hud_gauge->initHalfSize(Lead_indicator_half[0], Lead_indicator_half[1]);
 	hud_gauge->initBitmaps(fname);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeLeadIndicator* instance = new HudGaugeLeadIndicator();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_orientation_tee(gauge_settings* settings)
@@ -5178,7 +4749,7 @@ void load_gauge_orientation_tee(gauge_settings* settings)
 		Radius = 166;
 	}
 
-	HudGaugeOrientationTee* hud_gauge = gauge_load_common<HudGaugeOrientationTee>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeOrientationTee>(settings);
 
 	if(optional_string("Radius:")) {
 		stuff_int(&Radius);
@@ -5186,16 +4757,7 @@ void load_gauge_orientation_tee(gauge_settings* settings)
 
 	hud_gauge->initRadius(Radius);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeOrientationTee* instance = new HudGaugeOrientationTee();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_lead_sight(gauge_settings* settings)
@@ -5214,7 +4776,7 @@ void load_gauge_lead_sight(gauge_settings* settings)
 		settings->offset[1] = 3;
 	}
 
-	HudGaugeLeadSight* hud_gauge = gauge_load_common<HudGaugeLeadSight>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeLeadSight>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -5222,16 +4784,7 @@ void load_gauge_lead_sight(gauge_settings* settings)
 
 	hud_gauge->initBitmaps(fname);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeLeadSight* instance = new HudGaugeLeadSight();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_kills(gauge_settings* settings)
@@ -5261,7 +4814,7 @@ void load_gauge_kills(gauge_settings* settings)
 		}
 	}
 
-	HudGaugeKills* hud_gauge = gauge_load_common<HudGaugeKills>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeKills>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -5277,16 +4830,7 @@ void load_gauge_kills(gauge_settings* settings)
 	hud_gauge->initTextOffsets(text_offsets[0], text_offsets[1]);
 	hud_gauge->initTextValueOffsets(text_value_offsets[0], text_value_offsets[1]);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeKills* instance = new HudGaugeKills();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_flight_path(gauge_settings* settings)
@@ -5299,7 +4843,7 @@ void load_gauge_flight_path(gauge_settings* settings)
 
 	settings->set_position = false;
 
-	HudGaugeFlightPath* hud_gauge = gauge_load_common<HudGaugeFlightPath>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeFlightPath>(settings);
 
 	if(optional_string("Filename:")) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -5311,16 +4855,7 @@ void load_gauge_flight_path(gauge_settings* settings)
 	hud_gauge->initHalfSize(Marker_half[0], Marker_half[1]);
 	hud_gauge->initBitmap(fname);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeFlightPath* instance = new HudGaugeFlightPath();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_warhead_count(gauge_settings* settings)
@@ -5346,7 +4881,7 @@ void load_gauge_warhead_count(gauge_settings* settings)
 		settings->offset[1] = -144;
 	}
 
-	HudGaugeWarheadCount* hud_gauge = gauge_load_common<HudGaugeWarheadCount>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeWarheadCount>(settings);
 
 	if ( optional_string("Filename:") ) {
 		stuff_string(fname, F_NAME, MAX_FILENAME_LEN);
@@ -5392,16 +4927,7 @@ void load_gauge_warhead_count(gauge_settings* settings)
 	hud_gauge->initMaxColumns(max_columns);
 	hud_gauge->initTextAlign(alignment);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeWarheadCount* instance = new HudGaugeWarheadCount();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_hardpoints(gauge_settings* settings)
@@ -5423,7 +4949,7 @@ void load_gauge_hardpoints(gauge_settings* settings)
 		settings->offset[1] = -98;
 	}
 
-	HudGaugeHardpoints* hud_gauge = gauge_load_common<HudGaugeHardpoints>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeHardpoints>(settings);
 
 	if ( optional_string("Size:") ) {
 		stuff_int_list(sizes, 2);
@@ -5454,16 +4980,7 @@ void load_gauge_hardpoints(gauge_settings* settings)
 	hud_gauge->initViewDir(view_dir);
 	hud_gauge->initDrawOptions(show_primary, show_secondary);
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeHardpoints* instance = new HudGaugeHardpoints();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_primary_weapons(gauge_settings* settings)
@@ -5485,7 +5002,7 @@ void load_gauge_primary_weapons(gauge_settings* settings)
 	int link_x = 33;
 	int name_x = 35;
 
-	HudGaugePrimaryWeapons* hud_gauge = gauge_load_common<HudGaugePrimaryWeapons>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugePrimaryWeapons>(settings);
 
 	if ( optional_string("Header Offsets:") ) {
 		stuff_int_list(header_offsets, 2);
@@ -5567,16 +5084,7 @@ void load_gauge_primary_weapons(gauge_settings* settings)
 	hud_gauge->initPrimaryNameOffsetX(name_x);
 	hud_gauge->initLinkIcon();
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugePrimaryWeapons* instance = new HudGaugePrimaryWeapons();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
 
 void load_gauge_secondary_weapons(gauge_settings* settings)
@@ -5600,7 +5108,7 @@ void load_gauge_secondary_weapons(gauge_settings* settings)
 	int reload_x = 118;
 	int unlink_x = 33;
 
-	HudGaugeSecondaryWeapons* hud_gauge = gauge_load_common<HudGaugeSecondaryWeapons>(settings);
+	auto hud_gauge = gauge_load_common<HudGaugeSecondaryWeapons>(settings);
 
 	if ( optional_string("Header Offsets:") ) {
 		stuff_int_list(header_offsets, 2);
@@ -5692,14 +5200,5 @@ void load_gauge_secondary_weapons(gauge_settings* settings)
 	hud_gauge->initSecondaryUnlinkedOffsetX(unlink_x);
 	hud_gauge->initLinkIcon();
 
-	if(settings->ship_idx->at(0) >= 0) {
-		for (SCP_vector<int>::iterator ship_index = settings->ship_idx->begin(); ship_index != settings->ship_idx->end(); ++ship_index) {
-			HudGaugeSecondaryWeapons* instance = new HudGaugeSecondaryWeapons();
-			*instance = *hud_gauge;
-			Ship_info[*ship_index].hud_gauges.push_back(instance);
-		}
-		delete hud_gauge;
-	} else {
-		default_hud_gauges.push_back(hud_gauge);
-	}
+	gauge_assign_common(settings, std::move(hud_gauge));
 }
