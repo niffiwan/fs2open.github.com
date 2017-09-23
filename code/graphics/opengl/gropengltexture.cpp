@@ -759,17 +759,27 @@ void opengl_determine_bpp_and_flags(int bitmap_handle, int bitmap_type, ubyte& f
 		case TCACHE_TYPE_CUBEMAP:
 		case TCACHE_TYPE_NORMAL:
 			flags |= BMP_TEX_OTHER;
-			if (bm_has_alpha_channel(bitmap_handle)) {
-				bpp = 32; // Since this bitmap has an alpha channel we need to respect that
+			if (bm_get_type(bitmap_handle) == BM_TYPE_PCX) {
+				// PCX is special since the locking code only works with bpp = 16 for some reason
+				bpp = 16;
 			} else {
-				bpp = 24; // RGB, 8-bits per channel
+				if (bm_has_alpha_channel(bitmap_handle)) {
+					bpp = 32; // Since this bitmap has an alpha channel we need to respect that
+				} else {
+					bpp = 24; // RGB, 8-bits per channel
+				}
 			}
 			break;
 
 		case TCACHE_TYPE_INTERFACE:
 		case TCACHE_TYPE_XPARENT:
 			flags |= BMP_TEX_XPARENT;
-			bpp = 32; // RGBA, 8-bits per channel
+			if (bm_get_type(bitmap_handle) == BM_TYPE_PCX) {
+				// PCX is special since the locking code only works with bpp = 16 for some reason
+				bpp = 16;
+			} else {
+				bpp = 32; // RGBA, 8-bits per channel
+			}
 			break;
 
 		case TCACHE_TYPE_COMPRESSED:
@@ -813,7 +823,7 @@ void opengl_tex_array_storage(GLenum target, GLint levels, GLenum format, GLint 
 	if (target == GL_TEXTURE_CUBE_MAP) {
 		Assertion(frames == 1, "Cube map texture arrays aren't supported yet!");
 
-		if (GL_version >= 42) {
+		if (GLAD_GL_ARB_texture_storage) {
 			// This version has a better way of specifying the texture storage
 			glTexStorage2D(target, levels, format, width, height);
 		} else {
@@ -829,7 +839,7 @@ void opengl_tex_array_storage(GLenum target, GLint levels, GLenum format, GLint 
 			}
 		}
 	} else {
-		if (GL_version >= 42) {
+		if (GLAD_GL_ARB_texture_storage) {
 			// This version has a better way of specifying the texture storage
 			glTexStorage3D(target, levels, format, width, height, frames);
 		} else {

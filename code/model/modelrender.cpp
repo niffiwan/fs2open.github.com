@@ -15,6 +15,8 @@
 #include "graphics/opengl/gropengldraw.h"
 #include "graphics/opengl/gropenglshader.h"
 #include "graphics/tmapper.h"
+#include "graphics/matrix.h"
+#include "graphics/light.h"
 #include "io/timer.h"
 #include "math/staticrand.h"
 #include "model/modelrender.h"

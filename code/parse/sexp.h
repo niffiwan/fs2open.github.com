@@ -734,6 +734,7 @@ class waypoint_list;
 #define OP_TURRET_SET_PRIMARY_AMMO			(0x002c | OP_CATEGORY_CHANGE2 | OP_NONCAMPAIGN_FLAG)	// DahBlount, part of the turret ammo changes
 #define OP_TURRET_SET_SECONDARY_AMMO		(0x002d | OP_CATEGORY_CHANGE2 | OP_NONCAMPAIGN_FLAG)	// DahBlount, part of the turret ammo changes
 #define OP_JETTISON_CARGO_NEW				(0x002e | OP_CATEGORY_CHANGE2 | OP_NONCAMPAIGN_FLAG)	// Goober5000
+#define OP_STRING_CONCATENATE_BLOCK			(0x002f | OP_CATEGORY_CHANGE2 | OP_NONCAMPAIGN_FLAG)	// Goober5000
 
 // defined for AI goals
 #define OP_AI_CHASE							(0x0000 | OP_CATEGORY_AI | OP_NONCAMPAIGN_FLAG)
@@ -1149,7 +1150,7 @@ extern int get_sexp_main(void);	//	Returns start node
 extern int run_sexp(const char* sexpression); // debug and lua sexps
 extern int stuff_sexp_variable_list();
 extern int eval_sexp(int cur_node, int referenced_node = -1);
-extern int is_sexp_true(int cur_node, int referenced_node = -1);
+extern bool is_sexp_true(int cur_node, int referenced_node = -1);
 extern int query_operator_return_type(int op);
 extern int query_operator_argument_type(int op, int argnum);
 extern void update_sexp_references(const char *old_name, const char *new_name);
