@@ -61,6 +61,8 @@ extern Category CollisionDetection;
 extern Category RenderBuffer;
 
 extern Category QueueRender;
+extern Category BuildModelUniforms;
+extern Category UploadModelUniforms;
 extern Category SubmitDraws;
 extern Category ApplyLights;
 extern Category DrawEffects;
@@ -91,6 +93,9 @@ extern Category ProcessParticleEffects;
 extern Category TrailsMoveAll;
 extern Category Simulation;
 extern Category RenderMainFrame;
+extern Category RenderHUD;
+extern Category RenderHUDHook;
+extern Category RenderHUDGauge;
 extern Category MainFrame;
 extern Category PageFlip;
 

@@ -41,6 +41,7 @@
 #include "render/3d.h"
 #include "tracing/tracing.h"
 #include "popup/popup.h"
+#include "utils/boost/hash_combine.h"
 
 #if ( SDL_VERSION_ATLEAST(1, 2, 7) )
 #include "SDL_cpuinfo.h"
@@ -652,6 +653,8 @@ void gr_close()
 
 	gr_light_shutdown();
 
+	graphics::paths::PathRenderer::shutdown();
+
 	switch (gr_screen.mode) {
 		case GR_OPENGL:
 			gr_opengl_cleanup(true);
@@ -663,6 +666,8 @@ void gr_close()
 		default:
 			Int3();		// Invalid graphics mode
 	}
+
+	bm_close();
 
 	Gr_inited = 0;
 }
@@ -1065,13 +1070,13 @@ bool gr_init(std::unique_ptr<os::GraphicsOperations>&& graphicsOps, int d_mode, 
 
 	gr_light_init();
 
-	mprintf(("Initializing path renderer...\n"));
-	graphics::paths::PathRenderer::init();
-
 	gr_set_palette_internal(Gr_current_palette_name, NULL, 0);
 
 	bm_init();
 	io::mouse::CursorManager::init();
+
+	mprintf(("Initializing path renderer...\n"));
+	graphics::paths::PathRenderer::init();
 
 	// Initialize uniform buffer managers
 	uniform_buffer_managers_init();
@@ -2227,15 +2232,13 @@ uint gr_determine_model_shader_flags(
 
 void gr_print_timestamp(int x, int y, fix timestamp, int resize_mode)
 {
-	char time[8];
-
 	int seconds = fl2i(f2fl(timestamp));
 
 	// format the time information into strings
+	SCP_string time;
 	sprintf(time, "%.1d:%.2d:%.2d", (seconds / 3600) % 10, (seconds / 60) % 60, seconds % 60);
-	time[7] = '\0';
 
-	gr_string(x, y, time, resize_mode);
+	gr_string(x, y, time.c_str(), resize_mode);
 }
 
 static std::unique_ptr<graphics::util::UniformBufferManager>
@@ -2254,7 +2257,7 @@ static void uniform_buffer_managers_deinit() {
 	}
 }
 static void uniform_buffer_managers_retire_buffers() {
-	GR_DEBUG_SCOPE("Retiring uniform buffers");
+	GR_DEBUG_SCOPE("Retiring unused uniform buffers");
 
 	for (auto& manager: uniform_buffer_managers) {
 		manager->retireBuffers();
@@ -2263,4 +2266,129 @@ static void uniform_buffer_managers_retire_buffers() {
 
 graphics::util::UniformBuffer* gr_get_uniform_buffer(uniform_block_type type) {
 	return uniform_buffer_managers[static_cast<size_t>(type)]->getBuffer();
+}
+
+SCP_vector<DisplayData> gr_enumerate_displays()
+{
+	// It seems that linux cannot handle having the video subsystem inited
+	// too late
+	if (SDL_InitSubSystem(SDL_INIT_VIDEO) < 0) {
+		return SCP_vector<DisplayData>();
+	}
+
+	SCP_vector<DisplayData> data;
+
+	auto num_displays = SDL_GetNumVideoDisplays();
+	for (auto i = 0; i < num_displays; ++i) {
+		DisplayData display;
+		display.index = i;
+
+		SDL_Rect bounds;
+		if (SDL_GetDisplayBounds(i, &bounds) == 0) {
+			display.x = bounds.x;
+			display.y = bounds.y;
+			display.width = bounds.w;
+			display.height = bounds.h;
+		}
+
+		auto name = SDL_GetDisplayName(i);
+		if (name != nullptr) {
+			display.name = name;
+		}
+
+		auto num_mods = SDL_GetNumDisplayModes(i);
+		for (auto j = 0; j < num_mods; ++j) {
+			SDL_DisplayMode mode;
+			if (SDL_GetDisplayMode(i, j, &mode) != 0) {
+				continue;
+			}
+			
+			VideoModeData videoMode;
+			videoMode.width = mode.w;
+			videoMode.height = mode.h;
+
+			int sdlBits = SDL_BITSPERPIXEL(mode.format);
+
+			if (SDL_ISPIXELFORMAT_ALPHA(mode.format)) {
+				videoMode.bit_depth = sdlBits;
+			} else {
+				// Fix a few values
+				if (sdlBits == 24) {
+					videoMode.bit_depth = 32;
+				} else if (sdlBits == 15) {
+					videoMode.bit_depth = 16;
+				} else {
+					videoMode.bit_depth = sdlBits;
+				}
+			}
+
+			display.video_modes.push_back(videoMode);
+		}
+
+		data.push_back(display);
+	}
+	
+	SDL_QuitSubSystem(SDL_INIT_VIDEO);
+
+	return data;
+}
+
+namespace std {
+
+size_t hash<vertex_format_data>::operator()(const vertex_format_data& data) const {
+	size_t seed = 0;
+	boost::hash_combine(seed, (size_t)data.format_type);
+	boost::hash_combine(seed, data.offset);
+	boost::hash_combine(seed, data.stride);
+	return seed;
+}
+size_t hash<vertex_layout>::operator()(const vertex_layout& data) const {
+	return data.hash();
+}
+
+}
+bool vertex_layout::resident_vertex_format(vertex_format_data::vertex_format format_type) const {
+	return ( Vertex_mask & vertex_format_data::mask(format_type) ) ? true : false;
+}
+void vertex_layout::add_vertex_component(vertex_format_data::vertex_format format_type, size_t stride, size_t offset) {
+	// A stride value of 0 is not handled consistently by the graphics API so we must enforce that that does not happen
+	Assertion(stride != 0, "The stride of a vertex component may not be zero!");
+
+	if ( resident_vertex_format(format_type) ) {
+		// we already have a vertex component of this format type
+		return;
+	}
+
+	if (Vertex_mask == 0) {
+		// This is the first element so we need to initialize the global stride here
+		Vertex_stride = stride;
+	}
+
+	Assertion(Vertex_stride == stride, "The strides of all elements must be the same in a vertex layout!");
+
+	Vertex_mask |= (1 << format_type);
+	Vertex_components.push_back(vertex_format_data(format_type, stride, offset));
+}
+bool vertex_layout::operator==(const vertex_layout& other) const {
+	if (Vertex_mask != other.Vertex_mask) {
+		return false;
+	}
+
+	if (Vertex_components.size() != other.Vertex_components.size()) {
+		return false;
+	}
+
+	return std::equal(Vertex_components.cbegin(),
+					  Vertex_components.cend(),
+					  other.Vertex_components.cbegin());
+}
+size_t vertex_layout::hash() const {
+	size_t seed = 0;
+	boost::hash_combine(seed, Vertex_mask);
+
+	for (auto& comp : Vertex_components) {
+		boost::hash_combine(seed, comp);
+	}
+
+	return seed;
 }

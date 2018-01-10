@@ -92,6 +92,7 @@
 #include "sound/audiostr.h"
 #include "sound/ds.h"
 #include "sound/sound.h"
+#include "utils/unicode.h"
 #include "starfield/starfield.h"
 #include "starfield/supernova.h"
 #include "stats/medals.h"
@@ -99,6 +100,8 @@
 #include "weapon/emp.h"
 #include "weapon/shockwave.h"
 #include "weapon/weapon.h"
+
+#include "parse/sexp/sexp_lookup.h"
 
 #ifndef NDEBUG
 #include "hud/hudmessage.h"
@@ -115,7 +118,7 @@
 #define FALSE	0
 
 
-sexp_oper Operators[] = {
+SCP_vector<sexp_oper> Operators = {
 //   Operator, Identity, Min / Max arguments
 	//Arithmetic Category
 	{ "+",								OP_PLUS,								2,	INT_MAX,	SEXP_ARITHMETIC_OPERATOR,	},
@@ -682,7 +685,8 @@ sexp_oper Operators[] = {
 	{ "string-concatenate",				OP_STRING_CONCATENATE,					3,	3,			SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "string-concatenate-block",		OP_STRING_CONCATENATE_BLOCK,			3,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "string-get-substring",			OP_STRING_GET_SUBSTRING,				4,	4,			SEXP_ACTION_OPERATOR,	},	// Goober5000
-	{ "string-set-substring",			OP_STRING_SET_SUBSTRING,				5,	5,			SEXP_ACTION_OPERATOR,	},	// Goober5000  
+	{ "string-set-substring",			OP_STRING_SET_SUBSTRING,				5,	5,			SEXP_ACTION_OPERATOR,	},	// Goober5000
+	{ "modify-variable-xstr",			OP_MODIFY_VARIABLE_XSTR,				3,	3,			SEXP_ACTION_OPERATOR,	},	// m!m
 
 	//Other Sub-Category
 	{ "damaged-escort-priority",		OP_DAMAGED_ESCORT_LIST,					3,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	//phreak
@@ -1100,13 +1104,6 @@ void init_sexp()
 	Sexp_current_argument_nesting_level = 0;
 	Current_sexp_network_packet.initialize();
 
-	static bool done_sexp_atexit = false;
-	if (!done_sexp_atexit)
-	{
-		atexit(sexp_nodes_close);
-		done_sexp_atexit = true;
-	}
-
 	sexp_nodes_init();
 	init_sexp_vars();
 	Locked_sexp_false = Locked_sexp_true = -1;
@@ -1120,6 +1117,12 @@ void init_sexp()
 	Assert(Locked_sexp_true != -1);
 	Sexp_nodes[Locked_sexp_true].type = SEXP_ATOM;  // fix bypassing value
 	Sexp_nodes[Locked_sexp_true].value = SEXP_KNOWN_TRUE;
+}
+
+void sexp_shutdown() {
+	sexp_nodes_close();
+
+	sexp::dynamic_sexp_shutdown();
 }
 
 /**
@@ -1569,12 +1572,11 @@ int find_argnum(int parent_node, int arg_node)
  */
 int get_operator_index(const char *token)
 {
-	int	i;
 	Assertion(token != NULL, "get_operator_index(char*) called with a null token; get a coder!\n");
 
-	for (i=0; i<Num_operators; i++){
-		if (!stricmp(token, Operators[i].text)){
-			return i;
+	for (size_t i=0; i < Operators.size(); i++){
+		if (Operators[i].text == token){
+			return (int)i;
 		}
 	}
 
@@ -3315,7 +3317,7 @@ int get_sexp()
 	ignore_white_space();
 	while (*Mp != ')') {
 		// end of string or end of file
-		if (*Mp == '\0' || *Mp == EOF_CHAR) {
+		if (*Mp == '\0') {
 			Error(LOCATION, "Unexpected end of sexp!");
 			return -1;
 		}
@@ -3382,7 +3384,7 @@ int get_sexp()
 				}
 
 				// end of string or end of file?
-				if (*Mp == '\0' || *Mp == EOF_CHAR) {
+				if (*Mp == '\0') {
 					Error(LOCATION, "Unexpected end of sexp!");
 					return -1;
 				}
@@ -3572,6 +3574,18 @@ int get_sexp()
 					n = CDDR(n);
 				}
 				break;
+
+			case OP_MODIFY_VARIABLE_XSTR: {
+				n = CDDR(start); // First parameter is the variable name so we need to the second parameter
+
+				int id = atoi(Sexp_nodes[CDR(n)].text);
+				Assert(id < 10000000);
+				SCP_string xstr;
+				sprintf(xstr, "XSTR(\"%s\", %d)", Sexp_nodes[n].text, id);
+
+				memset(Sexp_nodes[n].text, 0, NAME_LENGTH*sizeof(char));
+				lcl_ext_localize(xstr.c_str(), Sexp_nodes[n].text, TOKEN_LENGTH - 1);
+			}
 		}
 	}
 
@@ -9251,6 +9265,7 @@ int sexp_is_iff(int n)
 					// it's probably an exited wing, which we don't store information about
 					return SEXP_NAN_FOREVER;
 				}
+				FALLTHROUGH;
 			}
 
 			// we don't handle the other cases
@@ -10335,7 +10350,7 @@ void sexp_play_sound_from_table(int n)
 
 	// play sound effect ---------------------------
 	if (sound_index >= 0) {
-		game_snd *snd = &Snds[sound_index];
+		game_snd *snd = gamesnd_get_game_sound(sound_index);
 		if (snd->min == 0 && snd->max == 0) {
 			// if sound doesn't specify 3d range, don't play in 3d
 			snd_play( snd, 0.0f, 1.0f, SND_PRIORITY_MUST_PLAY );
@@ -10367,7 +10382,7 @@ void multi_sexp_play_sound_from_table()
 
 	// play sound effect ---------------------------
 	if (sound_index >= 0) {
-		game_snd *snd = &Snds[sound_index];
+		game_snd *snd = gamesnd_get_game_sound(sound_index);
 		if (snd->min == 0 && snd->max == 0) {
 			// if sound doesn't specify 3d range, don't play in 3d
 			snd_play( snd, 0.0f, 1.0f, SND_PRIORITY_MUST_PLAY );
@@ -10827,7 +10842,7 @@ void sexp_explosion_effect(int n)
 	// play sound effect ---------------------------
 	if (sound_index >= 0)
 	{
-		snd_play_3d( &Snds[sound_index], &origin, &View_position, 0.0f, NULL, 0, 1.0f, SND_PRIORITY_MUST_PLAY  );
+		snd_play_3d( gamesnd_get_game_sound(sound_index), &origin, &View_position, 0.0f, NULL, 0, 1.0f, SND_PRIORITY_MUST_PLAY  );
 	}
 
 
@@ -13037,7 +13052,8 @@ void sexp_alter_ship_flag_helper(object_ship_wing_point_team &oswpt, bool future
 				Ai_info[oswpt.shipp->ai_index].ai_flags.set(ai_flag, set_flag);
 			}
 			
-			// no break statement. We want to fall through. 
+			// no break statement. We want to fall through.
+			FALLTHROUGH;
 			
 		case OSWPT_TYPE_PARSE_OBJECT:
 			if (!future_ships) {
@@ -20380,7 +20396,8 @@ void sexp_string_concatenate_block(int n)
 // Goober5000
 int sexp_string_get_length(int node)
 {
-	return (int)strlen(CTEXT(node));
+	auto text = CTEXT(node);
+	return (int)unicode::num_codepoints(text, text + strlen(text));
 }
 
 // Goober5000
@@ -20415,7 +20432,9 @@ void sexp_string_get_substring(int node)
 		return;
 	}
 
-	int parent_len = (int)strlen(parent);
+	auto parent_byte_len = strlen(parent);
+	auto parent_end = parent + parent_byte_len;
+	int parent_len = (int)unicode::num_codepoints(parent, parent_end);
 
 	// sanity
 	if (pos >= parent_len)
@@ -20430,7 +20449,16 @@ void sexp_string_get_substring(int node)
 
 	// copy substring
 	memset(new_text, 0, TOKEN_LENGTH);
-	strncpy(new_text, &parent[pos], len);
+	auto start_ptr = parent;
+	// Advance the pointer by n codepoints to the start of our substring
+	unicode::advance(start_ptr, static_cast<size_t>(pos), parent_end);
+
+	auto end_ptr = start_ptr;
+	unicode::advance(end_ptr, static_cast<size_t>(len), parent_end);
+
+	auto byte_diff = end_ptr - start_ptr;
+	
+	strncpy(new_text, start_ptr, byte_diff);
 
 	// assign to variable
 	sexp_modify_variable(new_text, sexp_variable_index);
@@ -20441,7 +20469,6 @@ void sexp_string_set_substring(int node)
 {
 	int n = node;
 	int sexp_variable_index;
-	char new_text[TOKEN_LENGTH * 2];
 
 	// Only do single player or multi host
 	if ( MULTIPLAYER_CLIENT )
@@ -20470,8 +20497,9 @@ void sexp_string_set_substring(int node)
 		return;
 	}
 
-	int parent_len = (int)strlen(parent);
-	int new_len = (int)strlen(new_substring);
+	int parent_byte_len = (int)strlen(parent);
+
+	auto parent_len = (int)unicode::num_codepoints(parent, parent + parent_byte_len);
 
 	// sanity
 	if (pos >= parent_len)
@@ -20480,34 +20508,73 @@ void sexp_string_set_substring(int node)
 		return;
 	}
 
-	// make the common case fast
-	if (len == 1 && new_len == 1)
-	{
-		strcpy_s(new_text, parent);
-		new_text[pos] = new_substring[0];
-	}
-	else
-	{
-		// sanity
-		if (pos + len > parent_len)
-			len = parent_len - pos;
+	SCP_string new_text = parent;
 
-		// copy parent string up to the substring pos
-		strncpy(new_text, parent, pos);
+	auto range = unicode::codepoint_range(parent);
+	auto end_iter = range.end();
 
-		// add new substring
-		strcpy(&new_text[pos], new_substring);
-
-		// add rest of parent string
-		strcat_s(new_text, &parent[pos + len]);
-
-		// check length
-		if (strlen(new_text) >= TOKEN_LENGTH)
-		{
-			Warning(LOCATION, "Concatenated string is too long and will be truncated.");
-			new_text[TOKEN_LENGTH] = 0;
+	size_t substring_begin_byte = 0;
+	size_t substring_end_byte = 0;
+	auto i = 0;
+	for (auto iter = range.begin(); iter != end_iter; ++iter, ++i) {
+		if (i == pos) {
+			substring_begin_byte = iter.pos() - parent;
+		} else if (i == pos + len) {
+			substring_end_byte = iter.pos() - parent;
+			// We have reached the end byte so we have done everything we need to
+			break;
 		}
 	}
+
+	// This shouldn't happen
+	Assertion(substring_begin_byte < substring_end_byte,
+			  "The begin position of the substring must be less than the end position!");
+
+	new_text.replace(substring_begin_byte, substring_end_byte - substring_begin_byte, new_substring);
+
+	if (new_text.size() >= TOKEN_LENGTH) {
+		Warning(LOCATION, "Concatenated string is too long and will be truncated.");
+
+		new_text.resize(TOKEN_LENGTH - 1);
+
+		// This might have broken the UTF-8 sequence so that needs to be fixed in Unicode mode
+		if (Unicode_text_mode) {
+			auto invalid = utf8::find_invalid(new_text.begin(), new_text.end());
+
+			if (invalid != new_text.end()) {
+				// Found an invalid sequence. End the string right before that to make sure the string is still valid
+				new_text.erase(invalid, new_text.end());
+			}
+		}
+	}
+
+	// assign to variable
+	sexp_modify_variable(new_text.c_str(), sexp_variable_index);
+}
+
+void sexp_modify_variable_xstr(int n)
+{
+	Assert(n >= 0);
+
+	// Only do single player or multi host
+	if ( MULTIPLAYER_CLIENT )
+		return;
+
+	// get sexp_variable index
+	Assert(Sexp_nodes[n].first == -1);
+	auto sexp_variable_index = atoi(Sexp_nodes[n].text);
+	n = CDR(n);
+
+	// verify variable set
+	Assert(Sexp_variables[sexp_variable_index].type & SEXP_VARIABLE_SET);
+
+	if (!(Sexp_variables[sexp_variable_index].type & SEXP_VARIABLE_STRING)) {
+		Warning(LOCATION, "Variable for modify-variable-xstr has to be a string variable!");
+		return;
+	}
+
+	// get new string
+	const char* new_text = Sexp_nodes[n].text;
 
 	// assign to variable
 	sexp_modify_variable(new_text, sexp_variable_index);
@@ -23193,6 +23260,11 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = SEXP_TRUE;	// SEXP_TRUE means only do once.
 				break;
 
+			case OP_MODIFY_VARIABLE_XSTR:
+				sexp_modify_variable_xstr(node);
+				sexp_val = SEXP_TRUE;	// SEXP_TRUE means only do once.
+				break;
+
 			case OP_GET_VARIABLE_BY_INDEX:
 				sexp_val = sexp_get_variable_by_index(node);
 				break;
@@ -25108,9 +25180,15 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_set_turret_secondary_ammo(node);
 				break;
 
-			default:
-				Error(LOCATION, "Looking for SEXP operator, found '%s'.\n", CTEXT(cur_node));
-				break;
+			default:{
+				// Check if we have a dynamic SEXP with this operator and if there is, execute that
+				auto dynamicSEXP = sexp::get_dynamic_sexp(op_num);
+				if (dynamicSEXP != nullptr) {
+					sexp_val = dynamicSEXP->execute(node);
+				} else {
+					Error(LOCATION, "Looking for SEXP operator, found '%s'.\n", CTEXT(cur_node));
+				}
+			}
 		}
 
 		if (Log_event) {
@@ -25611,7 +25689,7 @@ int query_operator_return_type(int op)
 {
 	if (op < FIRST_OP)
 	{
-		Assert(op >= 0 && op < Num_operators);
+		Assert(op >= 0 && op < (int)Operators.size());
 		op = Operators[op].value;
 	}
 
@@ -25921,6 +25999,7 @@ int query_operator_return_type(int op)
 		case OP_SHIP_SUBSYS_UNTARGETABLE:
 		case OP_RED_ALERT:
 		case OP_MODIFY_VARIABLE:
+		case OP_MODIFY_VARIABLE_XSTR:
 		case OP_SET_VARIABLE_BY_INDEX:
 		case OP_BEAM_FIRE:
 		case OP_BEAM_FIRE_COORDS:
@@ -26178,8 +26257,14 @@ int query_operator_return_type(int op)
 		case OP_FOR_COUNTER:
 			return OPR_FLEXIBLE_ARGUMENT;
 
-		default:
+		default: {
+			auto dynamicSEXP = sexp::get_dynamic_sexp(op);
+			if (dynamicSEXP != nullptr) {
+				return dynamicSEXP->getReturnType();
+			}
+
 			Int3();
+		}
 	}
 
 	return 0;
@@ -26197,17 +26282,17 @@ int query_operator_argument_type(int op, int argnum)
 
 	if (op < FIRST_OP)
 	{
-		Assert(index >= 0 && index < Num_operators);
+		Assert(index >= 0 && index < (int)Operators.size());
 		op = Operators[index].value;
 
 	} else {
 		Warning(LOCATION, "Possible unnecessary search for operator index.  Trace out and see if this is necessary.\n");
 
-		for (index=0; index<Num_operators; index++)
+		for (index=0; index<(int)Operators.size(); index++)
 			if (Operators[index].value == op)
 				break;
 
-		Assert(index < Num_operators);
+		Assert(index < (int)Operators.size());
 	}
 
 	if (argnum >= Operators[index].max)
@@ -26282,6 +26367,9 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_STRING;
 			} else if (argnum == 2) {
 				return OPF_VARIABLE_NAME;
+			} else {
+				// This shouldn't happen
+				return OPF_NONE;
 			}
 
 		case OP_STRING_CONCATENATE_BLOCK:
@@ -26296,6 +26384,9 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_NUMBER;
 			} else if (argnum == 1) {
 				return OPF_VARIABLE_NAME;
+			} else {
+				// This shouldn't happen
+				return OPF_NONE;
 			}
 
 		case OP_STRING_GET_SUBSTRING:
@@ -26305,6 +26396,9 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_POSITIVE;
 			} else if (argnum == 3) {
 				return OPF_VARIABLE_NAME;
+			} else {
+				// This shouldn't happen
+				return OPF_NONE;
 			}
 
 		case OP_STRING_SET_SUBSTRING:
@@ -26316,6 +26410,9 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_STRING;
 			} else if (argnum == 4) {
 				return OPF_VARIABLE_NAME;
+			} else {
+				// This shouldn't happen
+				return OPF_NONE;
 			}
 
 		case OP_DEBUG:
@@ -26662,6 +26759,17 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_AMBIGUOUS; 
 			}
 
+		case OP_MODIFY_VARIABLE_XSTR:
+			if (argnum == 0) {
+				return OPF_VARIABLE_NAME;
+			} else if (argnum == 1) {
+				return OPF_STRING;
+			} else if (argnum == 2) {
+				return OPF_NUMBER;
+			} else {
+				return OPF_NONE;
+			}
+
 		case OP_GET_VARIABLE_BY_INDEX:
 		case OP_COPY_VARIABLE_BETWEEN_INDEXES:
 			return OPF_POSITIVE;
@@ -26724,6 +26832,9 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_SHIP;
 			else if (argnum == 1)
 				return OPF_SUBSYSTEM;
+			else
+				// This shouldn't happen
+				return OPF_NONE;
 
 		case OP_DISTANCE_SUBSYSTEM:
 			if (argnum == 0)
@@ -26733,7 +26844,8 @@ int query_operator_argument_type(int op, int argnum)
 			else if (argnum == 2)
 				return OPF_SUBSYSTEM;
 			else
-				Int3();		// shouldn't happen
+				// This shouldn't happen
+				return OPF_NONE;
 
 		case OP_NUM_WITHIN_BOX:
 			if(argnum < 3)
@@ -26779,6 +26891,8 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_JUMP_NODE_NAME;
 			else if (argnum == 1)
 				return OPF_POSITIVE;
+			else
+				return OPF_NONE;
 
 		case OP_IS_SUBSYSTEM_DESTROYED_DELAY:
 			if ( argnum == 0 )
@@ -27008,6 +27122,7 @@ int query_operator_argument_type(int op, int argnum)
 
 			// fall through
 			argnum--;
+			FALLTHROUGH;
 
 		case OP_UPDATE_SOUND_ENVIRONMENT:
 		{
@@ -27111,6 +27226,9 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_MESSAGE;
 			else if(a_mod == 3)
 				return OPF_POSITIVE;
+			else
+				// This can't happen
+				return OPF_NONE;
 		}
 
 		case OP_TRAINING_MSG:
@@ -27257,6 +27375,8 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_POSITIVE;
 			else if (argnum == 2)
 				return OPF_BOOL;
+			else
+				return OPF_NONE;
 
 		case OP_GOAL_INCOMPLETE:
 		case OP_GOAL_TRUE_DELAY:
@@ -27567,6 +27687,8 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_WEAPON_NAME;
 			} else if(argnum > 2) {
 				return OPF_POSITIVE;
+			} else {
+				return OPF_NONE;
 			}
 
 		case OP_TURRET_SET_DIRECTION_PREFERENCE:
@@ -27701,6 +27823,8 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_BOOL;
 			else if (argnum == 5)
 				return OPF_SUBSYSTEM;
+			else
+				return OPF_NONE;
 
 		case OP_BEAM_FREE_ALL:
 		case OP_BEAM_LOCK_ALL:
@@ -28130,6 +28254,8 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_POSITIVE;
 			else if (argnum == 12 )
 				return OPF_BOOL;
+			else
+				return OPF_NONE;
 
 		case OP_CUTSCENES_SHOW_SUBTITLE_TEXT:
 			if (argnum == 0)
@@ -28144,6 +28270,8 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_FONT;
 			else if (argnum == 12)
 				return OPF_BOOL;
+			else
+				return OPF_NONE;
 
 		case OP_CUTSCENES_SHOW_SUBTITLE_IMAGE:
 			if (argnum == 0)
@@ -28156,6 +28284,8 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_POSITIVE;
 			else if (argnum == 9)
 				return OPF_BOOL;
+			else
+				return OPF_NONE;
 
 		//</Cutscenes>
 
@@ -28164,6 +28294,8 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_JUMP_NODE_NAME;
 			else if (argnum==1)
 				return OPF_STRING;
+			else
+				return OPF_NONE;
 
 		case OP_JUMP_NODE_SET_JUMPNODE_COLOR:
 			if(argnum==0)
@@ -28330,8 +28462,13 @@ int query_operator_argument_type(int op, int argnum)
 		case OP_SET_MOTION_DEBRIS:
 			return OPF_BOOL;
 
-		default:
+		default: {
+			auto dynamicSEXP = sexp::get_dynamic_sexp(op);
+			if (dynamicSEXP != nullptr) {
+				return dynamicSEXP->getArgumentType(argnum);
+			}
 			Int3();
+		}
 	}
 
 	return 0;
@@ -28813,11 +28950,11 @@ int query_sexp_ai_goal_valid(int sexp_ai_goal, int ship_num)
 {
 	int i, op;
 
-	for (op=0; op<Num_operators; op++)
+	for (op=0; op<(int)Operators.size(); op++)
 		if (Operators[op].value == sexp_ai_goal)
 			break;
 
-	Assert(op < Num_operators);
+	Assert(op < (int)Operators.size());
 	for (i=0; i<Num_sexp_ai_goal_links; i++)
 		if (Sexp_ai_goal_links[i].op_code == sexp_ai_goal)
 			break;
@@ -29640,9 +29777,9 @@ int eval_num(int n)
 // Goober5000
 int get_sexp_id(char *sexp_name)
 {
-	for (int i = 0; i < Num_operators; i++)
+	for (size_t i=0; i < Operators.size(); i++)
 	{
-		if (!stricmp(sexp_name, Operators[i].text))
+		if (!stricmp(sexp_name, Operators[i].text.c_str()))
 			return Operators[i].value;
 	}
 	return -1;
@@ -30008,6 +30145,7 @@ int get_subcategory(int sexp_id)
 		case OP_STRING_CONCATENATE_BLOCK:
 		case OP_STRING_GET_SUBSTRING:
 		case OP_STRING_SET_SUBSTRING:
+		case OP_MODIFY_VARIABLE_XSTR:
 			return CHANGE_SUBCATEGORY_VARIABLES;
 
 		case OP_DAMAGED_ESCORT_LIST:
@@ -30119,12 +30257,20 @@ int get_subcategory(int sexp_id)
 		case OP_SCRIPT_EVAL_NUM:
 			return STATUS_SUBCATEGORY_OTHER;
 
-		default:
-			return -1;		// sexp doesn't have a subcategory
+		default: {
+			// Check if we have a dynamic SEXP with this operator and if there is, execute that
+			auto dynamicSEXP = sexp::get_dynamic_sexp(sexp_id);
+			if (dynamicSEXP != nullptr) {
+				return dynamicSEXP->getSubcategory();
+			}
+			else {
+				return -1;		// sexp doesn't have a subcategory
+			}
+		}
 	}
 }
 
-sexp_help_struct Sexp_help[] = {
+SCP_vector<sexp_help_struct> Sexp_help = {
 	{ OP_PLUS, "Plus (Arithmetic operator)\r\n"
 		"\tAdds numbers and returns results.\r\n\r\n"
 		"Returns a number.  Takes 2 or more numeric arguments." },
@@ -33873,33 +34019,41 @@ sexp_help_struct Sexp_help[] = {
 		"\tThis overrides any choice made by the user through the -nomotiondebris commandline flag."
 		"Takes 1 argument...\r\n"
 		"\t1:\tBoolean: True will disable motion debris, False reenable it.\r\n"
-	}
+	},
+
+	{ OP_MODIFY_VARIABLE_XSTR, "modify-variable-xstr\r\n"
+		"\tSets a variable to a localized string.\r\n\r\n"
+		"Takes 2 arguments...\r\n"
+		"\t1:\tName of Variable.\r\n"
+		"\t2:\tThe default text if no localized version is available.\r\n"
+		"\t3:\tThe XSTR index. If set to -1 then the default value will be used\r\n"
+	},
 };
 
 
 
-op_menu_struct op_menu[] =
+SCP_vector<op_menu_struct> op_menu =
 {
-	{ "Objectives",		OP_CATEGORY_OBJECTIVE },
-	{ "Time",			OP_CATEGORY_TIME },
-	{ "Logical",		OP_CATEGORY_LOGICAL },
-	{ "Arithmetic",		OP_CATEGORY_ARITHMETIC },
-	{ "Status",			OP_CATEGORY_STATUS },
-	{ "Change",			OP_CATEGORY_CHANGE },
-	{ "Conditionals",	OP_CATEGORY_CONDITIONAL },
-	{ "Ai goals",		OP_CATEGORY_AI },
-	{ "Event/Goals",	OP_CATEGORY_GOAL_EVENT },
-	{ "Training",		OP_CATEGORY_TRAINING },
+	{ "Objectives",		OP_CATEGORY_OBJECTIVE	},
+	{ "Time",			OP_CATEGORY_TIME		},
+	{ "Logical",		OP_CATEGORY_LOGICAL		},
+	{ "Arithmetic",		OP_CATEGORY_ARITHMETIC	},
+	{ "Status",			OP_CATEGORY_STATUS		},
+	{ "Change",			OP_CATEGORY_CHANGE		},
+	{ "Conditionals",	OP_CATEGORY_CONDITIONAL	},
+	{ "Ai goals",		OP_CATEGORY_AI			},
+	{ "Event/Goals",	OP_CATEGORY_GOAL_EVENT	},
+	{ "Training",		OP_CATEGORY_TRAINING	},
 };
 
 // Goober5000's subcategorization of the Change menu (and possibly other menus in the future,
 // if people so choose - see sexp.h)
-op_menu_struct op_submenu[] =
+SCP_vector<op_menu_struct> op_submenu =
 {
 	{	"Messages and Personas",		CHANGE_SUBCATEGORY_MESSAGING						},
 	{	"AI Control",					CHANGE_SUBCATEGORY_AI_CONTROL						},
 	{	"Ship Status",					CHANGE_SUBCATEGORY_SHIP_STATUS						},
-	{	"Weapons, Shields, and Engines",	CHANGE_SUBCATEGORY_SHIELDS_ENGINES_AND_WEAPONS		},
+	{	"Weapons, Shields, and Engines",CHANGE_SUBCATEGORY_SHIELDS_ENGINES_AND_WEAPONS		},
 	{	"Subsystems and Health",		CHANGE_SUBCATEGORY_SUBSYSTEMS						},
 	{	"Cargo",						CHANGE_SUBCATEGORY_CARGO							},
 	{	"Armor and Damage Types",		CHANGE_SUBCATEGORY_ARMOR_AND_DAMAGE_TYPES			},
@@ -33918,39 +34072,34 @@ op_menu_struct op_submenu[] =
 	{	"Other",						CHANGE_SUBCATEGORY_OTHER							},
 	{	"Mission",						STATUS_SUBCATEGORY_MISSION							},
 	{	"Player",						STATUS_SUBCATEGORY_PLAYER							},
-	{	"Multiplayer",						STATUS_SUBCATEGORY_MULTIPLAYER					},
+	{	"Multiplayer",					STATUS_SUBCATEGORY_MULTIPLAYER						},
 	{	"Ship Status",					STATUS_SUBCATEGORY_SHIP_STATUS						},
-	{	"Weapons, Shields, and Engines",	STATUS_SUBCATEGORY_SHIELDS_ENGINES_AND_WEAPONS	},
+	{	"Weapons, Shields, and Engines",STATUS_SUBCATEGORY_SHIELDS_ENGINES_AND_WEAPONS		},
 	{	"Cargo",						STATUS_SUBCATEGORY_CARGO							},
 	{	"Damage",						STATUS_SUBCATEGORY_DAMAGE							},
 	{	"Distance and Coordinates",		STATUS_SUBCATEGORY_DISTANCE_AND_COORDINATES			},
 	{	"Variables",					STATUS_SUBCATEGORY_VARIABLES						},
-	{	"Other",						STATUS_SUBCATEGORY_OTHER							},
-
-
+	{	"Other",						STATUS_SUBCATEGORY_OTHER							}
 };
-int Num_sexp_help = sizeof(Sexp_help) / sizeof(sexp_help_struct);
-int Num_op_menus = sizeof(op_menu) / sizeof(op_menu_struct);
-int Num_submenus = sizeof(op_submenu) / sizeof(op_menu_struct);
 
 /**
  * Internal file used by output_sexps, should not be called from output_sexps
  */
 static void output_sexp_html(int sexp_idx, FILE *fp)
 {
-	if(sexp_idx < 0 || sexp_idx > Num_operators)
+	if(sexp_idx < 0 || sexp_idx > (int)Operators.size())
 		return;
 
 	bool printed=false;
 
-	for(int i = 0; i < Num_sexp_help; i++)
+	for(auto& help : Sexp_help)
 	{
-		if(Sexp_help[i].id == Operators[sexp_idx].value)
+		if(help.id == Operators[sexp_idx].value)
 		{
-			char* new_buf = new char[2*strlen(Sexp_help[i].help)];
+			char* new_buf = new char[2 * help.help.size()];
 			char* dest_ptr = new_buf;
-			const char* curr_ptr = Sexp_help[i].help;
-			const char* end_ptr = curr_ptr + strlen(Sexp_help[i].help);
+			const char* curr_ptr = help.help.c_str();
+			const char* end_ptr = curr_ptr + help.help.size();
 			while(curr_ptr < end_ptr)
 			{
 				if(*curr_ptr == '\n')
@@ -33966,7 +34115,7 @@ static void output_sexp_html(int sexp_idx, FILE *fp)
 			}
 			*dest_ptr = '\0';
 
-			fprintf(fp, "<dt><b>%s</b></dt>\n<dd>%s</dd>\n", Operators[sexp_idx].text, new_buf);
+			fprintf(fp, "<dt><b>%s</b></dt>\n<dd>%s</dd>\n", Operators[sexp_idx].text.c_str(), new_buf);
 			delete[] new_buf;
 
 			printed = true;
@@ -33974,7 +34123,7 @@ static void output_sexp_html(int sexp_idx, FILE *fp)
 	}
 
 	if(!printed)
-		fprintf(fp, "<dt><b>%s</b></dt>\n<dd>Min arguments: %d, Max arguments: %d</dd>\n", Operators[sexp_idx].text, Operators[sexp_idx].min, Operators[sexp_idx].max);
+		fprintf(fp, "<dt><b>%s</b></dt>\n<dd>Min arguments: %d, Max arguments: %d</dd>\n", Operators[sexp_idx].text.c_str(), Operators[sexp_idx].min, Operators[sexp_idx].max);
 }
 
 /**
@@ -34000,14 +34149,14 @@ bool output_sexps(const char *filepath)
 
 	//Output an overview
 	fputs("<dl>", fp);
-	for(x = 0; x < Num_op_menus; x++)
+	for(x = 0; x < (int)op_menu.size(); x++)
 	{
-		fprintf(fp, "<dt><a href=\"#%d\">%s</a></dt>", (op_menu[x].id & OP_CATEGORY_MASK), op_menu[x].name);
-		for(y = 0; y < Num_submenus; y++)
+		fprintf(fp, "<dt><a href=\"#%d\">%s</a></dt>", (op_menu[x].id & OP_CATEGORY_MASK), op_menu[x].name.c_str());
+		for(y = 0; y < (int)op_submenu.size(); y++)
 		{
 			if(((op_submenu[y].id & OP_CATEGORY_MASK) == op_menu[x].id))
 			{
-				fprintf(fp, "<dd><a href=\"#%d\">%s</a></dd>", op_submenu[y].id & (OP_CATEGORY_MASK | SUBCATEGORY_MASK), op_submenu[y].name);
+				fprintf(fp, "<dd><a href=\"#%d\">%s</a></dd>", op_submenu[y].id & (OP_CATEGORY_MASK | SUBCATEGORY_MASK), op_submenu[y].name.c_str());
 			}
 		}
 	}
@@ -34015,19 +34164,19 @@ bool output_sexps(const char *filepath)
 
 	//Output the full descriptions
 	fputs("<dl>", fp);
-	for(x = 0; x < Num_op_menus; x++)
+	for(x = 0; x < (int)op_menu.size(); x++)
 	{
-		fprintf(fp, "<dt id=\"%d\"><h2>%s</h2></dt>\n", (op_menu[x].id & OP_CATEGORY_MASK), op_menu[x].name);
+		fprintf(fp, "<dt id=\"%d\"><h2>%s</h2></dt>\n", (op_menu[x].id & OP_CATEGORY_MASK), op_menu[x].name.c_str());
 		fputs("<dd>", fp);
 		fputs("<dl>", fp);
-		for(y = 0; y < Num_submenus; y++)
+		for(y = 0; y < (int)op_submenu.size(); y++)
 		{
 			if(((op_submenu[y].id & OP_CATEGORY_MASK) == op_menu[x].id))
 			{
-				fprintf(fp, "<dt id=\"%d\"><h3>%s</h3></dt>\n", op_submenu[y].id & (OP_CATEGORY_MASK | SUBCATEGORY_MASK), op_submenu[y].name);
+				fprintf(fp, "<dt id=\"%d\"><h3>%s</h3></dt>\n", op_submenu[y].id & (OP_CATEGORY_MASK | SUBCATEGORY_MASK), op_submenu[y].name.c_str());
 				fputs("<dd>", fp);
 				fputs("<dl>", fp);
-				for(z = 0; z < Num_operators; z++)
+				for(z = 0; z < (int)Operators.size(); z++)
 				{
 					if((get_category(Operators[z].value) == op_menu[x].id)
 						&& (get_subcategory(Operators[z].value) != -1)
@@ -34040,7 +34189,7 @@ bool output_sexps(const char *filepath)
 				fputs("</dd>", fp);
 			}
 		}
-		for(z = 0; z < Num_operators; z++)
+		for(z = 0; z < (int)Operators.size(); z++)
 		{
 			if((get_category(Operators[z].value) == op_menu[x].id)
 				&& (get_subcategory(Operators[z].value) == -1))
@@ -34051,7 +34200,7 @@ bool output_sexps(const char *filepath)
 		fputs("</dl>", fp);
 		fputs("</dd>", fp);
 	}
-	for(z = 0; z < Num_operators; z++)
+	for(z = 0; z < (int)Operators.size(); z++)
 	{
 		if(!get_category(Operators[z].value))
 		{

@@ -1171,24 +1171,6 @@ int gr_opengl_preload(int bitmap_num, int is_aabitmap)
 	return retval;
 }
 
-static int GL_texture_panning_enabled = 0;
-void gr_opengl_set_texture_panning(float u, float v, bool enable)
-{
-	if (enable) {
-		vm_matrix4_set_identity(&GL_texture_matrix);
-		GL_texture_matrix.vec.pos.xyzw.x = u;
-		GL_texture_matrix.vec.pos.xyzw.y = v;
-
-
-		GL_texture_panning_enabled = 1;
-	} else if (GL_texture_panning_enabled) {
-		vm_matrix4_set_identity(&GL_texture_matrix);
-
-	
-		GL_texture_panning_enabled = 0;
-	}
-}
-
 void gr_opengl_set_texture_addressing(int mode)
 {
 	GL_CHECK_FOR_ERRORS("start of set_texture_addressing()");
@@ -1517,7 +1499,11 @@ void gr_opengl_update_texture(int bitmap_handle, int bpp, const ubyte* data, int
 		}
 	}
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	glBindTexture(t->texture_target, t->texture_id);
+
+	GL_state.Texture.SetActiveUnit(0);
+	GL_state.Texture.SetTarget(t->texture_target);
+	GL_state.Texture.Enable(t->texture_id);
+
 	glTexSubImage3D(t->texture_target, 0, 0, 0, t->array_index, width, height, 1, glFormat, texFormat, (texmem)?texmem:data);
 
 	if (texmem != NULL)
@@ -1837,6 +1823,8 @@ int opengl_make_render_target( int handle, int slot, int *w, int *h, int *bpp, i
 
 	glTexParameteri(GL_texture_target, GL_TEXTURE_MAX_LEVEL, ts->mipmap_levels - 1);
 
+	GL_state.Texture.Enable(0);
+
 	// render buffer
 //	glGenRenderbuffers(1, &new_fbo.renderbuffer_id);
 //	glBindRenderbuffer(GL_RENDERBUFFER, new_fbo.renderbuffer_id);
@@ -1851,7 +1839,7 @@ int opengl_make_render_target( int handle, int slot, int *w, int *h, int *bpp, i
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X, ts->texture_id, 0);
 	} else {
 		// Since we use texture arrays for all bitmaps we use a single image array here
-		glFramebufferTexture3D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_state.Texture.GetTarget(), ts->texture_id, 0, 0);
+		glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, ts->texture_id, 0, 0);
 	}
 
 //	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, new_fbo.renderbuffer_id);

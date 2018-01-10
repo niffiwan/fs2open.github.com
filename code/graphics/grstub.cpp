@@ -131,11 +131,6 @@ void gr_stub_update_transform_buffer(void* data, size_t size)
 
 }
 
-void gr_stub_set_transform_buffer_offset(size_t offset)
-{
-
-}
-
 void gr_stub_set_clear_color(int r, int g, int b)
 {
 }
@@ -252,10 +247,6 @@ void gr_stub_deferred_lighting_finish()
 {
 }
 
-void gr_stub_set_texture_panning(float u, float v, bool enable)
-{
-}
-
 void gr_stub_set_line_width(float width)
 {
 }
@@ -330,12 +321,7 @@ void gr_stub_render_model(model_material* material_info, indexed_vertex_source *
 
 }
 
-void gr_stub_render_primitives(material* material_info, primitive_type prim_type, vertex_layout* layout, int offset, int n_verts, int buffer_handle)
-{
-
-}
-
-void gr_stub_render_primitives_2d(material* material_info, primitive_type prim_type, vertex_layout* layout, int offset, int n_verts, int buffer_handle)
+void gr_stub_render_primitives(material* material_info, primitive_type prim_type, vertex_layout* layout, int offset, int n_verts, int buffer_handle, size_t buffer_offset)
 {
 
 }
@@ -351,6 +337,14 @@ void gr_stub_render_primitives_distortion(distortion_material* material_info, pr
 }
 void gr_stub_render_movie(movie_material* material_info, primitive_type prim_type, vertex_layout* layout, int n_verts, int buffer)
 {
+}
+
+void gr_stub_render_nanovg(nanovg_material* material_info,
+							  primitive_type prim_type,
+							  vertex_layout* layout,
+							  int offset,
+							  int n_verts,
+							  int buffer_handle) {
 }
 
 void gr_stub_render_primitives_batched(batched_bitmap_material* material_info, primitive_type prim_type, vertex_layout* layout, int offset, int n_verts, int buffer_handle)
@@ -472,7 +466,6 @@ bool gr_stub_init()
 	gr_screen.gf_set_texture_addressing	= gr_stub_set_texture_addressing;
 	gr_screen.gf_zbias					= gr_stub_zbias_stub;
 	gr_screen.gf_set_fill_mode			= gr_set_fill_mode_stub;
-	gr_screen.gf_set_texture_panning	= gr_stub_set_texture_panning;
 
 	gr_screen.gf_create_buffer	= gr_stub_create_buffer;
 	gr_screen.gf_delete_buffer		= gr_stub_delete_buffer;
@@ -480,7 +473,6 @@ bool gr_stub_init()
 	gr_screen.gf_update_transform_buffer	= gr_stub_update_transform_buffer;
 	gr_screen.gf_update_buffer_data		= gr_stub_update_buffer_data;
 	gr_screen.gf_update_buffer_data_offset = gr_stub_update_buffer_data_offset;
-	gr_screen.gf_set_transform_buffer_offset	= gr_stub_set_transform_buffer_offset;
 
 	gr_screen.gf_post_process_set_effect	= gr_stub_post_process_set_effect;
 	gr_screen.gf_post_process_set_defaults	= gr_stub_post_process_set_defaults;
@@ -516,10 +508,10 @@ bool gr_stub_init()
 
 	gr_screen.gf_render_model = gr_stub_render_model;
 	gr_screen.gf_render_primitives	= gr_stub_render_primitives;
-	gr_screen.gf_render_primitives_2d	= gr_stub_render_primitives_2d;
 	gr_screen.gf_render_primitives_particle	= gr_stub_render_primitives_particle;
 	gr_screen.gf_render_primitives_distortion = gr_stub_render_primitives_distortion;
 	gr_screen.gf_render_movie = gr_stub_render_movie;
+	gr_screen.gf_render_nanovg = gr_stub_render_nanovg;
 	gr_screen.gf_render_primitives_batched = gr_stub_render_primitives_batched;
 
 	gr_screen.gf_is_capable = gr_stub_is_capable;

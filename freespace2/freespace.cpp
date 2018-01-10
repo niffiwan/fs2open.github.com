@@ -19,6 +19,10 @@
  #include <crtdbg.h>
 #endif // !_MINGW
 #else
+#ifdef APPLE_APP
+ #include <sys/types.h>
+ #include <libproc.h>
+#endif
  #include <unistd.h>
  #include <sys/stat.h>
 #endif
@@ -134,6 +138,7 @@
 #include "parse/parselo.h"
 #include "scripting/scripting.h"
 #include "parse/sexp.h"
+#include "parse/sexp/sexp_lookup.h"
 #include "particle/particle.h"
 #include "particle/ParticleManager.h"
 #include "pilotfile/pilotfile.h"
@@ -1123,7 +1128,7 @@ static int framenum;
  * called since the current callback function was set.
  */
 void game_loading_callback(int count)
-{	
+{
 	game_do_networking();
 
 	Assert( Game_loading_callback_inited==1 );
@@ -1175,6 +1180,17 @@ void game_loading_callback(int count)
 		memset( Processing_filename, 0, MAX_PATH_LEN );
 	}
 #endif
+
+	auto progress = static_cast<float>(count) / static_cast<float>(COUNT_ESTIMATE);
+	CLAMP(progress, 0.0f, 1.0f);
+	Script_system.SetHookVar("Progress", 'f', &progress);
+
+	if (Script_system.RunCondition(CHA_LOADSCREEN)) {
+		// At least one script exeuted so we probably need to do a flip now
+		do_flip = 1;
+	}
+
+	Script_system.RemHookVar("Progress");
 
 	os_ignore_events();
 
@@ -1280,10 +1296,8 @@ void freespace_mission_load_stuff()
 			game_busy( NOX("** preloading common game sounds **") );
 			gamesnd_preload_common_sounds();			// load in sounds that are expected to play
 
-			if (Cmdline_snd_preload) {
-				game_busy( NOX("** preloading gameplay sounds **") );
-				gamesnd_load_gameplay_sounds();			// preload in gameplay sounds if wanted
-			}
+			game_busy( NOX("** preloading gameplay sounds **") );
+			gamesnd_load_gameplay_sounds();			// preload in gameplay sounds if wanted
 
 			game_busy( NOX("** assigning sound environment for mission **") );
 			ship_assign_sound_all();	// assign engine sounds to ships
@@ -1460,6 +1474,7 @@ extern int Training_message_method;
 DCF_BOOL( training_msg_method, Training_message_method )
 DCF_BOOL( show_player_pos, Show_player_pos )
 DCF_BOOL(i_framerate, Interface_framerate )
+DCF_BOOL( show_bmpman_usage, Cmdline_bmpman_usage )
 
 DCF(warp, "Tests warpin effect")
 {
@@ -1684,7 +1699,7 @@ void game_init()
 
 	// init os stuff next
 	if ( !Is_standalone ) {		
-		os_init( Osreg_class_name, Osreg_app_name );
+		os_init( Osreg_class_name, Window_title.c_str(), Osreg_app_name );
 	}
 	else {
 		std_init_os();
@@ -1713,11 +1728,12 @@ void game_init()
 
 	e1 = timer_get_milliseconds();
 
+	mod_table_init();		// load in all the mod dependent settings
+
 	// initialize localization module. Make sure this is done AFTER initialzing OS.
 	lcl_init( detect_lang() );	
 	lcl_xstr_init();
 
-	mod_table_init();		// load in all the mod dependent settings
 
 	if (Is_standalone) {
 		// force off some cmdlines if they are on
@@ -1979,6 +1995,14 @@ void game_init()
 		main_hall_table_init();
 	}
 
+	// Initialize dynamic SEXPs
+	sexp::dynamic_sexp_init();
+
+	// This needs to be done after the dynamic SEXP init so that our documentation contains the dynamic sexps
+	if (Cmdline_output_sexp_info) {
+		output_sexps("sexps.html");
+	}
+
 	Viewer_mode = 0;
 	Game_paused = 0;
 
@@ -2087,7 +2111,7 @@ void game_show_framerate()
 #endif
 
 
-	if (Show_framerate || Cmdline_frame_profile) {
+	if (Show_framerate || Cmdline_frame_profile || Cmdline_bmpman_usage) {
 		gr_set_color_fast(&HUD_color_debug);
 
 		if (Cmdline_frame_profile) {
@@ -2100,6 +2124,10 @@ void game_show_framerate()
 				gr_printf_no_resize( gr_screen.center_offset_x + 20, gr_screen.center_offset_y + 100, "FPS: %0.1f", Framerate );
 			else
 				gr_string( gr_screen.center_offset_x + 20, gr_screen.center_offset_y + 100, "FPS: ?", GR_RESIZE_NONE );
+		}
+
+		if (Cmdline_bmpman_usage) {
+			gr_printf_no_resize( gr_screen.center_offset_x + 20, gr_screen.center_offset_y + 100 - line_height, "BMPMAN: %d/%d", bmpman_count_bitmaps(), MAX_BITMAPS );
 		}
 	}
 
@@ -2594,7 +2622,7 @@ void game_tst_frame()
 		// tst y
 		tst_y = frand_range(0.0f, (float)gr_screen.max_h - h);
 
-		snd_play(&Snds[SND_VASUDAN_BUP]);
+		snd_play(gamesnd_get_game_sound(SND_VASUDAN_BUP));
 
 		// tst x and direction
 		tst_mode = 0;
@@ -2738,7 +2766,7 @@ void do_timing_test(float frame_time)
 
 		// start looping digital sounds
 		for ( i = 0; i < NUM_MIXED_SOUNDS; i++ )
-			snds[i] = snd_play_looping( &Snds[i], 0.0f, -1, -1);
+			snds[i] = snd_play_looping( gamesnd_get_game_sound(i), 0.0f, -1, -1);
 	}
 	
 
@@ -3698,6 +3726,8 @@ void game_simulation_frame()
 		// move all the objects now
 		obj_move_all(flFrametime);
 
+		game_do_training_checks();
+
 		mission_eval_goals();
 	}
 
@@ -3884,6 +3914,8 @@ void game_shade_frame(float frametime)
 	if ( !game_actually_playing() ) {
 		return;
 	}
+
+	GR_DEBUG_SCOPE("Shade frame");
 
 	if (Fade_type != FI_NONE) {
 		Assert(Fade_start_timestamp > 0);
@@ -4137,6 +4169,7 @@ void game_frame(bool paused)
 
 			if(Scripting_didnt_draw_hud) {
 				GR_DEBUG_SCOPE("Render HUD");
+				TRACE_SCOPE(tracing::RenderHUD);
 
 				game_render_hud(cid);
 			}
@@ -4148,6 +4181,8 @@ void game_frame(bool paused)
 
 			if (!(Viewer_mode & (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY))) 
 			{
+				TRACE_SCOPE(tracing::RenderHUDHook);
+
 				Script_system.RunCondition(CHA_HUDDRAW, '\0', NULL, Viewer_obj);
 			}
 			Script_system.RemHookVar("Self");
@@ -4207,7 +4242,6 @@ void game_frame(bool paused)
 		}
 	}
 
-	game_do_training_checks();
 	asteroid_frame();
 
 	// process lightning (nebula only)
@@ -5020,7 +5054,7 @@ void game_process_event( int current_state, int event )
 			// Same code as in GS_EVENT_PLAYER_WARPOUT_START only ignores current mode
 			Player->saved_viewer_mode = Viewer_mode;
 			Player->control_mode = PCM_WARPOUT_STAGE1;
-			Warpout_sound = snd_play(&Snds[SND_PLAYER_WARP_OUT]);
+			Warpout_sound = snd_play(gamesnd_get_game_sound(SND_PLAYER_WARP_OUT));
 			Warpout_time = 0.0f;			// Start timer!
 			break;
 
@@ -5030,7 +5064,7 @@ void game_process_event( int current_state, int event )
 			} else {
 				Player->saved_viewer_mode = Viewer_mode;
 				Player->control_mode = PCM_WARPOUT_STAGE1;
-				Warpout_sound = snd_play(&Snds[SND_PLAYER_WARP_OUT]);
+				Warpout_sound = snd_play(gamesnd_get_game_sound(SND_PLAYER_WARP_OUT));
 				Warpout_time = 0.0f;			// Start timer!
 				Warpout_forced = 0;				// If non-zero, bash the player to speed and go through effect
 			}
@@ -5354,6 +5388,7 @@ void game_leave_state( int old_state, int new_state )
 		case GS_STATE_TRAINING_PAUSED:
 			Training_num_lines = 0;
 			// fall through to GS_STATE_GAME_PAUSED
+			FALLTHROUGH;
 
 		case GS_STATE_GAME_PAUSED:
 			game_start_time();
@@ -6842,6 +6877,9 @@ void game_shutdown(void)
 #endif
 	fs2netd_close();
 
+	// Free SEXP resources
+	sexp_shutdown();
+
 	if ( Cmdline_old_collision_sys ) {
 		obj_pairs_close();		// free memory from object collision pairs
 	} else {
@@ -6951,7 +6989,7 @@ void game_do_training_checks()
 					Training_context_at_waypoint = i;
 					if (Training_context_goal_waypoint == i) {
 						Training_context_goal_waypoint++;
-						snd_play(&Snds[SND_CARGO_REVEAL], 0.0f);
+						snd_play(gamesnd_get_game_sound(SND_CARGO_REVEAL), 0.0f);
 					}
 
 					break;
@@ -7400,11 +7438,11 @@ static int Subspace_ambient_right_channel = -1;
 void game_start_subspace_ambient_sound()
 {
 	if ( Subspace_ambient_left_channel < 0 ) {
-		Subspace_ambient_left_channel = snd_play_looping(&Snds[SND_SUBSPACE_LEFT_CHANNEL], -1.0f);
+		Subspace_ambient_left_channel = snd_play_looping(gamesnd_get_game_sound(SND_SUBSPACE_LEFT_CHANNEL), -1.0f);
 	}
 
 	if ( Subspace_ambient_right_channel < 0 ) {
-		Subspace_ambient_right_channel = snd_play_looping(&Snds[SND_SUBSPACE_RIGHT_CHANNEL], 1.0f);
+		Subspace_ambient_right_channel = snd_play_looping(gamesnd_get_game_sound(SND_SUBSPACE_RIGHT_CHANNEL), 1.0f);
 	}
 }
 
@@ -7908,11 +7946,17 @@ int actual_main(int argc, char *argv[])
 	SCP_mspdbcs_Initialise();
 #else
 #ifdef APPLE_APP
-	// Finder sets the working directory to the root of the drive so we have to get a little creative
-	// to find out where on the disk we should be running from for CFILE's sake.
-	char *path_name = SDL_GetBasePath();
-	chdir(path_name);
-	SDL_free(path_name);
+    char pathbuf[PROC_PIDPATHINFO_MAXSIZE];
+    if (proc_pidpath(getppid(), pathbuf, sizeof(pathbuf)) <= 0) {
+        Warning(LOCATION, "Could not retrieve parent pidpath!");
+    }
+    if (strcmp("/sbin/launchd", pathbuf) == 0) {
+        // Finder sets the working directory to the root of the drive so we have to get a little creative
+        // to find out where on the disk we should be running from for CFILE's sake.
+        char *path_name = SDL_GetBasePath();
+        chdir(path_name);
+        SDL_free(path_name);
+    }
 #endif
 
 	// create user's directory	

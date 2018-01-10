@@ -49,6 +49,8 @@ Category CollisionDetection("Collision Detection", false);
 Category RenderBuffer("Render Buffer", true);
 
 Category QueueRender("Queue Render", false);
+Category BuildModelUniforms("Build Model Uniforms", false);
+Category UploadModelUniforms("Upload Model Uniforms", true);
 Category SubmitDraws("Submit Draws", true);
 Category ApplyLights("Apply Lights", true);
 Category DrawEffects("Draw Effects", true);
@@ -79,6 +81,9 @@ Category ProcessParticleEffects("Process particle effects", false);
 Category TrailsMoveAll("Trails move all", false);
 Category Simulation("Simulation", false);
 Category RenderMainFrame("Render frame", true);
+Category RenderHUD("Render HUD", true);
+Category RenderHUDHook("Render HUD Scripting Hook", true);
+Category RenderHUDGauge("Render HUD Gauge", true);
 Category MainFrame("Main Frame", true);
 Category PageFlip("Page flip", true);
 
