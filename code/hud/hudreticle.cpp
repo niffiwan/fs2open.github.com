@@ -37,6 +37,8 @@
 //#define RETICLE_LAUNCH_LABEL		5
 #define RETICLE_CENTER				10
 
+extern SCP_vector<game_snd>	Snds;
+
 int Hud_throttle_frame_w[GR_NUM_RESOLUTIONS] = {
 	49, 
 	78
