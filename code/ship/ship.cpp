@@ -19104,10 +19104,10 @@ bool ship::is_arriving(ship::warpstage stage, bool dock_leader_or_single)
 	return false;
 }
 
-bool check_restricted(const ship_info* sip, json_t* bank_json, bool restricted, int bank, int weapon_idx, int weapon_type)
+bool check_restricted(const ship_info& sir, json_t* bank_json, bool restricted, int bank, int weapon_idx, int weapon_type)
 {
-	// bank is a bank index, weapon_idx is a weapon type.  sip->allowed_bank_restricted_weapons[bank][weapon_idx] is a 2-bit bitfield.
-	if(sip->allowed_bank_restricted_weapons[bank][weapon_idx] & weapon_type)
+	// bank is a bank index, weapon_idx is a weapon type.  sir.allowed_bank_restricted_weapons[bank][weapon_idx] is a 2-bit bitfield.
+	if(sir.allowed_bank_restricted_weapons[bank][weapon_idx] & weapon_type)
 	{
 		json_array_append(bank_json, json_string(Weapon_info[weapon_idx].name));
 		if(!restricted && bank > 0)
@@ -19119,7 +19119,7 @@ bool check_restricted(const ship_info* sip, json_t* bank_json, bool restricted, 
 	return restricted;
 }
 
-void append_weapons(const ship_info* sip, json_t* ship_data, bool is_primary, int bank_offset)
+void append_weapons(const ship_info& sir, json_t* ship_data, bool is_primary, int bank_offset)
 {
 	int bank, weapon_idx, num_banks;
 	bool restricted = false, dogfight_restricted = false;
@@ -19132,12 +19132,12 @@ void append_weapons(const ship_info* sip, json_t* ship_data, bool is_primary, in
 
 	if(is_primary)
 	{
-		num_banks = sip->num_primary_banks;
+		num_banks = sir.num_primary_banks;
 		strcpy_s(type_name, "Primary");
 	}
 	else
 	{
-		num_banks = sip->num_secondary_banks;
+		num_banks = sir.num_secondary_banks;
 		strcpy_s(type_name, "Secondary");
 	}
 	sprintf(Allowed_Banks_name, "$Allowed %cBanks", type_name[0]);
@@ -19152,23 +19152,23 @@ void append_weapons(const ship_info* sip, json_t* ship_data, bool is_primary, in
 		json_t *dogfight_bank = json_array();
 		for(weapon_idx = 0; weapon_idx < Num_weapon_types; weapon_idx++)
 		{
-			restricted = check_restricted(sip, regular_bank, restricted, bank, weapon_idx, REGULAR_WEAPON);
-			dogfight_restricted = check_restricted(sip, dogfight_bank, dogfight_restricted, bank, weapon_idx, DOGFIGHT_WEAPON);
+			restricted = check_restricted(sir, regular_bank, restricted, bank, weapon_idx, REGULAR_WEAPON);
+			dogfight_restricted = check_restricted(sir, dogfight_bank, dogfight_restricted, bank, weapon_idx, DOGFIGHT_WEAPON);
 		}
 		json_array_append(Allowed_banks, regular_bank);
 		json_array_append(Allowed_dogfight_banks, dogfight_bank);
 
 		if(is_primary)
 		{
-			json_array_append(Default_banks, json_string(Weapon_info[sip->primary_bank_weapons[bank - bank_offset]].name));
-			json_array_append(Bank_capacity, json_integer(sip->primary_bank_ammo_capacity[bank - bank_offset]));
-			json_array_append(Show_models, json_boolean(sip->draw_primary_models[bank - bank_offset]));
+			json_array_append(Default_banks, json_string(Weapon_info[sir.primary_bank_weapons[bank - bank_offset]].name));
+			json_array_append(Bank_capacity, json_integer(sir.primary_bank_ammo_capacity[bank - bank_offset]));
+			json_array_append(Show_models, json_boolean(sir.draw_primary_models[bank - bank_offset]));
 		}
 		else
 		{
-			json_array_append(Default_banks, json_string(Weapon_info[sip->secondary_bank_weapons[bank - bank_offset]].name));
-			json_array_append(Bank_capacity, json_integer(sip->secondary_bank_ammo_capacity[bank - bank_offset]));
-			json_array_append(Show_models, json_boolean(sip->draw_secondary_models[bank - bank_offset]));
+			json_array_append(Default_banks, json_string(Weapon_info[sir.secondary_bank_weapons[bank - bank_offset]].name));
+			json_array_append(Bank_capacity, json_integer(sir.secondary_bank_ammo_capacity[bank - bank_offset]));
+			json_array_append(Show_models, json_boolean(sir.draw_secondary_models[bank - bank_offset]));
 		}
 	}
 	json_object_set_new(ship_data, Allowed_Banks_name, (restricted ? Allowed_banks : json_array_get(Allowed_banks, 0)));
@@ -19182,52 +19182,31 @@ void ship_output_json(const char *outfile)
 {
 	mprintf(("Exporting ship data to json.\n"));
 
-	int i;
 	json_t *ships_obj = json_object();
 	json_t *Ships_array = json_array();
-	ship_info *sip;
-	species_info *species;
-	char full_name[MAX_PATH_LEN];
 
 	json_object_set_new(ships_obj, "default_player_ship", json_string(default_player_ship));
 
-	// Loop over the Ship_info array and add a new entry to ship_info_arr each time
-	for (i = 0; i < static_cast<int>(Ship_info.size()); i++)
+	// Loop over the Ship_info array and add a new entry to Ships_array each time
+	for (const auto& sir : Ship_info)
 	{
-		int j;
-		sip = &Ship_info[i];
-		species = &Species_info[sip->species];
 		json_t *ship_data = json_object();
-		json_t *Displays = json_array();
-		json_t *Replacements = json_array();
-		json_t *Cockpit_offset = json_object();
-		json_t *Detail_distance = json_array();
-		json_t *Impact = json_object();
-		json_t *Collision_Physics = json_object();
-		json_t *Debris = json_object();
-		json_t *Max_Velocity = json_object();
-		json_t *Rotation_Time = json_object();
-		json_t *Anims = json_array();
-		json_t *Model_point_shield_controls = json_array();
-		size_t insert_index, shield_point;
-		json_t *quadrant;
-		json_t *Shield_color = json_object();
 
-		json_object_set_new(ship_data, "$Name", json_string(sip->name));
-		json_object_set_new(ship_data, "$Alt Name", json_string(sip->alt_name));
-		json_object_set_new(ship_data, "$Short Name", json_string(sip->short_name));
-		json_object_set_new(ship_data, "$Species", json_string(species->species_name));
-		json_object_set_new(ship_data, "+Type", json_string(sip->type_str));
-		json_object_set_new(ship_data, "+Maneuverability", json_string(sip->maneuverability_str));
-		json_object_set_new(ship_data, "+Armor", json_string(sip->armor_str));
-		json_object_set_new(ship_data, "+Manufacturer", json_string(sip->manufacturer_str));
-		json_object_set_new(ship_data, "+Description", json_string(sip->desc));
-		json_object_set_new(ship_data, "+Tech Title", json_string(sip->tech_title));
-		json_object_set_new(ship_data, "+Tech Description", json_string(sip->tech_desc));
-		json_object_set_new(ship_data, "+Length", json_string(sip->ship_length));
-		json_object_set_new(ship_data, "+Gun Mounts", json_string(sip->gun_mounts));
-		json_object_set_new(ship_data, "+Missile Banks", json_string(sip->missile_banks));
-		switch(sip->selection_effect)
+		json_object_set_new(ship_data, "$Name", json_string(sir.name));
+		json_object_set_new(ship_data, "$Alt Name", json_string(sir.alt_name));
+		json_object_set_new(ship_data, "$Short Name", json_string(sir.short_name));
+		json_object_set_new(ship_data, "$Species", json_string(Species_info[sir.species].species_name));
+		json_object_set_new(ship_data, "+Type", json_string(sir.type_str));
+		json_object_set_new(ship_data, "+Maneuverability", json_string(sir.maneuverability_str));
+		json_object_set_new(ship_data, "+Armor", json_string(sir.armor_str));
+		json_object_set_new(ship_data, "+Manufacturer", json_string(sir.manufacturer_str));
+		json_object_set_new(ship_data, "+Description", json_string(sir.desc));
+		json_object_set_new(ship_data, "+Tech Title", json_string(sir.tech_title));
+		json_object_set_new(ship_data, "+Tech Description", json_string(sir.tech_desc));
+		json_object_set_new(ship_data, "+Length", json_string(sir.ship_length));
+		json_object_set_new(ship_data, "+Gun Mounts", json_string(sir.gun_mounts));
+		json_object_set_new(ship_data, "+Missile Banks", json_string(sir.missile_banks));
+		switch(sir.selection_effect)
 		{
 			case 0:
 				json_object_set_new(ship_data, "$Selection Effect", json_string("off"));
@@ -19239,139 +19218,172 @@ void ship_output_json(const char *outfile)
 			default:
 				json_object_set_new(ship_data, "$Selection Effect", json_string("FS2"));
 		}
-		json_object_set_new(ship_data, "$Cockpit POF file", json_string(sip->cockpit_pof_file));
-		json_object_set_new(Cockpit_offset, "x", json_real(sip->cockpit_offset.xyz.x));
-		json_object_set_new(Cockpit_offset, "y", json_real(sip->cockpit_offset.xyz.y));
-		json_object_set_new(Cockpit_offset, "z", json_real(sip->cockpit_offset.xyz.z));
+		json_object_set_new(ship_data, "$Cockpit POF file", json_string(sir.cockpit_pof_file));
+		json_t *Cockpit_offset = json_object();
+		json_object_set_new(Cockpit_offset, "x", json_real(sir.cockpit_offset.xyz.x));
+		json_object_set_new(Cockpit_offset, "y", json_real(sir.cockpit_offset.xyz.y));
+		json_object_set_new(Cockpit_offset, "z", json_real(sir.cockpit_offset.xyz.z));
 		json_object_set_new(ship_data, "+Cockpit offset", Cockpit_offset);
-		for(SCP_vector<cockpit_display_info>::iterator display = sip->displays.begin(); display != sip->displays.end(); ++display)
+		json_t *Displays = json_array();
+		for(const auto& display : sir.displays)
 		{
 			json_t *display_data = json_object();
 			json_t *offsets = json_array();
 			json_t *size = json_array();
 
-			json_object_set_new(display_data, "+Texture", json_string(display->filename));
-			json_array_append_new(offsets, json_integer(display->offset[0]));
-			json_array_append_new(offsets, json_integer(display->offset[1]));
+			json_object_set_new(display_data, "+Texture", json_string(display.filename));
+			json_array_append_new(offsets, json_integer(display.offset[0]));
+			json_array_append_new(offsets, json_integer(display.offset[1]));
 			json_object_set_new(display_data, "+Offsets", offsets);
-			json_array_append_new(size, json_integer(display->size[0]));
-			json_array_append_new(size, json_integer(display->size[1]));
+			json_array_append_new(size, json_integer(display.size[0]));
+			json_array_append_new(size, json_integer(display.size[1]));
 			json_object_set_new(display_data, "+Size", size);
-			json_object_set_new(display_data, "+Background", json_string(display->bg_filename));
-			json_object_set_new(display_data, "+Foreground", json_string(display->fg_filename));
-			json_object_set_new(display_data, "+Display Name", json_string(display->name));
+			json_object_set_new(display_data, "+Background", json_string(display.bg_filename));
+			json_object_set_new(display_data, "+Foreground", json_string(display.fg_filename));
+			json_object_set_new(display_data, "+Display Name", json_string(display.name));
 
 			json_array_append_new(Displays, display_data);
 		}
 		json_object_set_new(ship_data, "$Cockpit Display", Displays);
-		json_object_set_new(ship_data, "$POF file", json_string(sip->pof_file));
-		for(SCP_vector<texture_replace>::iterator replace = sip->replacement_textures.begin(); replace != sip->replacement_textures.end(); ++replace)
+		json_object_set_new(ship_data, "$POF file", json_string(sir.pof_file));
+		json_object_set_new(ship_data, "$POF file Techroom", json_string(sir.pof_file_tech));
+		json_t *Replacements = json_array();
+		for(const auto& replace : sir.replacement_textures)
 		{
 			json_t *replace_data = json_object();
 
-			json_object_set_new(replace_data, "+old", json_string(replace->old_texture));
-			json_object_set_new(replace_data, "+new", json_string(replace->new_texture));
+			json_object_set_new(replace_data, "+old", json_string(replace.old_texture));
+			json_object_set_new(replace_data, "+new", json_string(replace.new_texture));
 
 			json_array_append_new(Replacements, replace_data);
 		}
 		json_object_set_new(ship_data, "$Texture Replace", Replacements);
-		json_object_set_new(ship_data, "$POF target file", json_string(sip->pof_file_hud));
-		json_object_set_new(ship_data, "$POF target LOD", json_integer(sip->hud_target_lod));
-		for (j = 0; j < sip->num_detail_levels; j++)
+		json_object_set_new(ship_data, "$POF target file", json_string(sir.pof_file_hud));
+		json_object_set_new(ship_data, "$POF target LOD", json_integer(sir.hud_target_lod));
+		json_t *Detail_distance = json_array();
+		for (const auto& distance : sir.detail_distance)
 		{
-			json_array_append_new(Detail_distance, json_integer(sip->detail_distance[j]));
+			json_array_append_new(Detail_distance, json_integer(distance));
 		}
 		json_object_set_new(ship_data, "$Detail distance", Detail_distance);
-		json_object_set_new(ship_data, "$Enable Team Colors", json_boolean(sip->uses_team_colors));
-		json_object_set_new(ship_data, "$Default Team", json_string(sip->default_team_name.c_str()));
-		json_object_set_new(ship_data, "$Damage Lightning Type", json_string(Lightning_types[sip->damage_lightning_type]));
-		if(sip->collision_damage_type_idx > -1 && sip->collision_damage_type_idx < static_cast<int>(Damage_types.size()))
+		json_object_set_new(ship_data, "$Collision LOD", json_integer(sir.collision_lod));
+		// $ND: is deprecated; don't show it
+		json_object_set_new(ship_data, "$Enable Team Colors", json_boolean(sir.uses_team_colors));
+		json_object_set_new(ship_data, "$Default Team", json_string(sir.default_team_name.c_str()));
+		// $Show damage: is deprecated; don't show it
+		json_object_set_new(ship_data, "$Damage Lightning Type", json_string(Lightning_types[sir.damage_lightning_type]));
+		json_t *Impact = json_object();
+		if(sir.collision_damage_type_idx > -1 && sir.collision_damage_type_idx < static_cast<int>(Damage_types.size()))
 		{
-			json_object_set_new(Impact, "+Damage Type", json_string(Damage_types.at(sip->collision_damage_type_idx).name));
+			json_object_set_new(Impact, "+Damage Type", json_string(Damage_types.at(sir.collision_damage_type_idx).name));
 		}
 		else
 		{
 			json_object_set_new(Impact, "+Damage Type", json_null());
 		}
 		json_object_set_new(ship_data, "$Impact", Impact);
-		// Skipping spews
-		json_object_set_new(Collision_Physics, "+Bounce", json_real(sip->collision_physics.bounce));
-		json_object_set_new(Collision_Physics, "+Both Small Bounce", json_real(sip->collision_physics.both_small_bounce));
-		json_object_set_new(Collision_Physics, "+Friction", json_real(sip->collision_physics.friction));
-		json_object_set_new(Collision_Physics, "+Rotation Factor", json_real(sip->collision_physics.rotation_factor));
-		json_object_set_new(Collision_Physics, "+Landing Max Forward Vel", json_real(sip->collision_physics.landing_max_z));
-		json_object_set_new(Collision_Physics, "+Landing Min Forward Vel", json_real(sip->collision_physics.landing_min_z));
-		json_object_set_new(Collision_Physics, "+Landing Max Descent Vel", json_real(sip->collision_physics.landing_min_y));
-		json_object_set_new(Collision_Physics, "+Landing Max Horizontal Vel", json_real(sip->collision_physics.landing_max_x));
-		json_object_set_new(Collision_Physics, "+Landing Max Angle", json_real(sip->collision_physics.landing_max_angle));
-		json_object_set_new(Collision_Physics, "+Landing Min Angle", json_real(sip->collision_physics.landing_min_angle));
-		json_object_set_new(Collision_Physics, "+Landing Max Rotate Angle", json_real(sip->collision_physics.landing_max_rot_angle));
-		json_object_set_new(Collision_Physics, "+Reorient Max Forward Vel", json_real(sip->collision_physics.reorient_max_z));
-		json_object_set_new(Collision_Physics, "+Reorient Min Forward Vel", json_real(sip->collision_physics.reorient_min_z));
-		json_object_set_new(Collision_Physics, "+Reorient Max Descent Vel", json_real(sip->collision_physics.reorient_min_y));
-		json_object_set_new(Collision_Physics, "+Reorient Max Horizontal Vel", json_real(sip->collision_physics.reorient_max_x));
-		json_object_set_new(Collision_Physics, "+Reorient Max Angle", json_real(sip->collision_physics.reorient_max_angle));
-		json_object_set_new(Collision_Physics, "+Reorient Min Angle", json_real(sip->collision_physics.reorient_min_angle));
-		json_object_set_new(Collision_Physics, "+Reorient Max Rotate Angle", json_real(sip->collision_physics.reorient_max_rot_angle));
-		json_object_set_new(Collision_Physics, "+Reorient Speed Mult", json_real(sip->collision_physics.reorient_mult));
-		json_object_set_new(Collision_Physics, "+Landing Rest Angle", json_real(sip->collision_physics.landing_rest_angle));
-		if(sip->collision_physics.landing_sound_idx.isValid())
+		// TODO add $Impact Spew
+		// TODO add $Damage Spew
+		json_t *Collision_Physics = json_object();
+		json_object_set_new(Collision_Physics, "+Bounce", json_real(sir.collision_physics.bounce));
+		json_object_set_new(Collision_Physics, "+Both Small Bounce", json_real(sir.collision_physics.both_small_bounce));
+		json_object_set_new(Collision_Physics, "+Friction", json_real(sir.collision_physics.friction));
+		json_object_set_new(Collision_Physics, "+Rotation Factor", json_real(sir.collision_physics.rotation_factor));
+		json_object_set_new(Collision_Physics, "+Landing Max Forward Vel", json_real(sir.collision_physics.landing_max_z));
+		json_object_set_new(Collision_Physics, "+Landing Min Forward Vel", json_real(sir.collision_physics.landing_min_z));
+		json_object_set_new(Collision_Physics, "+Landing Max Descent Vel", json_real(sir.collision_physics.landing_min_y));
+		json_object_set_new(Collision_Physics, "+Landing Max Horizontal Vel", json_real(sir.collision_physics.landing_max_x));
+		json_object_set_new(Collision_Physics, "+Landing Max Angle", json_real(sir.collision_physics.landing_max_angle));
+		json_object_set_new(Collision_Physics, "+Landing Min Angle", json_real(sir.collision_physics.landing_min_angle));
+		json_object_set_new(Collision_Physics, "+Landing Max Rotate Angle", json_real(sir.collision_physics.landing_max_rot_angle));
+		json_object_set_new(Collision_Physics, "+Reorient Max Forward Vel", json_real(sir.collision_physics.reorient_max_z));
+		json_object_set_new(Collision_Physics, "+Reorient Min Forward Vel", json_real(sir.collision_physics.reorient_min_z));
+		json_object_set_new(Collision_Physics, "+Reorient Max Descent Vel", json_real(sir.collision_physics.reorient_min_y));
+		json_object_set_new(Collision_Physics, "+Reorient Max Horizontal Vel", json_real(sir.collision_physics.reorient_max_x));
+		json_object_set_new(Collision_Physics, "+Reorient Max Angle", json_real(sir.collision_physics.reorient_max_angle));
+		json_object_set_new(Collision_Physics, "+Reorient Min Angle", json_real(sir.collision_physics.reorient_min_angle));
+		json_object_set_new(Collision_Physics, "+Reorient Max Rotate Angle", json_real(sir.collision_physics.reorient_max_rot_angle));
+		json_object_set_new(Collision_Physics, "+Reorient Speed Mult", json_real(sir.collision_physics.reorient_mult));
+		json_object_set_new(Collision_Physics, "+Landing Rest Angle", json_real(sir.collision_physics.landing_rest_angle));
+		if(sir.collision_physics.landing_sound_idx.isValid())
 		{
-			json_object_set_new(Collision_Physics, "+Landing Sound idx", json_string("INCOMPLETE"));
+			json_object_set_new(Collision_Physics, "+Landing Sound:", json_integer(sir.collision_physics.landing_sound_idx.value()));
 		}
 		else
 		{
-			json_object_set_new(Collision_Physics, "+Landing Sound", json_null());
+			json_object_set_new(Collision_Physics, "+Landing Sound:", json_null());
 		}
 		json_object_set_new(ship_data, "$Collision Physics", Collision_Physics);
-		json_object_set_new(Debris, "+Min Lifetime", json_real(sip->debris_min_lifetime));
-		json_object_set_new(Debris, "+Max Lifetime", json_real(sip->debris_max_lifetime));
-		json_object_set_new(Debris, "+Min Speed", json_real(sip->debris_min_speed));
-		json_object_set_new(Debris, "+Max Speed", json_real(sip->debris_max_speed));
-		json_object_set_new(Debris, "+Min Rotation speed", json_real(sip->debris_min_rotspeed));
-		json_object_set_new(Debris, "+Max Rotation speed", json_real(sip->debris_max_rotspeed));
-		if(sip->collision_damage_type_idx > -1 && sip->collision_damage_type_idx < static_cast<int>(Damage_types.size()))
+		json_t *Debris = json_object();
+		json_object_set_new(Debris, "+Min Lifetime", json_real(sir.debris_min_lifetime));
+		json_object_set_new(Debris, "+Max Lifetime", json_real(sir.debris_max_lifetime));
+		json_object_set_new(Debris, "+Min Speed", json_real(sir.debris_min_speed));
+		json_object_set_new(Debris, "+Max Speed", json_real(sir.debris_max_speed));
+		json_object_set_new(Debris, "+Min Rotation speed", json_real(sir.debris_min_rotspeed));
+		json_object_set_new(Debris, "+Max Rotation speed", json_real(sir.debris_max_rotspeed));
+		if(sir.collision_damage_type_idx > -1 && sir.collision_damage_type_idx < static_cast<int>(Damage_types.size()))
 		{
-			json_object_set_new(Debris, "+Damage Type", json_string(Damage_types.at(sip->debris_damage_type_idx).name));
+			json_object_set_new(Debris, "+Damage Type", json_string(Damage_types.at(sir.debris_damage_type_idx).name));
 		}
 		else
 		{
 			json_object_set_new(Debris, "+Damage Type", json_null());
 		}
-		json_object_set_new(Debris, "+Min Hitpoints", json_real(sip->debris_min_hitpoints));
-		json_object_set_new(Debris, "+Max Hitpoints", json_real(sip->debris_max_hitpoints));
-		json_object_set_new(Debris, "+Damage Multiplier", json_real(sip->debris_damage_mult));
-		json_object_set_new(Debris, "+Lightning Arc Percent", json_real(sip->debris_arc_percent * 100.0f));
+		json_object_set_new(Debris, "+Min Hitpoints", json_real(sir.debris_min_hitpoints));
+		json_object_set_new(Debris, "+Max Hitpoints", json_real(sir.debris_max_hitpoints));
+		json_object_set_new(Debris, "+Damage Multiplier", json_real(sir.debris_damage_mult));
+		json_object_set_new(Debris, "+Lightning Arc Percent", json_real(sir.debris_arc_percent * 100.0f));
 		json_object_set_new(ship_data, "$Debris", Debris);
-		json_object_set_new(ship_data, "$Density", json_real(sip->density));
-		json_object_set_new(ship_data, "$Damp", json_real(sip->damp));
-		json_object_set_new(ship_data, "$Rotdamp", json_real(sip->rotdamp));
-		json_object_set_new(ship_data, "$Banking Constant", json_real(sip->delta_bank_const));
-		json_object_set_new(Max_Velocity, "x", json_real(sip->max_vel.xyz.x));
-		json_object_set_new(Max_Velocity, "y", json_real(sip->max_vel.xyz.y));
-		json_object_set_new(Max_Velocity, "z", json_real(sip->max_vel.xyz.z));
+		json_object_set_new(ship_data, "$Density", json_real(sir.density));
+		json_object_set_new(ship_data, "$Damp", json_real(sir.damp));
+		json_object_set_new(ship_data, "$Rotdamp", json_real(sir.rotdamp));
+		json_object_set_new(ship_data, "$Banking Constant", json_real(sir.delta_bank_const));
+		json_t *Max_Velocity = json_object();
+		json_object_set_new(Max_Velocity, "x", json_real(sir.max_vel.xyz.x));
+		json_object_set_new(Max_Velocity, "y", json_real(sir.max_vel.xyz.y));
+		json_object_set_new(Max_Velocity, "z", json_real(sir.max_vel.xyz.z));
 		json_object_set_new(ship_data, "$Max Velocity", Max_Velocity);
-		json_object_set_new(Rotation_Time, "x", json_real(sip->rotation_time.xyz.x));
-		json_object_set_new(Rotation_Time, "y", json_real(sip->rotation_time.xyz.y));
-		json_object_set_new(Rotation_Time, "z", json_real(sip->rotation_time.xyz.z));
+		json_t *Rotation_Time = json_object();
+		json_object_set_new(Rotation_Time, "x", json_real(sir.rotation_time.xyz.x));
+		json_object_set_new(Rotation_Time, "y", json_real(sir.rotation_time.xyz.y));
+		json_object_set_new(Rotation_Time, "z", json_real(sir.rotation_time.xyz.z));
 		json_object_set_new(ship_data, "$Rotation Time", Rotation_Time);
-		json_object_set_new(ship_data, "$Rear Velocity", json_real(sip->max_rear_vel));
-		json_object_set_new(ship_data, "$Forward accel", json_real(sip->forward_accel));
-		json_object_set_new(ship_data, "$Forward decel", json_real(sip->forward_decel));
-		json_object_set_new(ship_data, "$Slide accel", json_real(sip->slide_accel));
-		json_object_set_new(ship_data, "$Slide decel", json_real(sip->slide_decel));
-		json_object_set_new(ship_data, "$Glide", json_boolean(sip->can_glide));
-		json_object_set_new(ship_data, "+Dynamic Glide Cap", json_boolean(sip->glide_dynamic_cap));
-		json_object_set_new(ship_data, "+Max Glide Speed", json_real(sip->glide_cap));
-		json_object_set_new(ship_data, "+Glide Accel Mult", json_real(sip->glide_accel_mult));
-		json_object_set_new(ship_data, "$Use Newtonian Dampening", json_boolean(sip->use_newtonian_damp));
-		json_object_set_new(ship_data, "$Autoaim FOV", json_real(sip->autoaim_fov));
-		// Skipping convergence, ugh...
-		auto warpin_params = &Warp_params[sip->warpin_params_index];
+		json_object_set_new(ship_data, "$Rear Velocity", json_real(sir.max_rear_vel));
+		json_object_set_new(ship_data, "$Forward accel", json_real(sir.forward_accel));
+		json_object_set_new(ship_data, "$Forward decel", json_real(sir.forward_decel));
+		json_object_set_new(ship_data, "$Slide accel", json_real(sir.slide_accel));
+		json_object_set_new(ship_data, "$Slide decel", json_real(sir.slide_decel));
+		json_object_set_new(ship_data, "$Glide", json_boolean(sir.can_glide));
+		json_object_set_new(ship_data, "+Dynamic Glide Cap", json_boolean(sir.glide_dynamic_cap));
+		json_object_set_new(ship_data, "+Max Glide Speed", json_real(sir.glide_cap));
+		json_object_set_new(ship_data, "+Glide Accel Mult", json_real(sir.glide_accel_mult));
+		json_object_set_new(ship_data, "$Use Newtonian Dampening", json_boolean(sir.use_newtonian_damp));
+
+		json_t *Autoaim_FOV = json_object();
+		json_object_set_new(Autoaim_FOV, "$Autoaim FOV", json_real(sir.autoaim_fov * 180.0f / PI));
+		json_object_set_new(Autoaim_FOV, "+Converging Autoaim", json_boolean(sir.aiming_flags[Ship::Aiming_Flags::Auto_convergence]));
+		json_object_set_new(Autoaim_FOV, "+Minimum Distance:", json_real(sir.minimum_convergence_distance));
+		json_object_set_new(Autoaim_FOV, "+Autoaim Lock Snd:", json_integer(sir.autoaim_lock_snd.value()));
+		json_object_set_new(Autoaim_FOV, "+Autoaim Lost Snd:", json_integer(sir.autoaim_lost_snd.value()));
+		json_object_set_new(ship_data, "$Autoaim:", Autoaim_FOV);
+
+		json_t *Convergence = json_object();
+		json_object_set_new(Convergence, "+Automatic:", json_boolean(sir.aiming_flags[Ship::Aiming_Flags::Auto_convergence]));
+		json_object_set_new(Convergence, "+Minimum Distance:", json_real(sir.minimum_convergence_distance));
+		json_object_set_new(Convergence, "+Standard:", json_boolean(sir.aiming_flags[Ship::Aiming_Flags::Std_convergence]));
+		json_object_set_new(Convergence, "+Distance:", json_real(sir.convergence_distance));
+		json_t *Convergence_offset = json_object();
+		json_object_set_new(Convergence_offset, "x", json_real(sir.convergence_offset.xyz.x));
+		json_object_set_new(Convergence_offset, "y", json_real(sir.convergence_offset.xyz.y));
+		json_object_set_new(Convergence_offset, "z", json_real(sir.convergence_offset.xyz.z));
+		json_object_set_new(Convergence, "+Offset:", Convergence_offset);
+		json_object_set_new(ship_data, "$Convergence:", Convergence);
+
+		auto warpin_params = &Warp_params[sir.warpin_params_index];
 		json_object_set_new(ship_data, "$Warpin type", json_string(Warp_types[warpin_params->warp_type]));
 		if(warpin_params->snd_start.isValid())
 		{
-			json_object_set_new(ship_data, "$Warpin Start Sound", json_string("INCOMPLETE"));
+			json_object_set_new(ship_data, "$Warpin Start Sound", json_integer(warpin_params->snd_start.value()));
 		}
 		else
 		{
@@ -19379,7 +19391,7 @@ void ship_output_json(const char *outfile)
 		}
 		if(warpin_params->snd_end.isValid())
 		{
-			json_object_set_new(ship_data, "$Warpin End Sound", json_string("INCOMPLETE"));
+			json_object_set_new(ship_data, "$Warpin End Sound", json_integer(warpin_params->snd_end.value()));
 		}
 		else
 		{
@@ -19390,11 +19402,11 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(ship_data, "$Warpin decel exp", json_real(warpin_params->accel_exp));
 		json_object_set_new(ship_data, "$Warpin radius", json_real(warpin_params->radius));
 		json_object_set_new(ship_data, "$Warpin animation", json_string(warpin_params->anim));
-		auto warpout_params = &Warp_params[sip->warpout_params_index];
+		auto warpout_params = &Warp_params[sir.warpout_params_index];
 		json_object_set_new(ship_data, "$Warpout type", json_string(Warp_types[warpout_params->warp_type]));
 		if(warpout_params->snd_start.isValid())
 		{
-			json_object_set_new(ship_data, "$Warpout Start Sound", json_string("INCOMPLETE"));
+			json_object_set_new(ship_data, "$Warpout Start Sound", json_integer(warpout_params->snd_start.value()));
 		}
 		else
 		{
@@ -19402,7 +19414,7 @@ void ship_output_json(const char *outfile)
 		}
 		if(warpout_params->snd_end.isValid())
 		{
-			json_object_set_new(ship_data, "$Warpout End Sound", json_string("INCOMPLETE"));
+			json_object_set_new(ship_data, "$Warpout End Sound", json_integer(warpout_params->snd_end.value()));
 		}
 		else
 		{
@@ -19415,92 +19427,98 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(ship_data, "$Warpout radius", json_real(warpout_params->radius));
 		json_object_set_new(ship_data, "$Warpout animation", json_string(warpout_params->anim));
 		json_object_set_new(ship_data, "$Player warpout speed", json_real(warpout_params->warpout_player_speed));
-		json_object_set_new(ship_data, "$Expl inner rad", json_real(sip->shockwave.inner_rad));
-		json_object_set_new(ship_data, "$Expl outer rad", json_real(sip->shockwave.outer_rad));
-		json_object_set_new(ship_data, "$Expl damage", json_real(sip->shockwave.damage));
-		json_object_set_new(ship_data, "$Expl blast", json_real(sip->shockwave.blast));
-		json_object_set_new(ship_data, "$Expl Propogates", json_boolean(sip->explosion_propagates));
-		json_object_set_new(ship_data, "$Propagating Expl Radius Multiplier", json_real(sip->prop_exp_rad_mult));
-		json_object_set_new(ship_data, "$Expl Visual Rad", json_real(sip->big_exp_visual_rad));
-		json_object_set_new(ship_data, "$Base Death-Roll Time", json_integer(sip->death_roll_base_time));
-		json_object_set_new(ship_data, "$Death-Roll Explosion Radius Mult", json_real(sip->death_roll_r_mult));
-		json_object_set_new(ship_data, "$Death-Roll Explosion Intensity Mult", json_real(sip->death_roll_time_mult));
-		json_object_set_new(ship_data, "$Death FX Explosion Radius Mult", json_real(sip->death_fx_r_mult));
-		json_object_set_new(ship_data, "$Death FX Explosion Count", json_integer(sip->death_fx_count));
-		// Skipping more particle stuff for now
-		json_object_set_new(ship_data, "$Vaporize Percent Chance", json_real(sip->vaporize_chance));
-		if(sip->shockwave.damage_type_idx > -1 && sip->shockwave.damage_type_idx < static_cast<int>(Damage_types.size()))
+		json_object_set_new(ship_data, "$Expl inner rad", json_real(sir.shockwave.inner_rad));
+		json_object_set_new(ship_data, "$Expl outer rad", json_real(sir.shockwave.outer_rad));
+		json_object_set_new(ship_data, "$Expl damage", json_real(sir.shockwave.damage));
+		json_object_set_new(ship_data, "$Expl blast", json_real(sir.shockwave.blast));
+		json_object_set_new(ship_data, "$Expl Propogates", json_boolean(sir.explosion_propagates));
+		json_object_set_new(ship_data, "$Propagating Expl Radius Multiplier", json_real(sir.prop_exp_rad_mult));
+		json_object_set_new(ship_data, "$Expl Visual Rad", json_real(sir.big_exp_visual_rad));
+		json_object_set_new(ship_data, "$Base Death-Roll Time", json_integer(sir.death_roll_base_time));
+		json_object_set_new(ship_data, "$Death-Roll Explosion Radius Mult", json_real(sir.death_roll_r_mult));
+		json_object_set_new(ship_data, "$Death-Roll Explosion Intensity Mult", json_real(sir.death_roll_time_mult));
+		json_object_set_new(ship_data, "$Death FX Explosion Radius Mult", json_real(sir.death_fx_r_mult));
+		json_object_set_new(ship_data, "$Death FX Explosion Count", json_integer(sir.death_fx_count));
+		json_object_set_new(ship_data, "$Death Roll X rotation Cap:", json_real(sir.death_roll_xrotation_cap));
+		json_object_set_new(ship_data, "$Death Roll Y rotation Cap:", json_real(sir.death_roll_xrotation_cap));
+		json_object_set_new(ship_data, "$Death Roll Z rotation Cap:", json_real(sir.death_roll_xrotation_cap));
+		// Skipping "$Ship Splitting Particles:"
+		json_object_set_new(ship_data, "$Ship Death Effect:", json_integer(sir.death_effect.value()));
+		// Skipping "$Ship Death Particles:"
+		// Skipping "$Alternate Death Particles:"
+		json_object_set_new(ship_data, "$Vaporize Percent Chance", json_real(sir.vaporize_chance));
+		if(sir.shockwave.damage_type_idx > -1 && sir.shockwave.damage_type_idx < static_cast<int>(Damage_types.size()))
 		{
-			json_object_set_new(ship_data, "$Shockwave Damage Type", json_string(Damage_types.at(sip->shockwave.damage_type_idx).name));
+			json_object_set_new(ship_data, "$Shockwave Damage Type", json_string(Damage_types.at(sir.shockwave.damage_type_idx).name));
 		}
 		else
 		{
 			json_object_set_new(ship_data, "$Shockwave Damage Type", json_null());
 		}
-		json_object_set_new(ship_data, "$Shockwave Speed", json_real(sip->shockwave.speed));
-		json_object_set_new(ship_data, "$Shockwave Count", json_real(sip->shockwave_count));
-		json_object_set_new(ship_data, "$Shockwave model", json_string(sip->shockwave.pof_name));
-		json_object_set_new(ship_data, "$Shockwave name", json_string(sip->shockwave.name));
-		for(SCP_vector<int>::iterator exp_anim = sip->explosion_bitmap_anims.begin(); exp_anim != sip->explosion_bitmap_anims.end(); ++exp_anim)
+		json_object_set_new(ship_data, "$Shockwave Speed", json_real(sir.shockwave.speed));
+		json_object_set_new(ship_data, "$Shockwave Count", json_real(sir.shockwave_count));
+		json_object_set_new(ship_data, "$Shockwave model", json_string(sir.shockwave.pof_name));
+		json_object_set_new(ship_data, "$Shockwave name", json_string(sir.shockwave.name));
+		json_t *Anims = json_array();
+		for(const auto& exp_anim : sir.explosion_bitmap_anims)
 		{
-			json_array_append_new(Anims, json_integer(*exp_anim));
+			json_array_append_new(Anims, json_integer(exp_anim));
 		}
 		json_object_set_new(ship_data, "$Explosion Animations", Anims);
-		json_object_set_new(ship_data, "$Weapon Model Draw Distance", json_real(sip->weapon_model_draw_distance));
-		append_weapons(sip, ship_data, true, 0);
-		append_weapons(sip, ship_data, false, MAX_SHIP_PRIMARY_BANKS);
-		json_object_set_new(ship_data, "$Shields", json_real(sip->max_shield_strength));
-		json_object_set_new(ship_data, "+Auto Spread", json_real(sip->auto_shield_spread));
-		json_object_set_new(ship_data, "+Allow Bypass", json_boolean(sip->auto_shield_spread_bypass));
-		json_object_set_new(ship_data, "+Spread From LOD", json_integer(sip->auto_shield_spread_from_lod));
-		for(auto k : sip->shield_point_augment_ctrls)
+		json_object_set_new(ship_data, "$Weapon Model Draw Distance", json_real(sir.weapon_model_draw_distance));
+		// TODO UP TO HERE
+		append_weapons(sir, ship_data, true, 0);
+		append_weapons(sir, ship_data, false, MAX_SHIP_PRIMARY_BANKS);
+		//if (optional_string("$Ship Recoil Modifier:")){
+		json_object_set_new(ship_data, "$Shields", json_real(sir.max_shield_strength));
+		json_object_set_new(ship_data, "+Auto Spread", json_real(sir.auto_shield_spread));
+		json_object_set_new(ship_data, "+Allow Bypass", json_boolean(sir.auto_shield_spread_bypass));
+		json_object_set_new(ship_data, "+Spread From LOD", json_integer(sir.auto_shield_spread_from_lod));
+
+		json_t *Model_point_shield_controls = json_array();
+		for(size_t idx2find = 0; idx2find < sizeof(sir.shield_point_augment_ctrls); ++idx2find)
 		{
-			if(sip->shield_point_augment_ctrls[k] != -1)
+			for (size_t ii = 0; ii < sizeof(sir.shield_point_augment_ctrls); ++ii)
 			{
-				insert_index = 0;
-				json_array_foreach(Model_point_shield_controls, shield_point, quadrant)
+				if(sir.shield_point_augment_ctrls[ii] >= 0 && idx2find == static_cast<size_t>(sir.shield_point_augment_ctrls[ii]))
 				{
-					insert_index = shield_point;
-					if(sip->shield_point_augment_ctrls[k] < static_cast<int>(shield_point))
+					switch(ii)
 					{
-						break;
+						case RIGHT_QUAD:
+							json_array_append(Model_point_shield_controls, json_string("right"));
+							break;
+						case FRONT_QUAD:
+							json_array_append(Model_point_shield_controls, json_string("front"));
+							break;
+						case REAR_QUAD:
+							json_array_append(Model_point_shield_controls, json_string("rear"));
+							break;
+						case LEFT_QUAD:
+							json_array_append(Model_point_shield_controls, json_string("left"));
+							break;
 					}
-				}
-				switch(k)
-				{
-					case 0:
-						json_array_insert_new(Model_point_shield_controls, insert_index, json_string("right"));
-						break;
-					case 1:
-						json_array_insert_new(Model_point_shield_controls, insert_index, json_string("front"));
-						break;
-					case 2:
-						json_array_insert_new(Model_point_shield_controls, insert_index, json_string("rear"));
-						break;
-					case 3:
-						json_array_insert_new(Model_point_shield_controls, insert_index, json_string("left"));
-						break;
 				}
 			}
 		}
 		json_object_set_new(ship_data, "$Model Point Shield Controls", Model_point_shield_controls);
-		json_object_set_new(Shield_color, "red", json_integer(sip->shield_color[0]));
-		json_object_set_new(Shield_color, "green", json_integer(sip->shield_color[1]));
-		json_object_set_new(Shield_color, "blue", json_integer(sip->shield_color[2]));
+		json_t *Shield_color = json_object();
+		json_object_set_new(Shield_color, "red", json_integer(sir.shield_color[0]));
+		json_object_set_new(Shield_color, "green", json_integer(sir.shield_color[1]));
+		json_object_set_new(Shield_color, "blue", json_integer(sir.shield_color[2]));
 		json_object_set_new(ship_data, "$Shield Color", Shield_color);
-		json_object_set_new(ship_data, "$Power Output", json_real(sip->power_output));
-		json_object_set_new(ship_data, "$Shield Regeneration Rate", json_real(sip->max_shield_regen_per_second));
-		json_object_set_new(ship_data, "$Support Shield Repair Rate", json_real(sip->sup_shield_repair_rate * 100));
-		json_object_set_new(ship_data, "$Weapon Regeneration Rate", json_real(sip->max_weapon_regen_per_second));
-		json_object_set_new(ship_data, "$Max Oclk Speed", json_real(sip->max_overclocked_speed));
-		json_object_set_new(ship_data, "$Max Weapon Eng", json_real(sip->max_weapon_reserve));
-		json_object_set_new(ship_data, "$Hitpoints", json_real(sip->max_hull_strength));
-		json_object_set_new(ship_data, "$Hull Repair Rate", json_real(sip->hull_repair_rate * 100));
-		json_object_set_new(ship_data, "$Support Hull Repair Rate", json_real(sip->sup_hull_repair_rate * 100));
-		json_object_set_new(ship_data, "$Subsystem Repair Rate", json_real(sip->subsys_repair_rate * 100));
-		json_object_set_new(ship_data, "$Support Subsystem Repair Rate", json_real(sip->sup_subsys_repair_rate * 100));
-		json_object_set_new(ship_data, "$Armor Type", ( (sip->armor_type_idx > -1) ? json_string(Armor_types[sip->armor_type_idx].GetNamePtr()) : json_null() ));
-		json_object_set_new(ship_data, "$Shield Armor Type", ( (sip->shield_armor_type_idx > -1) ? json_string(Armor_types[sip->shield_armor_type_idx].GetNamePtr()) : json_null() ));
+		json_object_set_new(ship_data, "$Power Output", json_real(sir.power_output));
+		json_object_set_new(ship_data, "$Shield Regeneration Rate", json_real(sir.max_shield_regen_per_second));
+		json_object_set_new(ship_data, "$Support Shield Repair Rate", json_real(sir.sup_shield_repair_rate * 100));
+		json_object_set_new(ship_data, "$Weapon Regeneration Rate", json_real(sir.max_weapon_regen_per_second));
+		json_object_set_new(ship_data, "$Max Oclk Speed", json_real(sir.max_overclocked_speed));
+		json_object_set_new(ship_data, "$Max Weapon Eng", json_real(sir.max_weapon_reserve));
+		json_object_set_new(ship_data, "$Hitpoints", json_real(sir.max_hull_strength));
+		json_object_set_new(ship_data, "$Hull Repair Rate", json_real(sir.hull_repair_rate * 100));
+		json_object_set_new(ship_data, "$Support Hull Repair Rate", json_real(sir.sup_hull_repair_rate * 100));
+		json_object_set_new(ship_data, "$Subsystem Repair Rate", json_real(sir.subsys_repair_rate * 100));
+		json_object_set_new(ship_data, "$Support Subsystem Repair Rate", json_real(sir.sup_subsys_repair_rate * 100));
+		json_object_set_new(ship_data, "$Armor Type", ( (sir.armor_type_idx > -1) ? json_string(Armor_types[sir.armor_type_idx].GetNamePtr()) : json_null() ));
+		json_object_set_new(ship_data, "$Shield Armor Type", ( (sir.shield_armor_type_idx > -1) ? json_string(Armor_types[sir.shield_armor_type_idx].GetNamePtr()) : json_null() ));
 		// Skipping flags
 
 		json_array_append_new(Ships_array, ship_data);
@@ -19508,6 +19526,7 @@ void ship_output_json(const char *outfile)
 
 	json_object_set_new(ships_obj, "Ships", Ships_array);
 
-	cf_create_default_path_string(full_name, sizeof(full_name) - 1, CF_TYPE_ROOT, outfile);
-	json_dump_file(ships_obj, full_name, JSON_ESCAPE_SLASH | JSON_INDENT(4) | JSON_PRESERVE_ORDER | JSON_REAL_PRECISION(4));
+	SCP_string full_name;
+	cf_create_default_path_string(full_name, CF_TYPE_ROOT, outfile);
+	json_dump_file(ships_obj, full_name.c_str(), JSON_ESCAPE_SLASH | JSON_INDENT(4) | JSON_PRESERVE_ORDER | JSON_REAL_PRECISION(4));
 }
