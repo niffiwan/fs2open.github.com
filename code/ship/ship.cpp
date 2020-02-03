@@ -19121,36 +19121,33 @@ bool check_restricted(const ship_info& sir, json_t* bank_json, bool restricted, 
 
 void append_weapons(const ship_info& sir, json_t* ship_data, bool is_primary, int bank_offset)
 {
-	int bank, weapon_idx, num_banks;
+	int num_banks;
+	SCP_string type_name;
+	char type_prefix;
+	if(is_primary)
+	{
+		num_banks = sir.num_primary_banks;
+		type_name = "Primary";
+		type_prefix = 'P';
+	}
+	else
+	{
+		num_banks = sir.num_secondary_banks;
+		type_name = "Secondary";
+		type_prefix = 'S';
+	}
+
 	bool restricted = false, dogfight_restricted = false;
 	json_t *Allowed_banks = json_array();
 	json_t *Allowed_dogfight_banks = json_array();
 	json_t *Default_banks = json_array();
 	json_t *Bank_capacity = json_array();
 	json_t *Show_models = json_array();
-	char Allowed_Banks_name[16], Allowed_Dogfight_Banks_name[25], Default_Banks_name[16], Bank_Capacity_name[16], Show_Models_name[23], type_name[10];
-
-	if(is_primary)
-	{
-		num_banks = sir.num_primary_banks;
-		strcpy_s(type_name, "Primary");
-	}
-	else
-	{
-		num_banks = sir.num_secondary_banks;
-		strcpy_s(type_name, "Secondary");
-	}
-	sprintf(Allowed_Banks_name, "$Allowed %cBanks", type_name[0]);
-	sprintf(Allowed_Dogfight_Banks_name, "$Allowed Dogfight %cBanks", type_name[0]);
-	sprintf(Default_Banks_name, "$Default %cBanks", type_name[0]);
-	sprintf(Bank_Capacity_name, "$%cBank Capacity", type_name[0]);
-	sprintf(Show_Models_name, "$Show %s Models", type_name);
-
-	for(bank = bank_offset; bank < bank_offset + num_banks; bank++)
+	for(int bank = bank_offset; bank < bank_offset + num_banks; bank++)
 	{
 		json_t *regular_bank = json_array();
 		json_t *dogfight_bank = json_array();
-		for(weapon_idx = 0; weapon_idx < Num_weapon_types; weapon_idx++)
+		for(int weapon_idx = 0; weapon_idx < Num_weapon_types; weapon_idx++)
 		{
 			restricted = check_restricted(sir, regular_bank, restricted, bank, weapon_idx, REGULAR_WEAPON);
 			dogfight_restricted = check_restricted(sir, dogfight_bank, dogfight_restricted, bank, weapon_idx, DOGFIGHT_WEAPON);
@@ -19171,11 +19168,24 @@ void append_weapons(const ship_info& sir, json_t* ship_data, bool is_primary, in
 			json_array_append(Show_models, json_boolean(sir.draw_secondary_models[bank - bank_offset]));
 		}
 	}
-	json_object_set_new(ship_data, Allowed_Banks_name, (restricted ? Allowed_banks : json_array_get(Allowed_banks, 0)));
-	json_object_set_new(ship_data, Allowed_Dogfight_Banks_name, (dogfight_restricted ? Allowed_dogfight_banks : json_array_get(Allowed_dogfight_banks, 0)));
-	json_object_set_new(ship_data, Default_Banks_name, Default_banks);
-	json_object_set_new(ship_data, Bank_Capacity_name, Bank_capacity);
-	json_object_set_new(ship_data, Show_Models_name, Show_models);
+
+	SCP_string Allowed_Banks_name = "$Allowed "; Allowed_Banks_name+= type_prefix;
+	Allowed_Banks_name+= "Banks";
+	SCP_string Allowed_Dogfight_Banks_name = "$Allowed Dogfight "; Allowed_Dogfight_Banks_name+= type_prefix;
+	Allowed_Dogfight_Banks_name+= "Banks";
+	SCP_string Default_Banks_name = "$Default "; Default_Banks_name+= type_prefix;
+	Default_Banks_name+= "Banks";
+	SCP_string Bank_Capacity_name = "$"; Bank_Capacity_name+= type_prefix;
+	Bank_Capacity_name+= "Bank Capacity";
+	SCP_string Show_Models_name = "$Show " + type_name + " Models";
+
+	json_object_set_new(ship_data, Allowed_Banks_name.c_str(),
+			(restricted ? Allowed_banks : json_array_get(Allowed_banks, 0)));
+	json_object_set_new(ship_data, Allowed_Dogfight_Banks_name.c_str(),
+			(dogfight_restricted ? Allowed_dogfight_banks : json_array_get(Allowed_dogfight_banks, 0)));
+	json_object_set_new(ship_data, Default_Banks_name.c_str(), Default_banks);
+	json_object_set_new(ship_data, Bank_Capacity_name.c_str(), Bank_capacity);
+	json_object_set_new(ship_data, Show_Models_name.c_str(), Show_models);
 }
 
 void ship_output_json(const char *outfile)
@@ -19466,12 +19476,12 @@ void ship_output_json(const char *outfile)
 		}
 		json_object_set_new(ship_data, "$Explosion Animations", Anims);
 		json_object_set_new(ship_data, "$Weapon Model Draw Distance", json_real(sir.weapon_model_draw_distance));
-		// TODO UP TO HERE
 		append_weapons(sir, ship_data, true, 0);
 		append_weapons(sir, ship_data, false, MAX_SHIP_PRIMARY_BANKS);
-		//if (optional_string("$Ship Recoil Modifier:")){
+		json_object_set_new(ship_data, "$Ship Recoil Modifier:", json_real(sir.ship_recoil_modifier));
 		json_object_set_new(ship_data, "$Shields", json_real(sir.max_shield_strength));
 		json_object_set_new(ship_data, "+Auto Spread", json_real(sir.auto_shield_spread));
+		json_object_set_new(ship_data, "+Minimum Weapon Span:", json_real(sir.auto_shield_spread_min_span));
 		json_object_set_new(ship_data, "+Allow Bypass", json_boolean(sir.auto_shield_spread_bypass));
 		json_object_set_new(ship_data, "+Spread From LOD", json_integer(sir.auto_shield_spread_from_lod));
 
@@ -19506,6 +19516,9 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(Shield_color, "green", json_integer(sir.shield_color[1]));
 		json_object_set_new(Shield_color, "blue", json_integer(sir.shield_color[2]));
 		json_object_set_new(ship_data, "$Shield Color", Shield_color);
+		json_object_set_new(ship_data, "$Shield Impact Explosion:",
+				// TODO needs public function to retrieve filename from class
+				json_integer(sir.shield_impact_explosion_anim));
 		json_object_set_new(ship_data, "$Power Output", json_real(sir.power_output));
 		json_object_set_new(ship_data, "$Shield Regeneration Rate", json_real(sir.max_shield_regen_per_second));
 		json_object_set_new(ship_data, "$Support Shield Repair Rate", json_real(sir.sup_shield_repair_rate * 100));
@@ -19519,7 +19532,17 @@ void ship_output_json(const char *outfile)
 		json_object_set_new(ship_data, "$Support Subsystem Repair Rate", json_real(sir.sup_subsys_repair_rate * 100));
 		json_object_set_new(ship_data, "$Armor Type", ( (sir.armor_type_idx > -1) ? json_string(Armor_types[sir.armor_type_idx].GetNamePtr()) : json_null() ));
 		json_object_set_new(ship_data, "$Shield Armor Type", ( (sir.shield_armor_type_idx > -1) ? json_string(Armor_types[sir.shield_armor_type_idx].GetNamePtr()) : json_null() ));
-		// Skipping flags
+
+		json_t *this_ships_flags = json_array();
+		for (const auto& flag : Ship_flags)
+		{
+			if (sir.flags[flag.def])
+			{
+				json_array_append(this_ships_flags, json_string(flag.name));
+			}
+		}
+		json_object_set_new(ship_data, "$Flags:", this_ships_flags);
+		// TODO UP TO HERE
 
 		json_array_append_new(Ships_array, ship_data);
 	}
